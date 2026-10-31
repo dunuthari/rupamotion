@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rupa Motion · Panel UI preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ===== Design system tokens (same values as the After Effects panel) ===== */
+  :root {
+    color-scheme: light;
+    --page: #EFF0F2;
+    --surface: #F7F8FA;
+    --card: #FFFFFF;
+    --hairline: #E2E4E8;
+    --text: #111316;
+    --label: #5F6368;
+    --hint: #94979C;
+    --primary: #0A6CFF;
+    --primary-press: #0058D6;
+    --on-primary: #FFFFFF;
+    --tint: #E8F1FF;
+    --field: #FFFFFF;
+    --shadow: 0 2px 0 rgba(15, 23, 41, .05), 0 12px 32px -18px rgba(15, 23, 41, .25);
+    --radius-outer: 18px;
+    --radius-inner: 14px;
+    --font: "Google Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #1C1D20;
+    --surface: #232428;
+    --card: #2B2D31;
+    --hairline: #3C3E43;
+    --text: #F1F2F4;
+    --label: #BEC0C4;
+    --hint: #90939A;
+    --primary: #0A6CFF;
+    --primary-press: #3D8BFF;
+    --on-primary: #FFFFFF;
+    --tint: #1E3357;
+    --field: #1F2024;
+    --shadow: 0 2px 0 rgba(0, 0, 0, .25), 0 12px 32px -18px rgba(0, 0, 0, .6);
+  }
+
+  * { box-sizing: border-box; }
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 100vh;
+    display: grid;
+    place-items: start center;
+    padding: 32px 16px 64px;
+  }
+
+  .stage { width: 100%; max-width: 392px; }
+  .note { color: var(--hint); font-size: 12px; text-align: center; margin: 14px 0 0; }
+
+  /* ===== Panel ===== */
+  .panel {
+    background: var(--page);
+    border: 1px solid var(--hairline);
+    border-radius: 22px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .head { display: flex; align-items: center; gap: 8px; }
+  .logo {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: var(--primary); color: var(--on-primary);
+    display: grid; place-items: center; font-weight: 700; font-size: 13px;
+  }
+  .title { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .head .sub { margin-left: auto; color: var(--hint); font-size: 12px; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-outer);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card > h2 { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+  .card .card { background: var(--card); border-radius: var(--radius-inner); padding: 12px; gap: 7px; box-shadow: 0 1px 0 rgba(15, 23, 41, .04); }
+  .card .card > h3 { margin: 0 0 2px; font-size: 12px; font-weight: 700; }
+
+  /* Icon tab bar */
+  .nav { padding: 6px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+  .tab {
+    appearance: none; border: 1px solid transparent; background: transparent;
+    color: var(--hint); font: inherit; font-size: 10.5px;
+    border-radius: 14px; padding: 8px 2px 6px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .tab svg .dot { fill: currentColor; stroke: none; }
+  .tab[aria-selected="true"] { color: var(--text); background: var(--card); border-color: var(--hairline); font-weight: 700; }
+  .tab[aria-selected="true"] svg { stroke-width: 2; }
+
+  /* Feature chips */
+  .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .chips[hidden] { display: none; }
+  .chip {
+    appearance: none; font: inherit; font-size: 12px; cursor: pointer;
+    height: 28px; padding: 0 10px; border-radius: 999px;
+    border: 1px solid var(--hairline); background: var(--card); color: var(--label);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chip[aria-selected="true"] { background: var(--tint); border-color: var(--tint); color: var(--primary); font-weight: 700; }
+
+  /* Form rows */
+  .row { display: grid; grid-template-columns: 116px 1fr; align-items: center; gap: 6px; min-height: 30px; }
+  .row > label, .row > .lbl { color: var(--label); font-size: 12px; }
+  .row .ctl { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  input[type="text"], select {
+    font: inherit; font-size: 12px; color: var(--text);
+    background: var(--field); border: 1px solid var(--hairline); border-radius: 10px;
+    height: 28px; padding: 0 9px; min-width: 0;
+  }
+  input[type="text"] { width: 72px; }
+  input.wide { width: 100%; }
+  select { padding-right: 6px; max-width: 100%; }
+  .hint { color: var(--hint); font-size: 11.5px; margin: 0; }
+
+  /* Toggle switch */
+  .toggle {
+    appearance: none; border: 0; background: none; padding: 0; font: inherit; font-size: 12px;
+    color: var(--text); display: flex; align-items: center; gap: 10px; cursor: pointer; text-align: left; min-height: 24px;
+  }
+  .toggle .track { width: 32px; height: 18px; border-radius: 999px; background: var(--hairline); position: relative; flex: none; transition: background .15s; }
+  .toggle .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .toggle[aria-checked="true"] .track { background: var(--primary); }
+  .toggle[aria-checked="true"] .track::after { transform: translateX(14px); }
+
+  /* Pill buttons */
+  .btn {
+    appearance: none; font: inherit; font-size: 12px; cursor: pointer;
+    height: 32px; padding: 0 14px; border-radius: 999px; width: 100%;
+    border: 1px solid var(--hairline); background: var(--card); color: var(--text);
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 700; }
+  .btn.primary:active { background: var(--primary-press); }
+  .btn:not(.primary):active { background: var(--surface); }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btns.four { grid-template-columns: repeat(4, 1fr); }
+
+  .swatch { width: 24px; height: 20px; border-radius: 6px; border: 1px solid var(--hairline); flex: none; }
+  input[type="color"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+  .pick { width: auto; height: 26px; padding: 0 10px; flex: none; }
+
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+    background: var(--text); color: var(--page); font-size: 12px;
+    padding: 10px 16px; border-radius: 999px; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast, .toggle .track, .toggle .track::after { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <main class="panel" aria-label="Rupa Motion panel">
+    <header class="head">
+      <div class="logo" aria-hidden="true">R</div>
+      <div class="title">Rupa Motion</div>
+      <div class="sub">Toolkit</div>
+    </header>
+    <nav class="card nav" id="nav" role="tablist" aria-label="Groups"></nav>
+    <div class="chips" id="chips" role="tablist" aria-label="Features" hidden></div>
+    <section class="card" id="view" aria-live="polite"></section>
+  </main>
+  <p class="note">UI preview of the After Effects panel. Buttons show what they'd do; the real actions run inside After Effects.</p>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- storage (per-viewer convenience only) ----------
+  function load(k, d) { try { var v = localStorage.getItem("mk-ui:" + k); return v === null ? d : v; } catch (e) { return d; } }
+  function save(k, v) { try { localStorage.setItem("mk-ui:" + k, v); } catch (e) {} }
+
+  // ---------- theme ----------
+  var root = document.documentElement;
+  function systemTheme() { return window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; }
+  function setTheme(t) { root.setAttribute("data-theme", t); }
+  setTheme(load("theme", systemTheme()));
+
+  // ---------- nav icons (same drawings as the panel) ----------
+  var ICONS = {
+    "Layers": '<rect x="2.5" y="4" width="13" height="10" rx="3"/><rect x="7.5" y="9" width="13" height="10" rx="3"/>',
+    "Quick Actions": '<path d="M13 2 6 12h5l-2 9 7-10h-5z"/>',
+    "Camera": '<rect x="1.5" y="6" width="14" height="12" rx="3"/><path d="M15.5 10 20.5 7v10l-5-3z"/>',
+    "Shapes": '<circle cx="7.5" cy="7.5" r="5.5"/><rect x="10" y="11" width="11" height="10" rx="2"/>',
+    "Animation": '<path d="M7 4 19 12 7 20z"/>',
+    "Transitions": '<path d="M3 8h17M16 4l4 4-4 4M21 16H4M8 12l-4 4 4 4"/>',
+    "Text": '<path d="M4 5h16M12 5v15"/>',
+    "UI Kit": '<rect x="1.5" y="6" width="21" height="12" rx="6"/><circle class="dot" cx="7.5" cy="12" r="3"/>',
+    "Media": '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
+    "Style": '<circle cx="12" cy="12" r="9"/><circle class="dot" cx="9" cy="9" r="2"/><circle class="dot" cx="15" cy="9" r="2"/><circle class="dot" cx="12" cy="15" r="2"/>'
+  };
+  var NAV_LABELS = { "Quick Actions": "Quick", "Animation": "Animate", "Transitions": "Cuts" };
+
+  var COLOR_LABELS = ["Primary", "Secondary", "Periwinkle", "Background", "Pink glow", "Accent (red)", "Dark text", "Gray text", "Gradient start", "Gradient end"];
+
+  // ---------- control helpers ----------
+  // Each returns [type, ...args]; render() turns them into DOM.
+  function F(label, value, opts) { return ["field", label, value, opts || {}]; }
+  function D(label, items, sel, tip) { return ["drop", label, items, sel || 0, tip]; }
+  function T(label, on, tip) { return ["toggle", label, !!on, tip]; }
+  function H(text) { return ["hint", text]; }
+  function B(label, done, tip) { return ["button", label, done, tip]; }
+  function ROW(buttons, cls) { return ["buttons", buttons, cls]; }
+  function GRID(items) { return ["grid", items]; }
+  function C(title, children) { return ["card", title, children]; }
+  function COLOR(label, hex) { return ["color", label, hex]; }
+  function SIZE(label, w, h) { return ["size", label, w, h]; }
+  function BOUNCE(key) { return ["bounce", key]; }
+
+  // ---------- features (mirrors MotionKit.jsx) ----------
+  var FEATURES = [
+    { group: "Layers", name: "Layer operations", ui: [
+      GRID([["Pre-compose", "Pre-composed the selected layers, keeping their timing."], ["Smart Null", "Added a 50×50 null and parented the selection."], ["Adjustment Layer", "Added a full-size adjustment layer above the selection."]]),
+      C("Unwrap Composition", [H("Select a pre-comp layer: its layers move into this comp."), T("Keep pre-comp transform (via null)", true), T("Remove the pre-comp layer", true), B("Unwrap Composition", "Moved the pre-comp's layers into this comp.")]),
+      C("Smart Duplicate", [F("Copies:", "1"), F("Offset (frames):", "0"), D("Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 0, "Linked copies share one comp; independent copies get their own."), B("Smart Duplicate", "Duplicated with numbered names.")]),
+      C("Solid Layer", [D("Color:", COLOR_LABELS), D("Shape:", ["Full frame", "Rounded card"]), B("Solid Layer", "Added a solid layer.")]),
+      C("Follow Path", [H("Select a path layer (mask or shape) + the follower."), F("Path time (s):", "3"), T("Loop along path", true), T("Orient along path", false), B("Follow Path", "The follower now moves along the path.")])
+    ]},
+    { group: "Quick Actions", name: "Motion quick actions", ui: [
+      BOUNCE("quick"),
+      F("Stagger (frames):", "0"), F("Slide distance (px):", "200"), D("Gradient direction:", ["Horizontal", "Vertical", "Diagonal"]),
+      GRID([["Fade In"], ["Fade Out"], ["Slide Left"], ["Slide Right"], ["Slide Up"], ["Slide Down"], ["Scale Pop"], ["Blur Fade"], ["Reverse Keys"], ["Lock Gradient"], ["Bounce Physics"]]),
+      H("Bounce applies to Fade, Slide, Scale Pop and Blur Fade."),
+      H("Uses Duration, Curve and Strength from the Style group.")
+    ]},
+    { group: "Camera", name: "Camera", ui: [
+      C("3-node camera", [H("Orbit null › Dolly null › Camera"), T("Depth of field", true), F("Aperture (blur):", "60"), B("Create 3-node camera", "Added the camera rig.")]),
+      C("Parallax: arrange layers in depth", [H("Select layers, then set the gap between them."), F("Distance (px):", "300"), F("Front layer Z (px):", "0"), D("In front:", ["Top layer", "Bottom layer"]), T("Keep on-screen size", true), T("Add camera rig if none", true), B("Arrange selected in depth", "Arranged the layers in depth.")])
+    ]},
+    { group: "Shapes", name: "Smart shape", ui: [
+      C("Shape", [D("Type:", ["Squircle", "Rounded rectangle", "Pill", "Circle / Ellipse", "Triangle", "Star", "Polygon"]), SIZE("Width × Height:", "400", "400"), F("Corner radius:", "60"), F("Points / sides:", "5"), F("Star inner (%):", "45")]),
+      C("Fill & stroke", [COLOR("Fill color:", "#4285F4"), F("Fill opacity (%):", "100"), T("Gradient fill (locked to shape)", false), D("Gradient direction:", ["Horizontal", "Vertical", "Diagonal"], 2), T("Stroke", false), COLOR("Stroke color:", "#1A73E8"), F("Stroke width:", "4")]),
+      C("Effects", [T("Soft shadow", true), T("Frosted glass behind (new shapes)", false)]),
+      ROW([["Create shape", "Created the shape.", true], ["Update selected", "Updated the selected shapes."]])
+    ]},
+    { group: "Animation", name: "Shape morph", ui: [H("Select 2 shape layers, playhead at the start."), D("Morph from:", ["Lower layer", "Upper layer"]), T("Morph fill color", true), T("Hide target layer", true), T("Put morph in a new composition", true), B("Morph", "Morphed the shapes.")] },
+    { group: "Animation", name: "Pop", ui: [T("Fade opacity too", true), T("Scale from layer center", true), F("Stagger (frames):", "0"), ROW([["Pop Up"], ["Pop Out"]])] },
+    { group: "Animation", name: "Move in / out", ui: [D("Mode:", ["In", "Out"]), D("Distance:", ["Off screen", "Custom"]), F("Custom (px):", "300"), T("Fade opacity too", false), F("Stagger (frames):", "0"), H("Arrow = direction of travel:"), ROW([["←", "Move left"], ["↑", "Move up"], ["↓", "Move down"], ["→", "Move right"]], "four")] },
+    { group: "Animation", name: "UI list stagger", ui: [H("Select imported UI rows. Animates top to bottom."), F("Slide up (px):", "40"), F("Stagger (frames):", "2"), T("Fade opacity too", true), B("Stagger selected layers", "Staggered the rows.")] },
+    { group: "Animation", name: "Hold push-in", ui: [H("Slow scale-up on holds (100% → 105%)."), F("Amount (%):", "5"), D("Range:", ["Whole layer", "Playhead to layer end"]), B("Push in selected", "Added the push-in.")] },
+    { group: "Transitions", name: "Zoom cut", ui: [H("Select 2 clips, or put the playhead on the cut."), F("Frames each side:", "6"), F("Intensity (×):", "3"), F("Blur (shutter °):", "270"), ROW([["Zoom In"], ["Zoom Out"]])] },
+    { group: "Transitions", name: "Swipe cut", ui: [H("Select 2 clips, or put the playhead on the cut."), F("Frames each side:", "6"), F("Blur (shutter °):", "300"), ROW([["←", "Swipe left"], ["↑", "Swipe up"], ["↓", "Swipe down"], ["→", "Swipe right"]], "four")] },
+    { group: "Transitions", name: "Shape wipe", ui: [H("Select 2 clips, or put the playhead on the cut."), D("Shape:", ["Circle", "Triangle"]), D("Grow from:", ["Center", "Left", "Right", "Top", "Bottom"]), T("Blue accent shape leads the reveal", true), F("Accent lead (frames):", "3"), B("Add shape wipe", "Added the shape wipe.")] },
+    { group: "Text", name: "Word swap", ui: [F("Start text:", "Meet your", { wide: true }), F("Pill label:", "+ New", { wide: true }), F("Swap words:", "storyteller, producer, editor", { wide: true }), F("Hold per word (s):", "1.2"), F("Font size:", "96"), T("Gradient fade on trailing letters", true), B("Build word swap", "Built the word swap.")] },
+    { group: "Text", name: "Typing prompt", ui: [F("Prompt text:", "Make a launch video for our new app", { wide: true }), F("Typing speed (chars/s):", "22"), F("Box width (px):", "1100"), B("Build typing prompt", "Built the typing prompt.")] },
+    { group: "Text", name: "Karaoke highlight", ui: [D("Timing:", ["Even", "Layer markers"]), F("Duration (s):", "3"), D("Highlight by:", ["Words", "Characters"]), T("Gradient overlay", false), B("Apply to selected text", "Applied the karaoke highlight."), F("Big kinetic text:", "Never let a dead battery ruin your day", { wide: true }), B("Create big kinetic text", "Created the kinetic text.")] },
+    { group: "Text", name: "Title card", ui: [H("Uses the selected text layer, or creates the word."), F("Word:", "voice", { wide: true }), B("Create title card", "Created the title card.")] },
+    { group: "Text", name: "Glow streak title", ui: [H("Uses the selected text layer, or creates the word."), F("Word:", "testimonials", { wide: true }), D("Method:", ["Light streaks", "CC Light Rays"]), D("Streaks:", ["Vertical", "Horizontal"]), T("Use Deep Glow if installed", true), T("Add blue background", true), B("Create glow title", "Created the glow title.")] },
+    { group: "UI Kit", name: "Pill button", ui: [F("Label:", "+ New", { wide: true }), D("Style:", ["Primary", "White glass", "Outline"]), T("Pop in at playhead", true), B("Create pill button", "Created the pill button.")] },
+    { group: "UI Kit", name: "Frosted glass", ui: [H("Select shapes; blurs whatever is behind them."), F("Blur radius:", "30"), B("Frost selected shapes", "Frosted the selected shapes.")] },
+    { group: "UI Kit", name: "AI glow button", ui: [F("Label:", "Creating…", { wide: true }), B("Create AI glow button", "Created the AI glow button.")] },
+    { group: "UI Kit", name: "Fake cursor", ui: [H("Add cursor → move playhead → drag cursor → repeat."), B("Add cursor", "Added the cursor."), B("Click at playhead", "Added a click and ripple."), B("Smooth moves", "Smoothed the cursor moves.")] },
+    { group: "UI Kit", name: "Avatar bubble", ui: [H("Select photo layers."), F("Avatar size (px):", "120"), B("Bubble selected photos", "Bubbled the photos."), B("Press at playhead", "Added a press animation.")] },
+    { group: "UI Kit", name: "Audio waveform", ui: [D("Mode:", ["From selected audio", "Idle loop"]), F("Bars:", "24"), F("Max height (px):", "140"), B("Create waveform", "Created the waveform.")] },
+    { group: "UI Kit", name: "Liquid-glass button", ui: [F("Label:", "Play", { wide: true }), T("3D depth + camera blur", false), B("Create glass button", "Created the glass button.")] },
+    { group: "Media", name: "Stock grid wall", ui: [H("Select clips/images in the Project panel."), F("Columns:", "5"), F("Gap (px):", "24"), F("Corner radius:", "24"), F("Tilt (°):", "-8"), F("Scroll speed (px/s):", "40"), D("Scroll:", ["Up", "Down"]), B("Build grid wall", "Built the grid wall.")] },
+    { group: "Style", name: "Style", ui: [
+      H("These settings apply to every group."),
+      C("Appearance", [["theme"]]),
+      C("Motion", [D("Curve:", ["Expo In/Out", "Apple smooth", "Ease in-out"]), F("Duration (frames):", "18"), T("Motion blur on animated layers", true)]),
+      C("Bounce", [BOUNCE("style")]),
+      C("Brand", [H("Colors, fonts and saved presets."), B("Colors & fonts…", "Opens the Colors & fonts window in After Effects.")])
+    ]}
+  ];
+
+  var GROUPS = [];
+  FEATURES.forEach(function (f) { if (GROUPS.indexOf(f.group) < 0) GROUPS.push(f.group); });
+
+  // ---------- DOM helpers ----------
+  var uid = 0;
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (k === "html") n.innerHTML = attrs[k];
+      else if (k.slice(0, 2) === "on") n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+
+  var toastEl = document.getElementById("toast"), toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2200);
+  }
+  function action(label, done) {
+    return function () { toast((done || label + " — done.") + " In After Effects this runs on your comp."); };
+  }
+
+  function row(labelText, control, forId) {
+    return el("div", { class: "row" }, [
+      el(forId ? "label" : "span", forId ? { for: forId, text: labelText } : { class: "lbl", text: labelText }),
+      el("div", { class: "ctl" }, [control])
+    ]);
+  }
+
+  function toggle(label, on, tip) {
+    var b = el("button", { class: "toggle", type: "button", role: "switch", "aria-checked": String(on), title: tip || "" }, [
+      el("span", { class: "track", "aria-hidden": "true" }), el("span", { text: label })
+    ]);
+    b.addEventListener("click", function () { b.setAttribute("aria-checked", String(b.getAttribute("aria-checked") !== "true")); });
+    return b;
+  }
+
+  function bounceControl(key) {
+    var on = load("bounce-" + key, "1") === "1";
+    var b = el("button", { class: "btn", type: "button", style: "width:128px" });
+    var info = el("span", { class: "hint" });
+    function paint() {
+      b.textContent = on ? "Bounce: ON" : "Bounce: OFF";
+      b.classList.toggle("primary", on);
+      info.textContent = on ? "with bounce" : "no bounce";
+    }
+    b.addEventListener("click", function () { on = !on; save("bounce-" + key, on ? "1" : "0"); paint(); });
+    paint();
+    var ctl = el("div", { class: "ctl" }, [b, key === "style" ? el("span", { class: "lbl", text: "Strength %:", style: "color:var(--label);font-size:12px" }) : info]);
+    if (key === "style") ctl.appendChild(el("input", { type: "text", value: "10", "aria-label": "Bounce strength percent", style: "width:52px" }));
+    return key === "style" ? ctl : el("div", { class: "row" }, [el("span", { class: "lbl", text: "Bounce:" }), ctl]);
+  }
+
+  function colorControl(label, hex) {
+    var id = "c" + (++uid);
+    var sw = el("span", { class: "swatch", style: "background:" + hex });
+    var input = el("input", { type: "text", id: id, value: hex, "aria-label": label, style: "width:86px" });
+    var picker = el("input", { type: "color", value: hex, tabindex: "-1", "aria-hidden": "true" });
+    function set(v) {
+      if (!/^#?[0-9a-f]{6}$/i.test(v)) { input.value = sw.dataset.hex || hex; return; }
+      v = ("#" + v.replace("#", "")).toUpperCase();
+      input.value = v; sw.style.background = v; sw.dataset.hex = v; picker.value = v;
+    }
+    input.addEventListener("change", function () { set(input.value.trim()); });
+    picker.addEventListener("input", function () { set(picker.value); });
+    var pick = el("button", { class: "btn pick", type: "button", text: "Pick…", onclick: function () { picker.click(); } });
+    set(hex);
+    return row(label, el("div", { class: "ctl", style: "position:relative" }, [sw, input, pick, picker]), id);
+  }
+
+  function themeControl() {
+    var id = "theme-select";
+    var s = el("select", { id: id }, [el("option", { value: "light", text: "Light" }), el("option", { value: "dark", text: "Dark" })]);
+    s.value = root.getAttribute("data-theme");
+    s.addEventListener("change", function () { setTheme(s.value); save("theme", s.value); });
+    return row("Panel theme:", s, id);
+  }
+
+  function render(spec) {
+    var t = spec[0];
+    if (t === "field") {
+      var id = "f" + (++uid);
+      return row(spec[1], el("input", { type: "text", id: id, value: spec[2], class: spec[3].wide ? "wide" : "" }), id);
+    }
+    if (t === "drop") {
+      var did = "d" + (++uid);
+      var s = el("select", { id: did, title: spec[4] || "" }, spec[2].map(function (o) { return el("option", { text: o }); }));
+      s.selectedIndex = spec[3];
+      return row(spec[1], s, did);
+    }
+    if (t === "toggle") return toggle(spec[1], spec[2], spec[3]);
+    if (t === "hint") return el("p", { class: "hint", text: spec[1] });
+    if (t === "button") return el("button", { class: "btn primary", type: "button", text: spec[1], title: spec[3] || "", onclick: action(spec[1], spec[2]) });
+    if (t === "buttons") {
+      return el("div", { class: "btns" + (spec[2] ? " " + spec[2] : "") }, spec[1].map(function (b) {
+        return el("button", { class: "btn" + (b[2] ? " primary" : ""), type: "button", text: b[0], "aria-label": b[1] && b[0].length === 1 ? b[1] : b[0], onclick: action(b[1] && b[0].length === 1 ? b[1] : b[0], b[0].length === 1 ? null : b[1]) });
+      }));
+    }
+    if (t === "grid") {
+      return el("div", { class: "btns" }, spec[1].map(function (b) {
+        return el("button", { class: "btn", type: "button", text: b[0], onclick: action(b[0], b[1]) });
+      }));
+    }
+    if (t === "card") return el("div", { class: "card" }, [el("h3", { text: spec[1] })].concat(spec[2].map(render)));
+    if (t === "color") return colorControl(spec[1], spec[2]);
+    if (t === "size") {
+      var w = el("input", { type: "text", value: spec[2], "aria-label": "Width" });
+      var h = el("input", { type: "text", value: spec[3], "aria-label": "Height" });
+      return row(spec[1], el("div", { class: "ctl" }, [w, h]));
+    }
+    if (t === "bounce") return bounceControl(spec[1]);
+    if (t === "theme") return themeControl();
+    return null;
+  }
+
+  // ---------- navigation ----------
+  var nav = document.getElementById("nav"), chips = document.getElementById("chips"), view = document.getElementById("view");
+
+  GROUPS.forEach(function (g) {
+    nav.appendChild(el("button", {
+      class: "tab", type: "button", role: "tab", "data-group": g, title: g, "aria-selected": "false",
+      html: '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS[g] + "</svg><span>" + (NAV_LABELS[g] || g) + "</span>",
+      onclick: function () { pick(g); }
+    }));
+  });
+
+  function featuresOf(g) { return FEATURES.filter(function (f) { return f.group === g; }); }
+
+  function showFeature(f) {
+    view.innerHTML = "";
+    view.appendChild(el("h2", { text: f.name }));
+    f.ui.forEach(function (s) { var n = render(s); if (n) view.appendChild(n); });
+    save("feature", f.name);
+  }
+
+  function pick(g, featName) {
+    var list = featuresOf(g);
+    var f = list.filter(function (x) { return x.name === featName; })[0] || list[0];
+    [].forEach.call(nav.children, function (t) { t.setAttribute("aria-selected", String(t.dataset.group === g)); });
+    chips.innerHTML = "";
+    chips.hidden = list.length <= 1;
+    if (list.length > 1) {
+      list.forEach(function (x) {
+        chips.appendChild(el("button", {
+          class: "chip", type: "button", role: "tab", text: x.name, title: x.name, "aria-selected": String(x === f),
+          onclick: function (ev) {
+            [].forEach.call(chips.children, function (c) { c.setAttribute("aria-selected", "false"); });
+            ev.currentTarget.setAttribute("aria-selected", "true");
+            showFeature(x);
+          }
+        }));
+      });
+    }
+    showFeature(f);
+    save("group", g);
+  }
+
+  var lastGroup = load("group", GROUPS[0]);
+  pick(GROUPS.indexOf(lastGroup) >= 0 ? lastGroup : GROUPS[0], load("feature", ""));
+})();
+</script>
+</body>
+</html>

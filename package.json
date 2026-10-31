@@ -1,0 +1,15 @@
+{
+  "name": "rupa-motion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rupa Motion — Google Vids–style motion toolkit (ScriptUI panel) for Adobe After Effects",
+  "scripts": {
+    "build": "node build.js",
+    "lint": "eslint --no-eslintrc -c .eslintrc.json dist/RupaMotion.jsx",
+    "test": "node tests/ui.test.js",
+    "check": "npm run build && npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "eslint": "8.57.0"
+  }
+}
