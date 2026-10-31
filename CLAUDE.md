@@ -22,10 +22,10 @@ UI-kit elements, camera parallax and a live, toggleable bounce.
 | `src/03_animation.jsx` | Shape morph, Pop, Move in/out, UI list stagger, Hold push-in |
 | `src/04_transitions_text.jsx` | Zoom/swipe cuts, shape wipe; word swap, typing prompt, karaoke, title card, glow title |
 | `src/05_uikit_media.jsx` | Pill button, frosted glass, AI glow button, fake cursor, avatar bubble, waveform, liquid glass; stock grid wall |
-| `src/06_tools.jsx` | Layers group (pre-compose, unwrap composition, smart duplicate, null, adjustment, solid, follow path), Camera group, Shapes group, Quick Actions |
+| `src/06_tools.jsx` | Layers group (pre-compose, unwrap composition, smart duplicate, null, adjustment, solid, follow path), Camera group, Shapes group, Quick Actions, Flow (`FLOW_PRESETS`, `doFlowApply`: cubic-bezier → AE temporal ease) |
 | `src/07_ui.jsx` | Design system (`THEMES`, `DS`), UI helpers, every `feature(...)` panel, Style dialog, main panel; closes the IIFE |
 
-Groups shown in the panel: Layers · Quick Actions · Camera · Shapes · Animation · Transitions · Text · UI Kit · Media · Style.
+Groups shown in the panel: Layers · Quick Actions · Flow · Camera · Shapes · Animation · Transitions · Text · UI Kit · Media · Style.
 Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.jsx`; wrap its action in `run("Label", fn)`.
 
 ## ExtendScript rules (After Effects runs ES3!)

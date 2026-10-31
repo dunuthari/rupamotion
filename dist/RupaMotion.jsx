@@ -9,7 +9,7 @@
       macOS:   /Applications/Adobe After Effects <version>/Scripts/ScriptUI Panels/
       Restart After Effects, then open Window > RupaMotion.jsx
 
-    Groups:  Layers · Quick Actions · Camera · Shapes · Animation · Transitions · Text · UI Kit · Media · Style
+    Groups:  Layers · Quick Actions · Flow · Camera · Shapes · Animation · Transitions · Text · UI Kit · Media · Style
 
     Every action is one undo step. Most actions start at the playhead.
 */
@@ -2508,6 +2508,151 @@
         if (skipped > 0) { alert(skipped + " propert" + (skipped === 1 ? "y was" : "ies were") + " skipped because they already have your own expression.", NAME); }
     }
 
+    // =====================================================================
+    // FLOW GROUP — cubic-bezier easing applied to keyframes
+    // =====================================================================
+
+    // [name, x1, y1, x2, y2] — the curve between two keys, as a CSS-style cubic-bezier
+    var FLOW_PRESETS = [
+        ["linear", 0, 0, 1, 1], ["easeIn", 0.42, 0, 1, 1], ["easeOut", 0, 0, 0.58, 1], ["ease", 0.25, 0.1, 0.25, 1],
+        ["sineIn", 0.12, 0, 0.39, 0], ["sineOut", 0.61, 1, 0.88, 1], ["sine", 0.37, 0, 0.63, 1],
+        ["quadIn", 0.11, 0, 0.5, 0], ["quadOut", 0.5, 1, 0.89, 1], ["quad", 0.45, 0, 0.55, 1],
+        ["cubicIn", 0.32, 0, 0.67, 0], ["cubicOut", 0.33, 1, 0.68, 1], ["cubic", 0.66, 0, 0.34, 1],
+        ["quartIn", 0.5, 0, 0.75, 0], ["quartOut", 0.25, 1, 0.5, 1], ["quart", 0.76, 0, 0.24, 1],
+        ["quintIn", 0.64, 0, 0.78, 0], ["quintOut", 0.22, 1, 0.36, 1], ["quint", 0.83, 0, 0.17, 1],
+        ["expoIn", 0.7, 0, 0.84, 0], ["expoOut", 0.16, 1, 0.3, 1], ["expo", 0.87, 0, 0.13, 1],
+        ["circIn", 0.55, 0, 1, 0.45], ["circOut", 0, 0.55, 0.45, 1], ["circ", 0.85, 0, 0.15, 1],
+        ["backIn", 0.36, 0, 0.66, -0.56], ["backOut", 0.34, 1.56, 0.64, 1], ["back", 0.68, -0.6, 0.32, 1.6]
+    ];
+
+    // Point on the cubic bezier (0,0) (x1,y1) (x2,y2) (1,1) at parameter t
+    function bezierAt(c, t) {
+        var u = 1 - t;
+        return [
+            3 * u * u * t * c[0] + 3 * u * t * t * c[2] + t * t * t,
+            3 * u * u * t * c[1] + 3 * u * t * t * c[3] + t * t * t
+        ];
+    }
+
+    function flowIsLinear(c) { return c[0] === 0 && c[1] === 0 && c[2] === 1 && c[3] === 1; }
+
+    // Value change between keys a and b, one entry per ease dimension
+    function flowDelta(prop, a, b, n) {
+        var va = prop.keyValue(a), vb = prop.keyValue(b), out = [], i;
+        if (typeof va === "number") { out.push(vb - va); }
+        else if (va instanceof Array && n === 1) {
+            var sum = 0;
+            for (i = 0; i < va.length; i++) { sum += (vb[i] - va[i]) * (vb[i] - va[i]); }
+            out.push(Math.sqrt(sum));
+        } else if (va instanceof Array) {
+            for (i = 0; i < n; i++) { out.push((vb[i] !== undefined && va[i] !== undefined) ? vb[i] - va[i] : 0); }
+        }
+        while (out.length < n) { out.push(0); }
+        return out;
+    }
+
+    function flowEase(dv, slopeNum, dx, dt) {
+        var inf = Math.max(0.1, Math.min(100, dx * 100)), arr = [];
+        for (var i = 0; i < dv.length; i++) { arr.push(new KeyframeEase(slopeNum * dv[i] / (dx * dt), inf)); }
+        return arr;
+    }
+
+    // Sets the temporal ease of the segment keys a -> b so it follows curve c.
+    // mode: "both" | "in" (only the incoming side at b) | "out" (only the outgoing side at a)
+    function flowSegment(prop, st, a, b, c, mode) {
+        var dt = prop.keyTime(b) - prop.keyTime(a);
+        if (dt <= 0) { return false; }
+        function slot(k) {
+            if (!st[k]) { st[k] = { i: prop.keyInTemporalEase(k), o: prop.keyOutTemporalEase(k), ti: false, to: false, lin: false }; }
+            return st[k];
+        }
+        var sa = slot(a), sb = slot(b), n = sa.o.length;
+        var linear = flowIsLinear(c);
+        if (mode !== "in") {
+            if (linear) { sa.lin = true; } else {
+                sa.o = flowEase(flowDelta(prop, a, b, n), c[1], Math.max(c[0], 0.001), dt);
+            }
+            sa.to = true;
+        }
+        if (mode !== "out") {
+            if (linear) { sb.lin = true; } else {
+                sb.i = flowEase(flowDelta(prop, a, b, sb.i.length), 1 - c[3], Math.max(1 - c[2], 0.001), dt);
+            }
+            sb.ti = true;
+        }
+        return true;
+    }
+
+    function flowCommit(prop, st) {
+        for (var key in st) {
+            var k = parseInt(key, 10), s = st[key], T = KeyframeInterpolationType;
+            var inT = s.ti ? (s.lin ? T.LINEAR : T.BEZIER) : prop.keyInInterpolationType(k);
+            var outT = s.to ? (s.lin ? T.LINEAR : T.BEZIER) : prop.keyOutInterpolationType(k);
+            prop.setInterpolationTypeAtKey(k, inT, outT);
+            if (inT === T.BEZIER || outT === T.BEZIER) {
+                try { prop.setTemporalEaseAtKey(k, s.i, s.o); } catch (e) {}
+            }
+        }
+    }
+
+    // Segments (pairs of key indices) to ease for the chosen keys
+    function flowSegments(idx, numKeys) {
+        var segs = [], i, has = {};
+        for (i = 0; i < idx.length; i++) { has[idx[i]] = true; }
+        for (i = 0; i < idx.length; i++) { if (has[idx[i] + 1]) { segs.push([idx[i], idx[i] + 1]); } }
+        if (segs.length === 0) {
+            for (i = 0; i < idx.length; i++) {
+                if (idx[i] < numKeys) { segs.push([idx[i], idx[i] + 1]); }
+                else if (idx[i] > 1) { segs.push([idx[i] - 1, idx[i]]); }
+            }
+        }
+        return segs;
+    }
+
+    // Selected keyframes first; otherwise every key of the selected properties; otherwise every keyed property of the selected layers
+    function flowTargets(comp) {
+        var sel = comp.selectedLayers, out = [], i, j, k;
+        for (i = 0; i < sel.length; i++) {
+            var sp = sel[i].selectedProperties;
+            for (j = 0; j < sp.length; j++) {
+                var p = sp[j];
+                if (p.propertyType !== PropertyType.PROPERTY || p.numKeys < 2) { continue; }
+                var idx = [];
+                try { for (k = 0; k < p.selectedKeys.length; k++) { idx.push(p.selectedKeys[k]); } } catch (e) {}
+                if (idx.length === 0) { for (k = 1; k <= p.numKeys; k++) { idx.push(k); } }
+                idx.sort(function (a, b) { return a - b; });
+                out.push({ prop: p, idx: idx });
+            }
+        }
+        if (out.length === 0) {
+            for (i = 0; i < sel.length; i++) {
+                var all = keyedProps(sel[i], []);
+                for (j = 0; j < all.length; j++) {
+                    var ix = [];
+                    for (k = 1; k <= all[j].numKeys; k++) { ix.push(k); }
+                    out.push({ prop: all[j], idx: ix });
+                }
+            }
+        }
+        return out;
+    }
+
+    // c: [x1, y1, x2, y2]. Returns the number of segments eased.
+    function doFlowApply(c, mode) {
+        var comp = activeComp(); if (!comp) { return; }
+        if (comp.selectedLayers.length === 0) { alert("Select a layer with keyframes (or select the keyframes).", NAME); return; }
+        var targets = flowTargets(comp), done = 0, i;
+        for (i = 0; i < targets.length; i++) {
+            var t = targets[i], st = {}, segs = flowSegments(t.idx, t.prop.numKeys), s;
+            try {
+                for (s = 0; s < segs.length; s++) { if (flowSegment(t.prop, st, segs[s][0], segs[s][1], c, mode)) { done++; } }
+                flowCommit(t.prop, st);
+            } catch (e) {}
+        }
+        if (done === 0) { alert("No keyframes to ease. Select a layer or properties with 2 or more keyframes.", NAME); }
+        return done;
+    }
+
 
     // =====================================================================
     // DESIGN SYSTEM  (based on a soft, light "Iconly" style)
@@ -2773,7 +2918,7 @@
     // ---- nav icons (simple line drawings, ~18 px) ----
 
     var NAV_LABELS = {
-        "Layers": "Layers", "Quick Actions": "Quick", "Camera": "Camera", "Shapes": "Shapes",
+        "Layers": "Layers", "Quick Actions": "Quick", "Flow": "Flow", "Camera": "Camera", "Shapes": "Shapes",
         "Animation": "Animate", "Transitions": "Cuts", "Text": "Text", "UI Kit": "UI Kit",
         "Media": "Media", "Style": "Style"
     };
@@ -2792,6 +2937,11 @@
         },
         "Quick Actions": function (g, x, y, p) {
             poly(g, [[x + 2, y - 9], [x - 5, y + 1], [x, y + 1], [x - 2, y + 9], [x + 5, y - 1], [x, y - 1]], true); g.strokePath(p);
+        },
+        "Flow": function (g, x, y, p) {
+            var pts = [], i, q;
+            for (i = 0; i <= 16; i++) { q = bezierAt([0.66, 0, 0.34, 1], i / 16); pts.push([x - 9 + q[0] * 18, y + 8 - q[1] * 16]); }
+            poly(g, pts, false); g.strokePath(p);
         },
         "Camera": function (g, x, y, p) {
             rrPath(g, x - 10, y - 6, 14, 12, 3); g.strokePath(p);
@@ -3215,6 +3365,166 @@
         btn(ball, "Bounce the ball effect", function () {
             run("Bounce the ball effect", function () { doBouncePhysics(num(ballAmt.text, 10, 1, 100)); });
         }, "Adds a ball-like bounce after every keyframe of the selected layers (position, scale, rotation) or selected keyframed properties.");
+    });
+
+    // ---------------- Flow ----------------
+
+    var FLOW_ORANGE = [0.96, 0.65, 0.14, 1];
+
+    // Draws a bezier curve as a smooth polyline into box (bx, by, bw, bh); yOf maps a value to y
+    function flowCurvePath(g, c, xOf, yOf) {
+        var i, q;
+        g.newPath();
+        for (i = 0; i <= 64; i++) {
+            q = bezierAt(c, i / 64);
+            if (i === 0) { g.moveTo(xOf(q[0]), yOf(q[1])); } else { g.lineTo(xOf(q[0]), yOf(q[1])); }
+        }
+    }
+
+    feature("Flow", "Easing curves", function (p) {
+        var GW = 300, GH = 252, X0 = 40, XW = 220, Y0 = 170, YS = 100;     // plot: u 0..1 -> X0..X0+XW, v 0..1 -> Y0..Y0-YS
+        var cur = [0.66, 0, 0.34, 1], mode = "both", picked = -1, drag = -1, i;
+        var saved = splitList(getS("flow_curve", ""));
+        if (saved.length === 4) { for (i = 0; i < 4; i++) { cur[i] = num(saved[i], cur[i], -1, 2); } }
+        for (i = 0; i < FLOW_PRESETS.length; i++) {
+            if (FLOW_PRESETS[i][1] === cur[0] && FLOW_PRESETS[i][2] === cur[1] && FLOW_PRESETS[i][3] === cur[2] && FLOW_PRESETS[i][4] === cur[3]) { picked = i; }
+        }
+        function xOf(u) { return X0 + u * XW; }
+        function yOf(v) { return Y0 - v * YS; }
+
+        hint(p, "Select keyframes, pick or drag a curve, then Apply.");
+
+        var gr = p.add("group");
+        gr.preferredSize = [GW, GH];
+        gr.alignment = ["center", "top"];
+        gr.helpTip = "Drag the orange handles to shape the curve.";
+        gr.onDraw = function () {
+            var g = this.graphics, k;
+            rrPath(g, 0.5, 0.5, GW - 1, GH - 1, 10);
+            g.fillPath(brush(g, DS.card));
+            for (k = 0; k <= 4; k++) {
+                poly(g, [[xOf(k / 4), yOf(-0.7)], [xOf(k / 4), yOf(1.6)]], false); g.strokePath(pen(g, DS.border, 1));
+            }
+            for (k = -2; k <= 6; k++) {
+                poly(g, [[X0 - 20, yOf(k / 4)], [X0 + XW + 20, yOf(k / 4)]], false); g.strokePath(pen(g, DS.border, 1));
+            }
+            g.newPath(); g.rectPath(X0, yOf(1), XW, YS); g.strokePath(pen(g, DS.primary, 1));
+            poly(g, [[xOf(0), yOf(0)], [xOf(1), yOf(1)]], false); g.strokePath(pen(g, DS.muted, 1));
+            poly(g, [[xOf(0), yOf(0)], [xOf(cur[0]), yOf(cur[1])]], false); g.strokePath(pen(g, FLOW_ORANGE, 2));
+            poly(g, [[xOf(1), yOf(1)], [xOf(cur[2]), yOf(cur[3])]], false); g.strokePath(pen(g, FLOW_ORANGE, 2));
+            flowCurvePath(g, cur, xOf, yOf); g.strokePath(pen(g, DS.text, 3));
+            var pts = [[0, 0, DS.text], [1, 1, DS.text], [cur[0], cur[1], FLOW_ORANGE], [cur[2], cur[3], FLOW_ORANGE]];
+            for (k = 0; k < 4; k++) {
+                g.newPath(); g.ellipsePath(xOf(pts[k][0]) - 5, yOf(pts[k][1]) - 5, 10, 10); g.fillPath(brush(g, pts[k][2]));
+            }
+        };
+
+        var vals = row(p, "Curve:");
+        var ef = [], names = ["x1", "y1", "x2", "y2"];
+        function two(v) { return String(Math.round(v * 100) / 100); }
+        var tiles = [];
+
+        function refresh(fromPreset) {
+            for (var k = 0; k < 4; k++) { ef[k].text = two(cur[k]); }
+            if (!fromPreset) { picked = -1; }
+            putS("flow_curve", cur.join(","));
+            redraw(gr);
+            for (k = 0; k < tiles.length; k++) { redraw(tiles[k]); }
+        }
+        for (i = 0; i < 4; i++) {
+            (function (k) {
+                var e = vals.add("edittext", undefined, two(cur[k]));
+                e.characters = 4;
+                e.helpTip = names[k] + (k % 2 === 0 ? " (time, 0–1)" : " (value)");
+                e.onChange = function () {
+                    cur[k] = (k % 2 === 0) ? num(e.text, cur[k], 0, 1) : num(e.text, cur[k], -1, 2);
+                    refresh(false);
+                };
+                ef.push(e);
+            })(i);
+        }
+
+        function moveHandle(e) {
+            if (drag < 0) { return; }
+            var u = Math.max(0, Math.min(1, (e.clientX - X0) / XW)), v = Math.max(-0.7, Math.min(1.6, (Y0 - e.clientY) / YS));
+            cur[drag * 2] = Math.round(u * 100) / 100;
+            cur[drag * 2 + 1] = Math.round(v * 100) / 100;
+            refresh(false);
+        }
+        gr.addEventListener("mousedown", function (e) {
+            var d0 = Math.abs(e.clientX - xOf(cur[0])) + Math.abs(e.clientY - yOf(cur[1]));
+            var d1 = Math.abs(e.clientX - xOf(cur[2])) + Math.abs(e.clientY - yOf(cur[3]));
+            drag = (d0 <= d1) ? 0 : 1;
+            moveHandle(e);
+        });
+        gr.addEventListener("mousemove", moveHandle);
+        gr.addEventListener("mouseup", function () { drag = -1; });
+        gr.addEventListener("mouseout", function () { drag = -1; });
+
+        // Which keyframe side the curve is applied to
+        var mr = btnRow(p);
+        var modeBtns = [];
+        var modeDefs = [["◂ In", "in"], ["Both", "both"], ["Out ▸", "out"]];
+        function paintModes() {
+            for (var k = 0; k < modeBtns.length; k++) {
+                modeBtns[k].variant = (modeBtns[k].modeId === mode) ? "primary" : "secondary";
+                redraw(modeBtns[k]);
+            }
+        }
+        for (i = 0; i < modeDefs.length; i++) {
+            (function (d) {
+                var b = styleButton(mr.add("button", undefined, d[0]), d[1] === mode ? "primary" : "secondary", 28);
+                b.modeId = d[1];
+                b.helpTip = (d[1] === "both") ? "Ease into and out of the keyframes."
+                    : (d[1] === "in") ? "Only the incoming side of each segment (slow arrival)."
+                    : "Only the outgoing side of each segment (slow departure).";
+                b.onClick = function () { mode = d[1]; paintModes(); };
+                modeBtns.push(b);
+            })(modeDefs[i]);
+        }
+
+        btn(p, "Apply", function () {
+            run("Flow easing", function () { doFlowApply(cur, mode); });
+        }, "Applies this curve to the selected keyframes (or every key of the selected properties).");
+
+        // Preset tiles, 6 per row
+        var pr = null;
+        function drawTile() {
+            var g = this.graphics, w = this.size[0], h = this.size[1], c = this.curve, on = (this.presetIndex === picked);
+            rrPath(g, 0.5, 0.5, w - 1, h - 1, 8);
+            g.fillPath(brush(g, on ? DS.tint : DS.card));
+            g.strokePath(pen(g, on ? DS.primary : DS.border, 1));
+            var lo = 0, hi = 1, k, q;
+            for (k = 0; k <= 16; k++) { q = bezierAt(c, k / 16); lo = Math.min(lo, q[1]); hi = Math.max(hi, q[1]); }
+            var bx = 9, bw = w - 18, by = 5, bh = 22, span = hi - lo;
+            flowCurvePath(g, c, function (u) { return bx + u * bw; }, function (v) { return by + bh - (v - lo) / span * bh; });
+            g.strokePath(pen(g, on ? DS.primary : DS.label, 1.5));
+            var f = font(on ? "BOLD" : "REGULAR", 9), m = measure(g, this.text, f);
+            textAt(g, this.text, on ? DS.primary : DS.muted, Math.round((w - m[0]) / 2), h - m[1] - 3, f);
+        }
+        for (i = 0; i < FLOW_PRESETS.length; i++) {
+            if (i % 6 === 0) {
+                pr = p.add("group");
+                pr.orientation = "row";
+                pr.alignChildren = ["fill", "center"];
+                pr.spacing = 4;
+            }
+            (function (idx) {
+                var d = FLOW_PRESETS[idx];
+                var t = pr.add("button", undefined, d[0]);
+                t.preferredSize = [48, 46];
+                t.presetIndex = idx;
+                t.curve = [d[1], d[2], d[3], d[4]];
+                t.helpTip = d[0] + "  (" + d[1] + ", " + d[2] + ", " + d[3] + ", " + d[4] + ")";
+                t.onDraw = drawTile;
+                t.onClick = function () {
+                    cur = [d[1], d[2], d[3], d[4]];
+                    picked = idx;
+                    refresh(true);
+                };
+                tiles.push(t);
+            })(i);
+        }
     });
 
     // ---------------- Camera ----------------

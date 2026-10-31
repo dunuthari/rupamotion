@@ -31,8 +31,8 @@ const app = { settings:{haveSetting:(s,k)=>(s+k) in settings,getSetting:(s,k)=>s
 function Panel(){}; let lastWin = null; function Window(){ lastWin = el('window'); return lastWin; }
 const g = { app, Panel, Window, $: $g, alert: ()=>{}, ScriptUI: { newFont:(f,s,z)=>({f,s,z}) },
   CompItem:function(){}, FootageItem:function(){}, AVLayer:function(){}, ShapeLayer:function(){}, TextLayer:function(){},
-  CameraLayer:function(){}, LightLayer:function(){}, Shape:function(){}, KeyframeEase:function(){}, KeyframeInterpolationType:{},
-  PropertyType:{}, MarkerValue:function(){}, TrackMatteType:{}, BlendingMode:{}, ParagraphJustification:{}, AutoOrientType:{} };
+  CameraLayer:function(){}, LightLayer:function(){}, Shape:function(){}, KeyframeEase:function(sp,inf){ this.speed=sp; this.influence=inf; }, KeyframeInterpolationType:{LINEAR:'L',BEZIER:'B'},
+  PropertyType:{PROPERTY:1}, MarkerValue:function(){}, TrackMatteType:{}, BlendingMode:{}, ParagraphJustification:{}, AutoOrientType:{} };
 const run = new Function(...Object.keys(g), 'thisObj', src.replace(/\}\)\(this\);\s*$/, '})(thisObj);'));
 const root = Object.assign(new Panel(), el('panel','root'));
 run(...Object.values(g), root);
@@ -104,3 +104,36 @@ let pressErrs = 0;
 pb.listeners.mousedown({}); const wasPressed = pb.pressed; try { pb.onDraw(); } catch (e) { pressErrs++; }
 pb.listeners.mouseup({}); const after = pb.pressed;
 console.log(`click effect: pressed on mousedown ${wasPressed}, cleared on mouseup ${!after}, draw errors ${pressErrs}`);
+
+// Flow: apply presets to a fake keyframed property and check the resulting AE ease values
+function fakeProp(v0, v1, dt) {
+  const set = {};
+  return { propertyType: 1, numKeys: 2, selectedKeys: [1, 2], set,
+    keyTime: i => (i === 1 ? 0 : dt), keyValue: i => (i === 1 ? v0 : v1),
+    keyInTemporalEase: () => [new g.KeyframeEase(0, 33)], keyOutTemporalEase: () => [new g.KeyframeEase(0, 33)],
+    keyInInterpolationType: () => 'B', keyOutInterpolationType: () => 'B',
+    setInterpolationTypeAtKey(k, a, b) { (set[k] = set[k] || {}).types = [a, b]; },
+    setTemporalEaseAtKey(k, i, o) { (set[k] = set[k] || {}).ease = [i[0], o[0]]; } };
+}
+function applyPreset(name, prop, value) {
+  const comp = new g.CompItem(); comp.selectedLayers = [{ selectedProperties: [prop], property() {} }];
+  app.project.activeItem = comp;
+  walk(root).filter(n => n.modeId === 'both')[0].onClick();
+  walk(root).filter(n => n.presetIndex !== undefined && n.text === name)[0].onClick();
+  walk(root).filter(n => n.type === 'button' && n.text === 'Apply')[0].onClick();
+  app.project.activeItem = null;
+}
+function near(a, b) { return Math.abs(a - b) < 1e-6 * Math.max(1, Math.abs(b)); }
+let flowOk = 0, flowTotal = 0;
+function check(label, got, want) { flowTotal++; if (near(got, want)) flowOk++; else console.log('FLOW MISMATCH', label, got, want); }
+let fp = fakeProp(0, 100, 2); applyPreset('cubic', fp);
+check('cubic out influence', fp.set[1].ease[1].influence, 66); check('cubic out speed', fp.set[1].ease[1].speed, 0);
+check('cubic in influence', fp.set[2].ease[0].influence, 66); check('cubic in speed', fp.set[2].ease[0].speed, 0);
+fp = fakeProp(0, 100, 2); applyPreset('backOut', fp);
+check('backOut out speed', fp.set[1].ease[1].speed, 1.56 * 100 / (0.34 * 2)); check('backOut out influence', fp.set[1].ease[1].influence, 34);
+check('backOut in influence', fp.set[2].ease[0].influence, 36);
+fp = fakeProp(100, 0, 1); applyPreset('expoOut', fp);
+check('expoOut falling speed', fp.set[1].ease[1].speed, 1 * -100 / (0.16 * 1));
+fp = fakeProp(0, 100, 1); applyPreset('linear', fp);
+flowTotal++; if (fp.set[1].types[1] === 'L' && fp.set[2].types[0] === 'L') flowOk++; else console.log('FLOW MISMATCH linear types', fp.set);
+console.log(`flow easing: ${flowOk}/${flowTotal} checks match the bezier math`);

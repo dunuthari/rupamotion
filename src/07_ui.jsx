@@ -264,7 +264,7 @@
     // ---- nav icons (simple line drawings, ~18 px) ----
 
     var NAV_LABELS = {
-        "Layers": "Layers", "Quick Actions": "Quick", "Camera": "Camera", "Shapes": "Shapes",
+        "Layers": "Layers", "Quick Actions": "Quick", "Flow": "Flow", "Camera": "Camera", "Shapes": "Shapes",
         "Animation": "Animate", "Transitions": "Cuts", "Text": "Text", "UI Kit": "UI Kit",
         "Media": "Media", "Style": "Style"
     };
@@ -283,6 +283,11 @@
         },
         "Quick Actions": function (g, x, y, p) {
             poly(g, [[x + 2, y - 9], [x - 5, y + 1], [x, y + 1], [x - 2, y + 9], [x + 5, y - 1], [x, y - 1]], true); g.strokePath(p);
+        },
+        "Flow": function (g, x, y, p) {
+            var pts = [], i, q;
+            for (i = 0; i <= 16; i++) { q = bezierAt([0.66, 0, 0.34, 1], i / 16); pts.push([x - 9 + q[0] * 18, y + 8 - q[1] * 16]); }
+            poly(g, pts, false); g.strokePath(p);
         },
         "Camera": function (g, x, y, p) {
             rrPath(g, x - 10, y - 6, 14, 12, 3); g.strokePath(p);
@@ -706,6 +711,166 @@
         btn(ball, "Bounce the ball effect", function () {
             run("Bounce the ball effect", function () { doBouncePhysics(num(ballAmt.text, 10, 1, 100)); });
         }, "Adds a ball-like bounce after every keyframe of the selected layers (position, scale, rotation) or selected keyframed properties.");
+    });
+
+    // ---------------- Flow ----------------
+
+    var FLOW_ORANGE = [0.96, 0.65, 0.14, 1];
+
+    // Draws a bezier curve as a smooth polyline into box (bx, by, bw, bh); yOf maps a value to y
+    function flowCurvePath(g, c, xOf, yOf) {
+        var i, q;
+        g.newPath();
+        for (i = 0; i <= 64; i++) {
+            q = bezierAt(c, i / 64);
+            if (i === 0) { g.moveTo(xOf(q[0]), yOf(q[1])); } else { g.lineTo(xOf(q[0]), yOf(q[1])); }
+        }
+    }
+
+    feature("Flow", "Easing curves", function (p) {
+        var GW = 300, GH = 252, X0 = 40, XW = 220, Y0 = 170, YS = 100;     // plot: u 0..1 -> X0..X0+XW, v 0..1 -> Y0..Y0-YS
+        var cur = [0.66, 0, 0.34, 1], mode = "both", picked = -1, drag = -1, i;
+        var saved = splitList(getS("flow_curve", ""));
+        if (saved.length === 4) { for (i = 0; i < 4; i++) { cur[i] = num(saved[i], cur[i], -1, 2); } }
+        for (i = 0; i < FLOW_PRESETS.length; i++) {
+            if (FLOW_PRESETS[i][1] === cur[0] && FLOW_PRESETS[i][2] === cur[1] && FLOW_PRESETS[i][3] === cur[2] && FLOW_PRESETS[i][4] === cur[3]) { picked = i; }
+        }
+        function xOf(u) { return X0 + u * XW; }
+        function yOf(v) { return Y0 - v * YS; }
+
+        hint(p, "Select keyframes, pick or drag a curve, then Apply.");
+
+        var gr = p.add("group");
+        gr.preferredSize = [GW, GH];
+        gr.alignment = ["center", "top"];
+        gr.helpTip = "Drag the orange handles to shape the curve.";
+        gr.onDraw = function () {
+            var g = this.graphics, k;
+            rrPath(g, 0.5, 0.5, GW - 1, GH - 1, 10);
+            g.fillPath(brush(g, DS.card));
+            for (k = 0; k <= 4; k++) {
+                poly(g, [[xOf(k / 4), yOf(-0.7)], [xOf(k / 4), yOf(1.6)]], false); g.strokePath(pen(g, DS.border, 1));
+            }
+            for (k = -2; k <= 6; k++) {
+                poly(g, [[X0 - 20, yOf(k / 4)], [X0 + XW + 20, yOf(k / 4)]], false); g.strokePath(pen(g, DS.border, 1));
+            }
+            g.newPath(); g.rectPath(X0, yOf(1), XW, YS); g.strokePath(pen(g, DS.primary, 1));
+            poly(g, [[xOf(0), yOf(0)], [xOf(1), yOf(1)]], false); g.strokePath(pen(g, DS.muted, 1));
+            poly(g, [[xOf(0), yOf(0)], [xOf(cur[0]), yOf(cur[1])]], false); g.strokePath(pen(g, FLOW_ORANGE, 2));
+            poly(g, [[xOf(1), yOf(1)], [xOf(cur[2]), yOf(cur[3])]], false); g.strokePath(pen(g, FLOW_ORANGE, 2));
+            flowCurvePath(g, cur, xOf, yOf); g.strokePath(pen(g, DS.text, 3));
+            var pts = [[0, 0, DS.text], [1, 1, DS.text], [cur[0], cur[1], FLOW_ORANGE], [cur[2], cur[3], FLOW_ORANGE]];
+            for (k = 0; k < 4; k++) {
+                g.newPath(); g.ellipsePath(xOf(pts[k][0]) - 5, yOf(pts[k][1]) - 5, 10, 10); g.fillPath(brush(g, pts[k][2]));
+            }
+        };
+
+        var vals = row(p, "Curve:");
+        var ef = [], names = ["x1", "y1", "x2", "y2"];
+        function two(v) { return String(Math.round(v * 100) / 100); }
+        var tiles = [];
+
+        function refresh(fromPreset) {
+            for (var k = 0; k < 4; k++) { ef[k].text = two(cur[k]); }
+            if (!fromPreset) { picked = -1; }
+            putS("flow_curve", cur.join(","));
+            redraw(gr);
+            for (k = 0; k < tiles.length; k++) { redraw(tiles[k]); }
+        }
+        for (i = 0; i < 4; i++) {
+            (function (k) {
+                var e = vals.add("edittext", undefined, two(cur[k]));
+                e.characters = 4;
+                e.helpTip = names[k] + (k % 2 === 0 ? " (time, 0–1)" : " (value)");
+                e.onChange = function () {
+                    cur[k] = (k % 2 === 0) ? num(e.text, cur[k], 0, 1) : num(e.text, cur[k], -1, 2);
+                    refresh(false);
+                };
+                ef.push(e);
+            })(i);
+        }
+
+        function moveHandle(e) {
+            if (drag < 0) { return; }
+            var u = Math.max(0, Math.min(1, (e.clientX - X0) / XW)), v = Math.max(-0.7, Math.min(1.6, (Y0 - e.clientY) / YS));
+            cur[drag * 2] = Math.round(u * 100) / 100;
+            cur[drag * 2 + 1] = Math.round(v * 100) / 100;
+            refresh(false);
+        }
+        gr.addEventListener("mousedown", function (e) {
+            var d0 = Math.abs(e.clientX - xOf(cur[0])) + Math.abs(e.clientY - yOf(cur[1]));
+            var d1 = Math.abs(e.clientX - xOf(cur[2])) + Math.abs(e.clientY - yOf(cur[3]));
+            drag = (d0 <= d1) ? 0 : 1;
+            moveHandle(e);
+        });
+        gr.addEventListener("mousemove", moveHandle);
+        gr.addEventListener("mouseup", function () { drag = -1; });
+        gr.addEventListener("mouseout", function () { drag = -1; });
+
+        // Which keyframe side the curve is applied to
+        var mr = btnRow(p);
+        var modeBtns = [];
+        var modeDefs = [["◂ In", "in"], ["Both", "both"], ["Out ▸", "out"]];
+        function paintModes() {
+            for (var k = 0; k < modeBtns.length; k++) {
+                modeBtns[k].variant = (modeBtns[k].modeId === mode) ? "primary" : "secondary";
+                redraw(modeBtns[k]);
+            }
+        }
+        for (i = 0; i < modeDefs.length; i++) {
+            (function (d) {
+                var b = styleButton(mr.add("button", undefined, d[0]), d[1] === mode ? "primary" : "secondary", 28);
+                b.modeId = d[1];
+                b.helpTip = (d[1] === "both") ? "Ease into and out of the keyframes."
+                    : (d[1] === "in") ? "Only the incoming side of each segment (slow arrival)."
+                    : "Only the outgoing side of each segment (slow departure).";
+                b.onClick = function () { mode = d[1]; paintModes(); };
+                modeBtns.push(b);
+            })(modeDefs[i]);
+        }
+
+        btn(p, "Apply", function () {
+            run("Flow easing", function () { doFlowApply(cur, mode); });
+        }, "Applies this curve to the selected keyframes (or every key of the selected properties).");
+
+        // Preset tiles, 6 per row
+        var pr = null;
+        function drawTile() {
+            var g = this.graphics, w = this.size[0], h = this.size[1], c = this.curve, on = (this.presetIndex === picked);
+            rrPath(g, 0.5, 0.5, w - 1, h - 1, 8);
+            g.fillPath(brush(g, on ? DS.tint : DS.card));
+            g.strokePath(pen(g, on ? DS.primary : DS.border, 1));
+            var lo = 0, hi = 1, k, q;
+            for (k = 0; k <= 16; k++) { q = bezierAt(c, k / 16); lo = Math.min(lo, q[1]); hi = Math.max(hi, q[1]); }
+            var bx = 9, bw = w - 18, by = 5, bh = 22, span = hi - lo;
+            flowCurvePath(g, c, function (u) { return bx + u * bw; }, function (v) { return by + bh - (v - lo) / span * bh; });
+            g.strokePath(pen(g, on ? DS.primary : DS.label, 1.5));
+            var f = font(on ? "BOLD" : "REGULAR", 9), m = measure(g, this.text, f);
+            textAt(g, this.text, on ? DS.primary : DS.muted, Math.round((w - m[0]) / 2), h - m[1] - 3, f);
+        }
+        for (i = 0; i < FLOW_PRESETS.length; i++) {
+            if (i % 6 === 0) {
+                pr = p.add("group");
+                pr.orientation = "row";
+                pr.alignChildren = ["fill", "center"];
+                pr.spacing = 4;
+            }
+            (function (idx) {
+                var d = FLOW_PRESETS[idx];
+                var t = pr.add("button", undefined, d[0]);
+                t.preferredSize = [48, 46];
+                t.presetIndex = idx;
+                t.curve = [d[1], d[2], d[3], d[4]];
+                t.helpTip = d[0] + "  (" + d[1] + ", " + d[2] + ", " + d[3] + ", " + d[4] + ")";
+                t.onDraw = drawTile;
+                t.onClick = function () {
+                    cur = [d[1], d[2], d[3], d[4]];
+                    picked = idx;
+                    refresh(true);
+                };
+                tiles.push(t);
+            })(i);
+        }
     });
 
     // ---------------- Camera ----------------

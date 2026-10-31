@@ -9,7 +9,7 @@
       macOS:   /Applications/Adobe After Effects <version>/Scripts/ScriptUI Panels/
       Restart After Effects, then open Window > RupaMotion.jsx
 
-    Groups:  Layers · Quick Actions · Camera · Shapes · Animation · Transitions · Text · UI Kit · Media · Style
+    Groups:  Layers · Quick Actions · Flow · Camera · Shapes · Animation · Transitions · Text · UI Kit · Media · Style
 
     Every action is one undo step. Most actions start at the playhead.
 */
