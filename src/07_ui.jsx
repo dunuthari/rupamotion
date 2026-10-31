@@ -372,27 +372,48 @@
     function colorChooser(parent, label, defHex, key, big) {
         var start = key ? getS(key, defHex) : defHex;
         var r = row(parent, label);
-        var sw = r.add("group");
-        sw.preferredSize = big ? [64, 40] : [24, 20];
+        var sw, pick = null;
+        if (big) {
+            // Large swatch that is itself the button: click it to open the color picker
+            sw = r.add("button", undefined, "");
+            sw.isSwatch = true;
+            sw.hexStr = start;
+            sw.preferredSize = [64, 40];
+            sw.helpTip = "Click to choose a color";
+            sw.onDraw = function () {
+                var g = this.graphics, c = hexToRgb(this.hexStr);
+                rrPath(g, 0.5, 0.5, this.size[0] - 1, this.size[1] - 1, 8);
+                g.fillPath(brush(g, [c[0], c[1], c[2], 1]));
+                g.strokePath(pen(g, DS.border, 1));
+            };
+        } else {
+            sw = r.add("group");
+            sw.preferredSize = [24, 20];
+        }
         var hex = r.add("edittext", undefined, start);
         hex.characters = 8;
         hex.helpTip = "Hex color, e.g. #4285F4";
-        var pick = styleButton(r.add("button", undefined, "Pick…"), "secondary", 26);
-        pick.preferredSize.width = 60;
         function update() {
             hex.text = rgbToHex(hexToRgb(hex.text));
             paintSwatch(sw, hex.text);
             if (key) { putS(key, hex.text); }
         }
-        hex.onChange = update;
-        pick.onClick = function () {
+        function choose() {
             var c = hexToRgb(hex.text);
             var res = $.colorPicker((Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255));
             if (res >= 0) {
                 hex.text = rgbToHex([((res >> 16) & 255) / 255, ((res >> 8) & 255) / 255, (res & 255) / 255]);
                 update();
             }
-        };
+        }
+        hex.onChange = update;
+        if (big) {
+            sw.onClick = choose;
+        } else {
+            pick = styleButton(r.add("button", undefined, "Pick…"), "secondary", 26);
+            pick.preferredSize.width = 60;
+            pick.onClick = choose;
+        }
         paintSwatch(sw, start);
         return { get: function () { return hexToRgb(hex.text); } };
     }
@@ -411,7 +432,7 @@
 
         var dup = subPanel(p, "Smart Duplicate");
         var dupN = field(dup, "Copies:", "1", 4);
-        var dupMode = drop(dup, "Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 0,
+        var dupMode = drop(dup, "Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 1,
             "Linked: every copy uses the same comp, so editing one changes all.\nIndependent: each copy gets its own comp (nested comps copied too), so edits stay separate.");
         btn(dup, "Smart Duplicate", function () {
             run("Smart Duplicate", function () {
@@ -859,6 +880,7 @@
     // =====================================================================
 
     function paintSwatch(sw, hexStr) {
+        if (sw.isSwatch) { sw.hexStr = hexStr; repaint(sw); return; }
         try {
             var c = hexToRgb(hexStr);
             sw.graphics.backgroundColor = sw.graphics.newBrush(sw.graphics.BrushType.SOLID_COLOR, [c[0], c[1], c[2], 1]);

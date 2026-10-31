@@ -157,7 +157,7 @@
   .btns.four { grid-template-columns: repeat(4, 1fr); }
 
   
-  .swatch.big { width: 64px; height: 40px; }
+  .swatch.big { width: 64px; height: 40px; cursor: pointer; padding: 0; }
   .swatch { width: 24px; height: 20px; border-radius: 6px; border: 1px solid var(--hairline); flex: none; }
   input[type="color"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
   .pick { width: auto; height: 26px; padding: 0 10px; flex: none; }
@@ -243,7 +243,7 @@
   var FEATURES = [
     { group: "Layers", name: "Layer operations", ui: [
       GRID([["Pre-compose", "Pre-composed the selected layers, keeping their timing."], ["Smart Null", "Added a 50×50 null and parented the selection."], ["Adjustment Layer", "Added a full-size adjustment layer above the selection."], ["Unwrap Composition", "Moved the pre-comp's layers into this comp."]]),
-      C("Smart Duplicate", [F("Copies:", "1"), D("Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 0, "Linked copies share one comp; independent copies get their own."), B("Smart Duplicate", "Duplicated with numbered names.")]),
+      C("Smart Duplicate", [F("Copies:", "1"), D("Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 1, "Linked copies share one comp; independent copies get their own."), B("Smart Duplicate", "Duplicated with numbered names.")]),
       C("Solid Layer", [COLOR("Color:", "#4285F4", true), B("Solid Layer", "Added a solid layer.")]),
       C("Follow Path", [H("Select a path layer (mask or shape) + the follower."), F("Path time (s):", "3"), T("Loop along path", true), T("Orient along path", false), B("Follow Path", "The follower now moves along the path.")])
     ]},
@@ -355,7 +355,7 @@
 
   function colorControl(label, hex, big) {
     var id = "c" + (++uid);
-    var sw = el("span", { class: big ? "swatch big" : "swatch", style: "background:" + hex });
+    var sw = big ? el("button", { class: "swatch big", type: "button", title: "Click to choose a color", "aria-label": label + " color", style: "background:" + hex, onclick: function () { picker.click(); } }) : el("span", { class: "swatch", style: "background:" + hex });
     var input = el("input", { type: "text", id: id, value: hex, "aria-label": label, style: "width:86px" });
     var picker = el("input", { type: "color", value: hex, tabindex: "-1", "aria-hidden": "true" });
     function set(v) {
@@ -365,9 +365,9 @@
     }
     input.addEventListener("change", function () { set(input.value.trim()); });
     picker.addEventListener("input", function () { set(picker.value); });
-    var pick = el("button", { class: "btn pick", type: "button", text: "Pick…", onclick: function () { picker.click(); } });
+    var pick = big ? null : el("button", { class: "btn pick", type: "button", text: "Pick…", onclick: function () { picker.click(); } });
     set(hex);
-    return row(label, el("div", { class: "ctl", style: "position:relative" }, [sw, input, pick, picker]), id);
+    return row(label, el("div", { class: "ctl", style: "position:relative" }, big ? [sw, input, picker] : [sw, input, pick, picker]), id);
   }
 
   function themeControl() {
