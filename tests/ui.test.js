@@ -118,7 +118,9 @@ function fakeProp(v0, v1, dt) {
 function applyPreset(name, prop, value) {
   const comp = new g.CompItem(); comp.selectedLayers = [{ selectedProperties: [prop], property() {} }];
   app.project.activeItem = comp;
+  walk(root).filter(n => n.modeId === 'both')[0].onClick();
   walk(root).filter(n => n.presetIndex !== undefined && n.text === name)[0].onClick();
+  walk(root).filter(n => n.type === 'button' && n.text === 'Apply')[0].onClick();
   app.project.activeItem = null;
 }
 function near(a, b) { return Math.abs(a - b) < 1e-6 * Math.max(1, Math.abs(b)); }

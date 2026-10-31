@@ -715,7 +715,9 @@
 
     // ---------------- Flow ----------------
 
-    // Draws a bezier curve as a smooth polyline; xOf/yOf map curve space to pixels
+    var FLOW_ORANGE = [0.96, 0.65, 0.14, 1];
+
+    // Draws a bezier curve as a smooth polyline into box (bx, by, bw, bh); yOf maps a value to y
     function flowCurvePath(g, c, xOf, yOf) {
         var i, q;
         g.newPath();
@@ -725,60 +727,156 @@
         }
     }
 
-    // A chart per easing curve: click one to apply it to the selected keyframes.
     feature("Flow", "Easing curves", function (p) {
-        var picked = -1, tiles = [], row = null, i;
-        hint(p, "Select keyframes, then click a curve to apply it.");
+        var GW = 300, GH = 252, X0 = 40, XW = 220, Y0 = 170, YS = 100;     // plot: u 0..1 -> X0..X0+XW, v 0..1 -> Y0..Y0-YS
+        var cur = [0.66, 0, 0.34, 1], mode = "both", picked = -1, drag = -1, i;
+        var saved = splitList(getS("flow_curve", ""));
+        if (saved.length === 4) { for (i = 0; i < 4; i++) { cur[i] = num(saved[i], cur[i], -1, 2); } }
+        for (i = 0; i < FLOW_PRESETS.length; i++) {
+            if (FLOW_PRESETS[i][1] === cur[0] && FLOW_PRESETS[i][2] === cur[1] && FLOW_PRESETS[i][3] === cur[2] && FLOW_PRESETS[i][4] === cur[3]) { picked = i; }
+        }
+        function xOf(u) { return X0 + u * XW; }
+        function yOf(v) { return Y0 - v * YS; }
 
+        hint(p, "Select keyframes, pick a curve, edit it if you like, then Apply.");
+
+        var gr = p.add("group");
+        gr.preferredSize = [GW, GH];
+        gr.alignment = ["center", "top"];
+        gr.helpTip = "Drag the orange handles to shape the curve.";
+        gr.onDraw = function () {
+            var g = this.graphics, k;
+            rrPath(g, 0.5, 0.5, GW - 1, GH - 1, 10);
+            g.fillPath(brush(g, DS.card));
+            for (k = 0; k <= 4; k++) {
+                poly(g, [[xOf(k / 4), yOf(-0.7)], [xOf(k / 4), yOf(1.6)]], false); g.strokePath(pen(g, DS.border, 1));
+            }
+            for (k = -2; k <= 6; k++) {
+                poly(g, [[X0 - 20, yOf(k / 4)], [X0 + XW + 20, yOf(k / 4)]], false); g.strokePath(pen(g, DS.border, 1));
+            }
+            g.newPath(); g.rectPath(X0, yOf(1), XW, YS); g.strokePath(pen(g, DS.primary, 1));
+            poly(g, [[xOf(0), yOf(0)], [xOf(1), yOf(1)]], false); g.strokePath(pen(g, DS.muted, 1));
+            poly(g, [[xOf(0), yOf(0)], [xOf(cur[0]), yOf(cur[1])]], false); g.strokePath(pen(g, FLOW_ORANGE, 2));
+            poly(g, [[xOf(1), yOf(1)], [xOf(cur[2]), yOf(cur[3])]], false); g.strokePath(pen(g, FLOW_ORANGE, 2));
+            flowCurvePath(g, cur, xOf, yOf); g.strokePath(pen(g, DS.text, 3));
+            var pts = [[0, 0, DS.text], [1, 1, DS.text], [cur[0], cur[1], FLOW_ORANGE], [cur[2], cur[3], FLOW_ORANGE]];
+            for (k = 0; k < 4; k++) {
+                g.newPath(); g.ellipsePath(xOf(pts[k][0]) - 5, yOf(pts[k][1]) - 5, 10, 10); g.fillPath(brush(g, pts[k][2]));
+            }
+        };
+
+        var vals = row(p, "Curve:");
+        var ef = [], names = ["x1", "y1", "x2", "y2"];
+        function two(v) { return String(Math.round(v * 100) / 100); }
+        var tiles = [];
+
+        function refresh(fromPreset) {
+            for (var k = 0; k < 4; k++) { ef[k].text = two(cur[k]); }
+            if (!fromPreset) { picked = -1; }
+            putS("flow_curve", cur.join(","));
+            redraw(gr);
+            for (k = 0; k < tiles.length; k++) { redraw(tiles[k]); }
+        }
+        for (i = 0; i < 4; i++) {
+            (function (k) {
+                var e = vals.add("edittext", undefined, two(cur[k]));
+                e.characters = 4;
+                e.helpTip = names[k] + (k % 2 === 0 ? " (time, 0–1)" : " (value)");
+                e.onChange = function () {
+                    cur[k] = (k % 2 === 0) ? num(e.text, cur[k], 0, 1) : num(e.text, cur[k], -1, 2);
+                    refresh(false);
+                };
+                ef.push(e);
+            })(i);
+        }
+
+        function moveHandle(e) {
+            if (drag < 0) { return; }
+            var u = Math.max(0, Math.min(1, (e.clientX - X0) / XW)), v = Math.max(-0.7, Math.min(1.6, (Y0 - e.clientY) / YS));
+            cur[drag * 2] = Math.round(u * 100) / 100;
+            cur[drag * 2 + 1] = Math.round(v * 100) / 100;
+            refresh(false);
+        }
+        gr.addEventListener("mousedown", function (e) {
+            var d0 = Math.abs(e.clientX - xOf(cur[0])) + Math.abs(e.clientY - yOf(cur[1]));
+            var d1 = Math.abs(e.clientX - xOf(cur[2])) + Math.abs(e.clientY - yOf(cur[3]));
+            drag = (d0 <= d1) ? 0 : 1;
+            moveHandle(e);
+        });
+        gr.addEventListener("mousemove", moveHandle);
+        gr.addEventListener("mouseup", function () { drag = -1; });
+        gr.addEventListener("mouseout", function () { drag = -1; });
+
+        // Which keyframe side the curve is applied to
+        var mr = btnRow(p);
+        var modeBtns = [];
+        var modeDefs = [["◂ In", "in"], ["Both", "both"], ["Out ▸", "out"]];
+        function paintModes() {
+            for (var k = 0; k < modeBtns.length; k++) {
+                modeBtns[k].variant = (modeBtns[k].modeId === mode) ? "primary" : "secondary";
+                redraw(modeBtns[k]);
+            }
+        }
+        for (i = 0; i < modeDefs.length; i++) {
+            (function (d) {
+                var b = styleButton(mr.add("button", undefined, d[0]), d[1] === mode ? "primary" : "secondary", 28);
+                b.modeId = d[1];
+                b.helpTip = (d[1] === "both") ? "Ease into and out of the keyframes."
+                    : (d[1] === "in") ? "Only the incoming side of each segment (slow arrival)."
+                    : "Only the outgoing side of each segment (slow departure).";
+                b.onClick = function () { mode = d[1]; paintModes(); };
+                modeBtns.push(b);
+            })(modeDefs[i]);
+        }
+
+        btn(p, "Apply", function () {
+            run("Flow easing", function () { doFlowApply(cur, mode); });
+        }, "Applies this curve to the selected keyframes (or every key of the selected properties).");
+
+        // Preset tiles, 7 per row: click one to load it into the graph above
+        var pr = null;
         function drawTile() {
             var g = this.graphics, w = this.size[0], h = this.size[1], c = this.curve, on = (this.presetIndex === picked);
             rrPath(g, 0.5, 0.5, w - 1, h - 1, 8);
             g.fillPath(brush(g, on ? DS.primary : DS.card));
             if (!on) { g.strokePath(pen(g, DS.border, 1)); }
             var ink = on ? DS.onPrimary : DS.text, soft = on ? [1, 1, 1, 0.55] : DS.muted;
-            // value range covers the curve and its handles (so back/overshoot curves fit)
             var lo = Math.min(0, c[1], c[3]), hi = Math.max(1, c[1], c[3]), k, q;
             for (k = 0; k <= 16; k++) { q = bezierAt(c, k / 16); lo = Math.min(lo, q[1]); hi = Math.max(hi, q[1]); }
             var bx = 8, bw = w - 16, by = 6, bh = h - 24, span = hi - lo;
-            function xOf(u) { return bx + u * bw; }
-            function yOf(v) { return by + bh - (v - lo) / span * bh; }
-            poly(g, [[xOf(0), yOf(0)], [xOf(c[0]), yOf(c[1])]], false); g.strokePath(pen(g, soft, 1));
-            poly(g, [[xOf(1), yOf(1)], [xOf(c[2]), yOf(c[3])]], false); g.strokePath(pen(g, soft, 1));
-            flowCurvePath(g, c, xOf, yOf); g.strokePath(pen(g, ink, 2));
+            function tx(u) { return bx + u * bw; }
+            function ty(v) { return by + bh - (v - lo) / span * bh; }
+            poly(g, [[tx(0), ty(0)], [tx(c[0]), ty(c[1])]], false); g.strokePath(pen(g, soft, 1));
+            poly(g, [[tx(1), ty(1)], [tx(c[2]), ty(c[3])]], false); g.strokePath(pen(g, soft, 1));
+            flowCurvePath(g, c, tx, ty); g.strokePath(pen(g, ink, 2));
             var dots = [[0, 0], [1, 1], [c[0], c[1]], [c[2], c[3]]];
             for (k = 0; k < 4; k++) {
-                g.newPath(); g.ellipsePath(xOf(dots[k][0]) - 2, yOf(dots[k][1]) - 2, 4, 4);
+                g.newPath(); g.ellipsePath(tx(dots[k][0]) - 2, ty(dots[k][1]) - 2, 4, 4);
                 g.fillPath(brush(g, k < 2 ? ink : soft));
             }
             var f = font(on ? "BOLD" : "REGULAR", 9), m = measure(g, this.text, f);
             textAt(g, this.text, on ? DS.onPrimary : DS.muted, Math.round((w - m[0]) / 2), h - m[1] - 4, f);
         }
-
-        function applyPreset(idx) {
-            var d = FLOW_PRESETS[idx], done = 0;
-            run("Flow easing: " + d[0], function () { done = doFlowApply([d[1], d[2], d[3], d[4]], "both"); });
-            if (done > 0) {
-                picked = idx;
-                for (var k = 0; k < tiles.length; k++) { redraw(tiles[k]); }
-            }
-        }
-
         for (i = 0; i < FLOW_PRESETS.length; i++) {
             if (i % 7 === 0) {
-                row = p.add("group");
-                row.orientation = "row";
-                row.alignChildren = ["fill", "center"];
-                row.spacing = 4;
+                pr = p.add("group");
+                pr.orientation = "row";
+                pr.alignChildren = ["fill", "center"];
+                pr.spacing = 4;
             }
             (function (idx) {
                 var d = FLOW_PRESETS[idx];
-                var t = row.add("button", undefined, d[0]);
+                var t = pr.add("button", undefined, d[0]);
                 t.preferredSize = [44, 60];
                 t.presetIndex = idx;
                 t.curve = [d[1], d[2], d[3], d[4]];
-                t.helpTip = d[0] + "  (" + d[1] + ", " + d[2] + ", " + d[3] + ", " + d[4] + ")\nClick to apply to the selected keyframes.";
+                t.helpTip = d[0] + "  (" + d[1] + ", " + d[2] + ", " + d[3] + ", " + d[4] + ")\nClick to load it into the graph, then Apply.";
                 t.onDraw = drawTile;
-                t.onClick = function () { applyPreset(idx); };
+                t.onClick = function () {
+                    cur = [d[1], d[2], d[3], d[4]];
+                    picked = idx;
+                    refresh(true);
+                };
                 tiles.push(t);
             })(i);
         }

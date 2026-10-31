@@ -493,7 +493,32 @@
   }
 
   function flowControl() {
-    var picked = -1, tiles = [], canvases = [];
+    var GW = 300, GH = 252, X0 = 40, XW = 220, Y0 = 170, YS = 100, ORANGE = "#F5A623";
+    var cur = [.66, 0, .34, 1], mode = "both", picked = 12, drag = -1;
+    var graph = el("canvas", { class: "flow-graph", title: "Drag the orange handles to shape the curve.", "aria-label": "Easing curve" });
+    var inputs = [], tiles = [], tileCanvases = [], modeBtns = [];
+    function xOf(u) { return X0 + u * XW; }
+    function yOf(v) { return Y0 - v * YS; }
+    function line(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
+
+    function drawGraph() {
+      var g = crisp(graph, GW, GH), k, q;
+      g.fillStyle = cssVar("--card"); g.beginPath(); g.roundRect ? g.roundRect(0, 0, GW, GH, 10) : g.rect(0, 0, GW, GH); g.fill();
+      g.strokeStyle = cssVar("--hairline"); g.lineWidth = 1;
+      for (k = 0; k <= 4; k++) line(g, xOf(k / 4), yOf(-.7), xOf(k / 4), yOf(1.6));
+      for (k = -2; k <= 6; k++) line(g, X0 - 20, yOf(k / 4), X0 + XW + 20, yOf(k / 4));
+      g.strokeStyle = cssVar("--primary"); g.strokeRect(X0, yOf(1), XW, YS);
+      g.strokeStyle = cssVar("--hint"); line(g, xOf(0), yOf(0), xOf(1), yOf(1));
+      g.strokeStyle = ORANGE; g.lineWidth = 2;
+      line(g, xOf(0), yOf(0), xOf(cur[0]), yOf(cur[1])); line(g, xOf(1), yOf(1), xOf(cur[2]), yOf(cur[3]));
+      g.strokeStyle = cssVar("--text"); g.lineWidth = 3; g.lineJoin = "round"; g.beginPath();
+      for (k = 0; k <= 64; k++) { q = bez(cur, k / 64); k ? g.lineTo(xOf(q[0]), yOf(q[1])) : g.moveTo(xOf(q[0]), yOf(q[1])); }
+      g.stroke();
+      [[0, 0, cssVar("--text")], [1, 1, cssVar("--text")], [cur[0], cur[1], ORANGE], [cur[2], cur[3], ORANGE]].forEach(function (p) {
+        g.fillStyle = p[2]; g.beginPath(); g.arc(xOf(p[0]), yOf(p[1]), 5, 0, 7); g.fill();
+      });
+    }
+
     function drawTile(canvas, c, on) {
       var W = canvas.clientWidth || 44, H = 38, g = crisp(canvas, W, H), lo = Math.min(0, c[1], c[3]), hi = Math.max(1, c[1], c[3]), k, q;
       for (k = 0; k <= 16; k++) { q = bez(c, k / 16); lo = Math.min(lo, q[1]); hi = Math.max(hi, q[1]); }
@@ -509,19 +534,59 @@
         g.fillStyle = d[2]; g.beginPath(); g.arc(X(d[0]), Y(d[1]), 2, 0, 7); g.fill();
       });
     }
-    function paint() {
-      tiles.forEach(function (t, i) { t.setAttribute("aria-pressed", String(i === picked)); drawTile(canvases[i], FLOW_PRESETS[i].slice(1), i === picked); });
+
+    function refresh(fromPreset) {
+      if (!fromPreset) picked = -1;
+      inputs.forEach(function (inp, k) { inp.value = (Math.round(cur[k] * 100) / 100).toString(); });
+      drawGraph();
+      tiles.forEach(function (t, i) { t.setAttribute("aria-pressed", String(i === picked)); drawTile(tileCanvases[i], FLOW_PRESETS[i].slice(1), i === picked); });
     }
+
+    function move(e) {
+      if (drag < 0) return;
+      var r = graph.getBoundingClientRect(), sx = GW / r.width, x = (e.clientX - r.left) * sx, y = (e.clientY - r.top) * (GH / r.height);
+      cur[drag * 2] = Math.round(Math.max(0, Math.min(1, (x - X0) / XW)) * 100) / 100;
+      cur[drag * 2 + 1] = Math.round(Math.max(-.7, Math.min(1.6, (Y0 - y) / YS)) * 100) / 100;
+      refresh(false);
+    }
+    graph.addEventListener("pointerdown", function (e) {
+      var r = graph.getBoundingClientRect(), x = (e.clientX - r.left) * (GW / r.width), y = (e.clientY - r.top) * (GH / r.height);
+      var d0 = Math.abs(x - xOf(cur[0])) + Math.abs(y - yOf(cur[1])), d1 = Math.abs(x - xOf(cur[2])) + Math.abs(y - yOf(cur[3]));
+      drag = d0 <= d1 ? 0 : 1; graph.setPointerCapture(e.pointerId); move(e);
+    });
+    graph.addEventListener("pointermove", move);
+    graph.addEventListener("pointerup", function () { drag = -1; });
+
+    var vals = el("div", { class: "flow-vals" });
+    ["x1", "y1", "x2", "y2"].forEach(function (n, k) {
+      var inp = el("input", { type: "text", "aria-label": n, title: n + (k % 2 === 0 ? " (time, 0–1)" : " (value)") });
+      inp.addEventListener("change", function () {
+        var v = parseFloat(inp.value); if (isNaN(v)) v = cur[k];
+        cur[k] = k % 2 === 0 ? Math.max(0, Math.min(1, v)) : Math.max(-1, Math.min(2, v)); refresh(false);
+      });
+      inputs.push(inp); vals.appendChild(inp);
+    });
+
+    var modes = el("div", { class: "flow-modes" });
+    [["◂ In", "in", "Only the incoming side of each segment (slow arrival)."], ["Both", "both", "Ease into and out of the keyframes."], ["Out ▸", "out", "Only the outgoing side of each segment (slow departure)."]].forEach(function (d) {
+      var b = el("button", { class: "btn", type: "button", text: d[0], title: d[2], onclick: function () { mode = d[1]; paintModes(); } });
+      b.dataset.mode = d[1]; modeBtns.push(b); modes.appendChild(b);
+    });
+    function paintModes() { modeBtns.forEach(function (b) { b.classList.toggle("primary", b.dataset.mode === mode); }); }
+
+    var apply = el("button", { class: "btn primary", type: "button", text: "Apply", title: "Applies this curve to the selected keyframes (or every key of the selected properties).",
+      onclick: function () { toast("Applied cubic-bezier(" + cur.map(function (v) { return Math.round(v * 100) / 100; }).join(", ") + ") — " + mode + ". In After Effects this eases your keyframes."); } });
+
     var grid = el("div", { class: "flow-grid" });
     FLOW_PRESETS.forEach(function (d, i) {
-      var cv = el("canvas");
-      var t = el("button", { class: "flow-tile", type: "button", title: d[0] + "  (" + d.slice(1).join(", ") + ")\nClick to apply to the selected keyframes.", "aria-pressed": "false",
-        onclick: function () { picked = i; paint(); toast("Applied " + d[0] + " to the selected keyframes. In After Effects this eases your keys."); } }, [cv, el("span", { text: d[0] })]);
-      tiles.push(t); canvases.push(cv); grid.appendChild(t);
+      var cv = el("canvas"), t = el("button", { class: "flow-tile", type: "button", title: d[0] + "  (" + d.slice(1).join(", ") + ")\nClick to load it into the graph, then Apply.", "aria-pressed": "false", onclick: function () { cur = d.slice(1); picked = i; refresh(true); } }, [cv, el("span", { text: d[0] })]);
+      tiles.push(t); tileCanvases.push(cv); grid.appendChild(t);
     });
-    var wrap = el("div", { class: "flow" }, [el("p", { class: "hint", text: "Select keyframes, then click a curve to apply it." }), grid]);
+
+    var wrap = el("div", { class: "flow" }, [el("p", { class: "hint", text: "Select keyframes, pick a curve, edit it if you like, then Apply." }), graph, row("Curve:", vals), modes, apply, grid]);
     wrap.style.display = "grid"; wrap.style.gap = "7px";
-    requestAnimationFrame(paint);
+    paintModes();
+    requestAnimationFrame(function () { refresh(true); });
     return wrap;
   }
 
