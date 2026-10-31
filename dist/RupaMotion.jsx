@@ -2921,12 +2921,12 @@
 
     feature("Layers", "Layer operations", function (p) {
         grid(p, [
-            ["Pre-compose", function () { run("Pre-compose", doPrecomposeSafe); }, "Group layers safely — keeps their in/out range"],
-            ["Smart Null", function () { run("Smart Null", doSmartNull); }, "50×50 null at the comp center (or the selection's center), parents selected layers"],
+            ["Pre-comp", function () { run("Pre-comp", doPrecomposeSafe); }, "Group layers safely — keeps their in/out range"],
+            ["Unwrap Comp", function () {
+                run("Unwrap Comp", function () { doUnwrapComp({ keepTransform: true, removeLayer: true }); });
+            }, "Moves the layers of the selected pre-comp into this comp, with timing and parenting. A null keeps the pre-comp layer's transform."],
             ["Adjustment Layer", function () { run("Adjustment Layer", doAdjustmentLayer); }, "Full comp bounds, above the selection"],
-            ["Unwrap Composition", function () {
-                run("Unwrap Composition", function () { doUnwrapComp({ keepTransform: true, removeLayer: true }); });
-            }, "Moves the layers of the selected pre-comp into this comp, with timing and parenting. A null keeps the pre-comp layer's transform."]
+            ["Smart Null", function () { run("Smart Null", doSmartNull); }, "50×50 null at the comp center (or the selection's center), parents selected layers"]
         ]);
 
         var dup = subPanel(p, "Smart Duplicate");
