@@ -2536,6 +2536,10 @@
 
     function flowIsLinear(c) { return c[0] === 0 && c[1] === 0 && c[2] === 1 && c[3] === 1; }
 
+    // Linear is eased like every other curve, as a bezier whose handles sit on the straight line
+    // (1/3, 1/3) (2/3, 2/3): constant speed, and it goes through the same path as the other 27 curves.
+    function flowStraight() { return [1 / 3, 1 / 3, 2 / 3, 2 / 3]; }
+
     // Value change between keys a and b, one entry per ease dimension
     function flowDelta(prop, a, b, n) {
         var va = prop.keyValue(a), vb = prop.keyValue(b), out = [], i;
@@ -2563,21 +2567,17 @@
         var dt = prop.keyTime(b) - prop.keyTime(a);
         if (dt <= 0) { return false; }
         function slot(k) {
-            if (!st[k]) { st[k] = { i: prop.keyInTemporalEase(k), o: prop.keyOutTemporalEase(k), ti: false, to: false, lin: false }; }
+            if (!st[k]) { st[k] = { i: prop.keyInTemporalEase(k), o: prop.keyOutTemporalEase(k), ti: false, to: false }; }
             return st[k];
         }
         var sa = slot(a), sb = slot(b), n = sa.o.length;
-        var linear = flowIsLinear(c);
+        if (flowIsLinear(c)) { c = flowStraight(); }
         if (mode !== "in") {
-            if (linear) { sa.lin = true; } else {
-                sa.o = flowEase(flowDelta(prop, a, b, n), c[1], Math.max(c[0], 0.001), dt);
-            }
+            sa.o = flowEase(flowDelta(prop, a, b, n), c[1], Math.max(c[0], 0.001), dt);
             sa.to = true;
         }
         if (mode !== "out") {
-            if (linear) { sb.lin = true; } else {
-                sb.i = flowEase(flowDelta(prop, a, b, sb.i.length), 1 - c[3], Math.max(1 - c[2], 0.001), dt);
-            }
+            sb.i = flowEase(flowDelta(prop, a, b, sb.i.length), 1 - c[3], Math.max(1 - c[2], 0.001), dt);
             sb.ti = true;
         }
         return true;
@@ -2601,8 +2601,8 @@
         for (var key in st) {
             var k = parseInt(key, 10), s = st[key], T = KeyframeInterpolationType;
             if (!s.ti && !s.to) { continue; }
-            var inT = s.ti ? (s.lin ? T.LINEAR : T.BEZIER) : prop.keyInInterpolationType(k);
-            var outT = s.to ? (s.lin ? T.LINEAR : T.BEZIER) : prop.keyOutInterpolationType(k);
+            var inT = s.ti ? T.BEZIER : prop.keyInInterpolationType(k);
+            var outT = s.to ? T.BEZIER : prop.keyOutInterpolationType(k);
             prop.setInterpolationTypeAtKey(k, inT, outT);
             if (inT !== T.BEZIER && outT !== T.BEZIER) { continue; }
             // A key that is "continuous" or "auto bezier" must keep the same speed on both sides, so After Effects
@@ -2618,6 +2618,44 @@
             }
             if (!ok) { report.failed++; }
         }
+    }
+
+
+    // Damped overshoot after every keyframe, sized as a % of that segment's travel. It sits on top of the
+    // eased curve (the curve still drives the move), so the object arrives and then springs a little.
+    var FLOW_BOUNCE_TAG = "Motion Kit flow bounce";
+
+    function flowBounceExpr(pct) {
+        return "// " + FLOW_BOUNCE_TAG + " (" + pct + "% overshoot after each keyframe). Turn off in Flow > Bounce effect.\n" +
+            "var pct = " + (pct / 100).toFixed(3) + ", f = 3, d = 6, out = value;\n" +
+            "if (numKeys > 1) {\n" +
+            "  var n = nearestKey(time).index;\n" +
+            "  if (key(n).time > time) { n = n - 1; }\n" +
+            "  if (n > 1) {\n" +
+            "    var t = time - key(n).time;\n" +
+            "    if (t > 0 && t < 2) {\n" +
+            "      var dv = sub(key(n).value, key(n - 1).value);\n" +
+            "      var k = pct * Math.exp(d / (4 * f)) * Math.sin(2 * Math.PI * f * t) * Math.exp(-d * t);\n" +
+            "      out = add(value, mul(dv, k));\n" +
+            "    }\n" +
+            "  }\n" +
+            "}\n" +
+            "out;";
+    }
+
+    // on: write the bounce; off: remove only our own flow bounce. Other people's expressions are never touched.
+    // Returns "skipped" when the property already has an expression of the user's.
+    function flowBounce(prop, on, pct) {
+        var v = prop.keyValue(1), ex = "";
+        if (typeof v !== "number" && !(v instanceof Array)) { return "n/a"; }
+        try { ex = prop.expression; } catch (e0) { return "n/a"; }
+        if (!on) {
+            if (ex.indexOf(FLOW_BOUNCE_TAG) >= 0) { prop.expression = ""; }
+            return "off";
+        }
+        if (ex !== "" && ex.indexOf("Motion Kit") < 0) { return "skipped"; }
+        prop.expression = flowBounceExpr(pct);
+        return "on";
     }
 
     // Segments (pairs of key indices) to ease for the chosen keys
@@ -2662,21 +2700,25 @@
         return out;
     }
 
-    // c: [x1, y1, x2, y2]. Returns the number of segments eased.
-    function doFlowApply(c, mode) {
+    // c: [x1, y1, x2, y2]. opts: { bounce: bool, pct: number }. Returns the number of segments eased.
+    function doFlowApply(c, mode, opts) {
+        opts = opts || { bounce: false, pct: 10 };
         var comp = activeComp(); if (!comp) { return; }
         if (comp.selectedLayers.length === 0) { alert("Select a layer with keyframes (or select the keyframes).", NAME); return; }
-        var targets = flowTargets(comp), done = 0, i, report = { failed: 0, error: "" };
+        var targets = flowTargets(comp), done = 0, i, report = { failed: 0, error: "" }, skippedExpr = 0;
         for (i = 0; i < targets.length; i++) {
             var t = targets[i], st = {}, segs = flowSegments(t.idx, t.prop.numKeys), s;
             try {
                 for (s = 0; s < segs.length; s++) { if (flowSegment(t.prop, st, segs[s][0], segs[s][1], c, mode)) { done++; } }
                 flowCommit(t.prop, st, report);
+                if (flowBounce(t.prop, opts.bounce, opts.pct) === "skipped") { skippedExpr++; }
             } catch (e) { report.failed++; report.error = e.toString(); }
         }
         if (done === 0) { alert("No keyframes to ease. Select a layer or properties with 2 or more keyframes.", NAME); }
         else if (report.failed > 0) {
             alert(report.failed + " keyframe(s) did not accept this curve." + (report.error ? "\n\n" + report.error : ""), NAME);
+        } else if (skippedExpr > 0) {
+            alert("Bounce skipped on " + skippedExpr + " propert" + (skippedExpr === 1 ? "y" : "ies") + " that already have your own expression.", NAME);
         }
         return done;
     }
@@ -3511,9 +3553,18 @@
             })(modeDefs[i]);
         }
 
+        var bounceT = check(p, "Bounce effect", getS("flow_bounce", "0") === "1",
+            "ON: after each keyframe the layer springs a little past its end value and settles.\nOFF: no bounce (also removes a Flow bounce added earlier).");
+        bounceT.onToggle = function () { putS("flow_bounce", bounceT.value ? "1" : "0"); };
+        var bounceP = field(p, "Bounce (%):", getS("flow_bounce_pct", "10"), 4,
+            "How far it overshoots, as a % of the move. 5 = subtle, 10 = default, 30 = very springy.");
+        bounceP.onChange = function () { bounceP.text = String(num(bounceP.text, 10, 1, 100)); putS("flow_bounce_pct", bounceP.text); };
+
         btn(p, "Apply", function () {
-            run("Flow easing", function () { doFlowApply(cur, mode); });
-        }, "Applies this curve to the selected keyframes (or every key of the selected properties).");
+            run("Flow easing", function () {
+                doFlowApply(cur, mode, { bounce: bounceT.value, pct: num(bounceP.text, 10, 1, 100) });
+            });
+        }, "Applies this curve (and the bounce, if on) to the selected keyframes, or to every key of the selected properties.");
 
         // Preset tiles, 7 per row: click one to load it into the graph above
         var pr = null;

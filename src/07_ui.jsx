@@ -829,9 +829,18 @@
             })(modeDefs[i]);
         }
 
+        var bounceT = check(p, "Bounce effect", getS("flow_bounce", "0") === "1",
+            "ON: after each keyframe the layer springs a little past its end value and settles.\nOFF: no bounce (also removes a Flow bounce added earlier).");
+        bounceT.onToggle = function () { putS("flow_bounce", bounceT.value ? "1" : "0"); };
+        var bounceP = field(p, "Bounce (%):", getS("flow_bounce_pct", "10"), 4,
+            "How far it overshoots, as a % of the move. 5 = subtle, 10 = default, 30 = very springy.");
+        bounceP.onChange = function () { bounceP.text = String(num(bounceP.text, 10, 1, 100)); putS("flow_bounce_pct", bounceP.text); };
+
         btn(p, "Apply", function () {
-            run("Flow easing", function () { doFlowApply(cur, mode); });
-        }, "Applies this curve to the selected keyframes (or every key of the selected properties).");
+            run("Flow easing", function () {
+                doFlowApply(cur, mode, { bounce: bounceT.value, pct: num(bounceP.text, 10, 1, 100) });
+            });
+        }, "Applies this curve (and the bounce, if on) to the selected keyframes, or to every key of the selected properties.");
 
         // Preset tiles, 7 per row: click one to load it into the graph above
         var pr = null;

@@ -111,7 +111,7 @@ console.log(`click effect: pressed on mousedown ${wasPressed}, cleared on mouseu
 function fakeKeyProp(times, values) {
   const keys = times.map((t, i) => ({ t, v: values[i], in: [new g.KeyframeEase(0, 16.67)], out: [new g.KeyframeEase(0, 16.67)],
     inT: 'L', outT: 'L', cont: true, auto: false }));
-  const P = { propertyType: 1, numKeys: keys.length, keys, selectedKeys: keys.map((k, i) => i + 1),
+  const P = { propertyType: 1, numKeys: keys.length, keys, expression: '', selectedKeys: keys.map((k, i) => i + 1),
     keyTime: i => keys[i - 1].t, keyValue: i => keys[i - 1].v,
     keyInTemporalEase: i => keys[i - 1].in, keyOutTemporalEase: i => keys[i - 1].out,
     keyInInterpolationType: i => keys[i - 1].inT, keyOutInterpolationType: i => keys[i - 1].outT,
@@ -145,12 +145,7 @@ const FP = fakeKeyProp([0, 1, 3], [0, 100, 40]);
 let applied = 0, wrong = 0;
 order.forEach(nm => {
   applyOn(FP, nm); applied++;
-  const want = presetData[nm];
-  if (nm === 'linear') {
-    const ok = FP.keys[0].outT === 'L' && FP.keys[1].inT === 'L' && FP.keys[1].outT === 'L' && FP.keys[2].inT === 'L';
-    if (!ok) { wrong++; console.log('FLOW linear types wrong'); }
-    return;
-  }
+  const want = nm === 'linear' ? [1 / 3, 1 / 3, 2 / 3, 2 / 3] : presetData[nm];   // linear = bezier handles on the straight line
   [[1, 2], [2, 3]].forEach(([a, b]) => {
     const got = segCurve(FP, a, b), w = [Math.max(want[0], 0.001), want[1], Math.min(want[2], 0.999), want[3]];
     if (!got.every((v, i) => Math.abs(v - w[i]) < 1e-6 * Math.max(1, Math.abs(w[i])))) { wrong++; console.log('FLOW MISMATCH', nm, 'seg', a + '-' + b, got.map(v => +v.toFixed(4)), 'want', w); }
@@ -174,3 +169,47 @@ const outOk = Math.abs(MP.keys[0].out[0].influence - 16) < 1e-6 && Math.abs(MP.k
 applyMode(MP, 'backIn', 'in');
 const inOk = Math.abs(MP.keys[1].in[0].influence - 34) < 1e-6 && Math.abs(MP.keys[0].out[0].influence - 16) < 1e-6; // in from backIn (1-0.66), out untouched
 console.log(`flow modes: out-only ${outOk}, in-only ${inOk}`);
+
+// Flow bounce: toggle on/off with a %, never touches a user's own expression
+function applyFlow(prop, name, opts) {
+  const comp = new g.CompItem(); comp.selectedLayers = [{ selectedProperties: [prop], property() {} }];
+  app.project.activeItem = comp;
+  const tog = walk(root).filter(n => n.type === 'button' && n.text === 'Bounce effect' && typeof n.value === 'boolean').pop();
+  const pct = walk(root).filter(n => n.type === 'edittext' && n.helpTip && /overshoots/.test(n.helpTip))[0];
+  walk(root).filter(n => n.modeId === 'both')[0].onClick();
+  if (tog.value !== opts.bounce) tog.onClick();
+  pct.text = String(opts.pct); pct.onChange();
+  walk(root).filter(n => n.presetIndex !== undefined && n.text === name)[0].onClick();
+  walk(root).filter(n => n.type === 'button' && n.text === 'Apply')[0].onClick();
+  app.project.activeItem = null;
+}
+const BP = fakeKeyProp([0, 1, 3], [0, 100, 40]);
+applyFlow(BP, 'cubic', { bounce: true, pct: 25 });
+const onOk = /Motion Kit flow bounce/.test(BP.expression) && /pct = 0\.250/.test(BP.expression);
+applyFlow(BP, 'expo', { bounce: true, pct: 40 });
+const changeOk = /pct = 0\.400/.test(BP.expression) && Math.abs(BP.keys[0].out[0].influence - 87) < 1e-6;
+applyFlow(BP, 'quad', { bounce: false, pct: 40 });
+const offOk = BP.expression === '';
+const UP = fakeKeyProp([0, 1], [0, 100]); UP.expression = 'wiggle(2, 10)';
+applyFlow(UP, 'cubic', { bounce: true, pct: 10 });
+const userOk = UP.expression === 'wiggle(2, 10)';
+applyFlow(UP, 'cubic', { bounce: false, pct: 10 });
+const userOffOk = UP.expression === 'wiggle(2, 10)';
+// the expression must at least be valid JS once the AE helpers exist, and overshoot in the travel direction
+let exprOk = false;
+try {
+  applyFlow(BP, 'cubic', { bounce: true, pct: 20 });
+  const sub = (a, b) => a - b, add = (a, b) => a + b, mul = (a, b) => a * b;
+  const kv = [0, 100, 40], kt = [0, 1, 3];
+  const run = (time, value) => {
+    const nearestKey = t => ({ index: kt.reduce((best, x, i) => (Math.abs(x - t) < Math.abs(kt[best] - t) ? i : best), 0) + 1 });
+    const key = i => ({ time: kt[i - 1], value: kv[i - 1] });
+    return new Function('value', 'numKeys', 'time', 'nearestKey', 'key', 'sub', 'add', 'mul', 'expr', 'return eval(expr);')(value, 3, time, nearestKey, key, sub, add, mul, BP.expression);
+  };
+  // a quarter cycle after key 2 the overshoot equals 20% of the 0 -> 100 travel, in the direction of travel
+  const peak = run(1 + 1 / 12, 100), before = run(0.5, 50), late = run(3.9, 40);
+  const done = run(5.5, 40);   // 2.5 s after the last key the bounce has ended
+  exprOk = Math.abs(peak - 120) < 0.01 && before === 50 && Math.abs(late - 40) < 0.2 && done === 40;
+  if (!exprOk) console.log('FLOW bounce numbers', peak, before, late, done);
+} catch (e) { console.log('FLOW bounce expression failed', e.message); }
+console.log(`flow bounce: on ${onOk}, change % ${changeOk}, off ${offOk}, user expression kept ${userOk && userOffOk}, parses ${exprOk}`);

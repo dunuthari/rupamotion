@@ -574,8 +574,15 @@
     });
     function paintModes() { modeBtns.forEach(function (b) { b.classList.toggle("primary", b.dataset.mode === mode); }); }
 
-    var apply = el("button", { class: "btn primary", type: "button", text: "Apply", title: "Applies this curve to the selected keyframes (or every key of the selected properties).",
-      onclick: function () { toast("Applied cubic-bezier(" + cur.map(function (v) { return Math.round(v * 100) / 100; }).join(", ") + ") — " + mode + ". In After Effects this eases your keyframes."); } });
+    var bounceT = toggle("Bounce effect", false, "ON: after each keyframe the layer springs a little past its end value and settles. OFF: no bounce.");
+    var bounceId = "fb" + (++uid);
+    var bounceIn = el("input", { type: "text", id: bounceId, value: "10", style: "width:52px", title: "How far it overshoots, as a % of the move. 5 = subtle, 10 = default, 30 = very springy." });
+    var bounceRow = row("Bounce (%):", bounceIn, bounceId);
+    var apply = el("button", { class: "btn primary", type: "button", text: "Apply", title: "Applies this curve (and the bounce, if on) to the selected keyframes, or to every key of the selected properties.",
+      onclick: function () {
+        var bounce = bounceT.getAttribute("aria-checked") === "true";
+        toast("Applied cubic-bezier(" + cur.map(function (v) { return Math.round(v * 100) / 100; }).join(", ") + ") — " + mode + (bounce ? ", with " + (parseFloat(bounceIn.value) || 10) + "% bounce" : "") + ". In After Effects this eases your keyframes.");
+      } });
 
     var grid = el("div", { class: "flow-grid" });
     FLOW_PRESETS.forEach(function (d, i) {
@@ -583,7 +590,7 @@
       tiles.push(t); tileCanvases.push(cv); grid.appendChild(t);
     });
 
-    var wrap = el("div", { class: "flow" }, [el("p", { class: "hint", text: "Select keyframes, pick a curve, edit it if you like, then Apply." }), graph, row("Curve:", vals), modes, apply, grid]);
+    var wrap = el("div", { class: "flow" }, [el("p", { class: "hint", text: "Select keyframes, pick a curve, edit it if you like, then Apply." }), graph, row("Curve:", vals), modes, bounceT, bounceRow, apply, grid]);
     wrap.style.display = "grid"; wrap.style.gap = "7px";
     paintModes();
     requestAnimationFrame(function () { refresh(true); });
