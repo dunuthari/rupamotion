@@ -728,7 +728,7 @@
     }
 
     feature("Flow", "Easing curves", function (p) {
-        var GW = 300, GH = 252, X0 = 40, XW = 220, Y0 = 170, YS = 100;     // plot: u 0..1 -> X0..X0+XW, v 0..1 -> Y0..Y0-YS
+        var GW = 240, GH = 200, X0 = 32, XW = 176, Y0 = 136, YS = 80;     // plot: u 0..1 -> X0..X0+XW, v 0..1 -> Y0..Y0-YS
         var cur = [0.66, 0, 0.34, 1], mode = "both", picked = -1, drag = -1, i;
         var saved = splitList(getS("flow_curve", ""));
         if (saved.length === 4) { for (i = 0; i < 4; i++) { cur[i] = num(saved[i], cur[i], -1, 2); } }

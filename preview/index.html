@@ -178,7 +178,7 @@
   .cp-btns .btn.primary { background: #0A6CFF; border-color: #0A6CFF; color: #fff; }
 
   /* Flow easing group */
-  .flow-graph { display: block; width: 100%; max-width: 300px; margin: 0 auto; aspect-ratio: 300 / 252; touch-action: none; cursor: crosshair; border-radius: 10px; }
+  .flow-graph { display: block; width: 100%; max-width: 240px; margin: 0 auto; aspect-ratio: 240 / 200; touch-action: none; cursor: crosshair; border-radius: 10px; }
   .flow-vals { display: flex; gap: 4px; align-items: center; }
   .flow-vals input { width: 44px; min-width: 0; padding: 0 4px; text-align: center; }
   .flow-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -493,7 +493,7 @@
   }
 
   function flowControl() {
-    var GW = 300, GH = 252, X0 = 40, XW = 220, Y0 = 170, YS = 100, ORANGE = "#F5A623";
+    var GW = 240, GH = 200, X0 = 32, XW = 176, Y0 = 136, YS = 80, ORANGE = "#F5A623";
     var cur = [.66, 0, .34, 1], mode = "both", picked = 12, drag = -1;
     var graph = el("canvas", { class: "flow-graph", title: "Drag the orange handles to shape the curve.", "aria-label": "Easing curve" });
     var inputs = [], tiles = [], tileCanvases = [], modeBtns = [];
