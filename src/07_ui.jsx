@@ -1057,12 +1057,13 @@
     });
 
     feature("Transitions", "Swipe cut", function (p) {
-        hint(p, "Select 2 clips, or put the playhead on the cut.");
-        var fr = field(p, "Frames each side:", "6", 4);
-        var blur = field(p, "Blur (shutter °):", "300", 4);
+        hint(p, "Select the outgoing + incoming clips, or put the playhead on the cut.");
+        hint(p, "Adds 3 linked nulls: Out, In and a Move null at the cut.");
+        var fr = field(p, "Frames each side:", "10", 4, "How long the whoosh lasts on each side of the cut.");
+        var blur = field(p, "Blur (shutter °):", "300", 4, "Raises the comp's shutter angle to at least this, for motion blur.");
         var r = btnRow(p);
         function go(dir) {
-            run("Swipe cut", function () { doSwipeCut(dir, { frames: num(fr.text, 6, 1, 60), blur: num(blur.text, 300, 0, 720) }); });
+            run("Swipe cut", function () { doSwipeCut(dir, { frames: num(fr.text, 10, 1, 60), blur: num(blur.text, 300, 0, 720) }); });
         }
         btn(r, "←", function () { go([-1, 0]); });
         btn(r, "↑", function () { go([0, -1]); });

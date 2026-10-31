@@ -69,6 +69,8 @@ live bounce via the `MK Bounce` / `MK Bounce Strength` effects + `bounceExpr`. U
 ## Naming / compatibility
 - Created layers/effects keep the `MK ` prefix and the `"Motion Kit"` marker in expression comments on
   purpose: existing projects depend on them (`hasBounce`, Bounce Physics' "own expression" check).
+- Swipe cut builds three linked `MK Swipe · Move / Out / In` nulls (anchor and position 0,0 so links don't move clips); only the
+  Move null is animated. Don't turn it back into an effect on an adjustment layer.
 - Settings key is `MotionKit_v1` so saved presets carry over. Don't rename without a migration.
 
 ## Testing limits

@@ -225,7 +225,7 @@ function fakeAnimProp(dims, base) {
     keyInTemporalEase: i => keys[i - 1].in, keyOutTemporalEase: i => keys[i - 1].out,
     keyInInterpolationType: i => keys[i - 1].inT, keyOutInterpolationType: i => keys[i - 1].outT,
     setInterpolationTypeAtKey(i, a, b) { keys[i - 1].inT = a; keys[i - 1].outT = b; },
-    setTemporalContinuousAtKey() {}, setTemporalAutoBezierAtKey() {},
+    setTemporalContinuousAtKey() {}, setTemporalAutoBezierAtKey() {}, setValue(v) { this.value = v; },
     setTemporalEaseAtKey(i, inn, out) { keys[i - 1].in = inn; keys[i - 1].out = out; } };
 }
 function runPop(label) {
@@ -284,4 +284,46 @@ function playExpr(expr, keys, curve) {
   let afterMax = 0; for (let t = t0 + T; t < t0 + T + 1; t += 0.004) afterMax = Math.max(afterMax, Math.abs(O(t)));
   const sL = (O(t0 - 2 * e) - O(t0 - 3 * e)) / e, sR = (O(t0 + 3 * e) - O(t0 + 2 * e)) / e;
   console.log(`pop out motion: winds up to ${maxBefore.toFixed(1)} before leaving 100, ends and stays at 0 (max after ${afterMax.toFixed(3)}), speed before/after start ${sL.toFixed(0)} / ${sR.toFixed(0)}`);
+}
+
+// Swipe cut: three linked nulls (Move at the cut, Out / In as its children) like the hand-built rig
+function fakeRigLayer(name, inP, outP) {
+  return { name, inPoint: inP, outPoint: outP, parent: null, index: 1, source: {}, motionBlur: false, containingComp: {},
+    transform: { anchorPoint: fakeAnimProp(2, [0, 0]), position: fakeAnimProp(2, [0, 0]) }, moveBefore() {} };
+}
+function runSwipe(arrow, mutate) {
+  const mbT = walk(root).filter(n => n.type === 'button' && n.text === 'Motion blur on animated layers' && typeof n.value === 'boolean')[0];
+  if (!mbT.value) mbT.onClick();   // earlier steps click every toggle; motion blur must be on for this check
+  const outL = fakeRigLayer('Clip A', 0, 5), inL = fakeRigLayer('Clip B', 5, 12), made = [];
+  if (mutate) mutate(outL, inL);
+  const comp = new g.CompItem(); Object.assign(comp, { selectedLayers: [outL, inL], time: 5, frameDuration: 0.04, width: 1920, height: 1080, duration: 12, shutterAngle: 180,
+    layers: { addNull() { const n = fakeRigLayer('Null', 0, 12); made.push(n); return n; } } });
+  app.project.activeItem = comp;
+  walk(root).filter(n => n.type === 'button' && n.text === arrow && n.parent && n.parent.parent && n.parent.parent.cardTitle === 'Swipe cut')[0].onClick();
+  app.project.activeItem = null;
+  return { outL, inL, made, comp };
+}
+{
+  const { outL, inL, made, comp } = runSwipe('←');
+  const [mv, on, inn] = made, k = mv ? mv.transform.position.keys : [];
+  const eq = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+  const checks = {
+    'three nulls named Move / Out / In': made.length === 3 && mv.name === 'MK Swipe · Move' && on.name === 'MK Swipe · Out' && inn.name === 'MK Swipe · In',
+    'Out and In are linked to Move': on.parent === mv && inn.parent === mv,
+    'clips linked to their nulls': outL.parent === on && inL.parent === inn,
+    'In offset one screen to the right': eq(inn.transform.position.value, [1920, 0]) && eq(on.transform.position.value, [0, 0]),
+    'Move keys: one at each end, rest -> one screen left': k.length === 2 && Math.abs(k[0].t - 4.6) < 1e-9 && Math.abs(k[1].t - 5.4) < 1e-9 && eq(k[0].v, [0, 0]) && eq(k[1].v, [-1920, 0]),
+    'easy-ease on both keys': k.length === 2 && Math.abs(k[0].out[0].influence - 70) < 1e-6 && Math.abs(k[1].in[0].influence - 70) < 1e-6,
+    'timing: Out to the cut, In from the cut, Move around it': on.inPoint === 0 && on.outPoint === 5 && inn.inPoint === 5 && inn.outPoint === 12 && Math.abs(mv.inPoint - 4.6) < 1e-9 && Math.abs(mv.outPoint - 5.4) < 1e-9,
+    'anchor and position of the nulls start at 0,0 (links do not move the clips)': eq(mv.transform.anchorPoint.value, [0, 0]) && eq(on.transform.anchorPoint.value, [0, 0]),
+    'motion blur on both clips and a wide shutter': outL.motionBlur && inL.motionBlur && comp.shutterAngle === 300
+  };
+  const bad = Object.keys(checks).filter(c => !checks[c]);
+  console.log(`swipe cut: ${bad.length === 0 ? 'rig OK' : 'WRONG: ' + bad.join('; ')} (${Object.keys(checks).length} checks)`);
+  const down = runSwipe('↓'), dk = down.made[0].transform.position.keys;
+  console.log(`swipe cut down: In offset ${JSON.stringify(down.made[2].transform.position.value)}, Move ends at ${JSON.stringify(dk[1].v)}`);
+  const hier = runSwipe('→', (a, b) => { const base = fakeRigLayer('Base', 0, 12); a.parent = base; });
+  console.log(`swipe cut with an already-parented clip: root of the chain is linked ${hier.outL.parent.name === 'Base' && hier.made[1] && hier.outL.parent.parent === hier.made[1]}`);
+  const shared = runSwipe('←', (a, b) => { const base = fakeRigLayer('Base', 0, 12); a.parent = base; b.parent = base; });
+  console.log(`swipe cut with a shared parent: refused, no nulls added ${shared.made.length === 0}`);
 }

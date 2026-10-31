@@ -1261,20 +1261,63 @@
         setKeys(sc, [[cut - d, 100], [cut - fr, a], [cut, b], [cut + d, 100]], { eases: CUT_EASES });
     }
 
+    // Swipe cut = a small rig of three linked nulls (the same set-up you would build by hand):
+    //   MK Swipe · Move  a short null around the cut; its Position is the only thing animated (easy-ease, one key each end)
+    //   MK Swipe · Out   child of Move, holds the outgoing clip (runs up to the cut)
+    //   MK Swipe · In    child of Move, offset by one screen, holds the incoming clip (runs from the cut)
+    // Move slides one screen, so the old clip leaves while the new one enters, and the hard cut happens mid-whoosh.
+    // Anchor and position of the nulls are both (0,0), so linking a clip does not move it.
+    var SWIPE_CURVE = [0.7, 0, 0.3, 1];
+
+    function topParent(L) {
+        while (L.parent) { L = L.parent; }
+        return L;
+    }
+
+    function swipeNull(comp, name, t0, t1) {
+        var n = comp.layers.addNull();
+        n.name = name;
+        setXY(n.transform.anchorPoint, 0, 0);
+        setXY(n.transform.position, 0, 0);
+        try { n.inPoint = Math.max(0, t0); n.outPoint = Math.min(comp.duration, t1); } catch (e) {}
+        return n;
+    }
+
     function doSwipeCut(dir, o) {
         var comp = activeComp(); if (!comp) { return; }
-        var ctx = transitionContext(comp, false); if (!ctx) { return; }
-        var fr = comp.frameDuration, d = o.frames * fr, cut = ctx.cut;
-        var W = comp.width, H = comp.height, c = [W / 2, H / 2];
-        var dist = (dir[0] !== 0) ? W : H;
-        var adj = cutAdjustment(comp, "MK Swipe Cut", cut, d, o.blur);
-        var pos = transformFx(adj).property(2);
-        setKeys(pos, [
-            [cut - d, c],
-            [cut - fr, [c[0] + dir[0] * dist, c[1] + dir[1] * dist]],
-            [cut, [c[0] - dir[0] * dist, c[1] - dir[1] * dist]],
-            [cut + d, c]
-        ], { eases: CUT_EASES });
+        var ctx = transitionContext(comp, true); if (!ctx) { return; }
+        var fr = comp.frameDuration, d = o.frames * fr, cut = ctx.cut, outL = ctx.outL, inL = ctx.inL;
+        var dist = (dir[0] !== 0) ? comp.width : comp.height, off = [dir[0] * dist, dir[1] * dist];
+
+        // Link the top of each clip's parent chain, so clips that already have parents keep their hierarchy
+        var rootOut = topParent(outL), rootIn = topParent(inL);
+        if (rootOut === rootIn) {
+            alert("Both clips share the same parent layer, so they can't be moved apart. Unparent one of them first.", NAME);
+            return;
+        }
+
+        var move = swipeNull(comp, "MK Swipe · Move", cut - d, cut + d);
+        var outN = swipeNull(comp, "MK Swipe · Out", outL.inPoint, cut);
+        var inN = swipeNull(comp, "MK Swipe · In", cut, inL.outPoint);
+        outN.parent = move;
+        inN.parent = move;
+        setXY(inN.transform.position, -off[0], -off[1]);
+        rootOut.parent = outN;
+        rootIn.parent = inN;
+
+        // Position is the only animation: rest -> one screen over, easy-ease both ends
+        setKeys(move.transform.position, [[cut - d, vecLike(move.transform.position, 0, 0)], [cut + d, vecLike(move.transform.position, off[0], off[1])]]);
+        easeBetweenKeys(move.transform.position, cut - d, cut + d, SWIPE_CURVE);
+
+        // Neat stack: each link null sits on its clip, the move null on top
+        outN.moveBefore(outL);
+        inN.moveBefore(inL);
+        move.moveBefore(outN.index < inN.index ? outN : inN);
+
+        mb(outL); mb(inL);
+        if (o.blur > 0 && style.motionBlur === "1") {
+            try { if (comp.shutterAngle < o.blur) { comp.shutterAngle = Math.min(720, o.blur); } } catch (e) {}
+        }
     }
 
     function doShapeWipe(o) {
@@ -3884,12 +3927,13 @@
     });
 
     feature("Transitions", "Swipe cut", function (p) {
-        hint(p, "Select 2 clips, or put the playhead on the cut.");
-        var fr = field(p, "Frames each side:", "6", 4);
-        var blur = field(p, "Blur (shutter °):", "300", 4);
+        hint(p, "Select the outgoing + incoming clips, or put the playhead on the cut.");
+        hint(p, "Adds 3 linked nulls: Out, In and a Move null at the cut.");
+        var fr = field(p, "Frames each side:", "10", 4, "How long the whoosh lasts on each side of the cut.");
+        var blur = field(p, "Blur (shutter °):", "300", 4, "Raises the comp's shutter angle to at least this, for motion blur.");
         var r = btnRow(p);
         function go(dir) {
-            run("Swipe cut", function () { doSwipeCut(dir, { frames: num(fr.text, 6, 1, 60), blur: num(blur.text, 300, 0, 720) }); });
+            run("Swipe cut", function () { doSwipeCut(dir, { frames: num(fr.text, 10, 1, 60), blur: num(blur.text, 300, 0, 720) }); });
         }
         btn(r, "←", function () { go([-1, 0]); });
         btn(r, "↑", function () { go([0, -1]); });
