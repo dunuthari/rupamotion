@@ -406,16 +406,11 @@
         grid(p, [
             ["Pre-compose", function () { run("Pre-compose", doPrecomposeSafe); }, "Group layers safely — keeps their in/out range"],
             ["Smart Null", function () { run("Smart Null", doSmartNull); }, "50×50 null at the comp center (or the selection's center), parents selected layers"],
-            ["Adjustment Layer", function () { run("Adjustment Layer", doAdjustmentLayer); }, "Full comp bounds, above the selection"]
+            ["Adjustment Layer", function () { run("Adjustment Layer", doAdjustmentLayer); }, "Full comp bounds, above the selection"],
+            ["Unwrap Composition", function () {
+                run("Unwrap Composition", function () { doUnwrapComp({ keepTransform: true, removeLayer: true }); });
+            }, "Moves the layers of the selected pre-comp into this comp, with timing and parenting. A null keeps the pre-comp layer's transform."]
         ]);
-
-        var unw = subPanel(p, "Unwrap Composition");
-        hint(unw, "Select a pre-comp layer: its layers move into this comp.");
-        var unwT = check(unw, "Keep pre-comp transform (via null)", true, "If the pre-comp layer was moved, scaled or rotated, a null carries that transform so nothing jumps.");
-        var unwR = check(unw, "Remove the pre-comp layer", true, "Off: the pre-comp layer is only hidden.");
-        btn(unw, "Unwrap Composition", function () {
-            run("Unwrap Composition", function () { doUnwrapComp({ keepTransform: unwT.value, removeLayer: unwR.value }); });
-        }, "Moves the layers inside the selected pre-comp into this comp, with correct timing and parenting.");
 
         var dup = subPanel(p, "Smart Duplicate");
         var dupN = field(dup, "Copies:", "1", 4);
