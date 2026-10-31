@@ -160,6 +160,20 @@
   .swatch.big { width: 64px; height: 40px; cursor: pointer; padding: 0; }
   .swatch { width: 24px; height: 20px; border-radius: 6px; border: 1px solid var(--hairline); flex: none; }
   input[type="color"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+
+  /* Color picker (mirrors the panel's dark picker) */
+  .cp-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 50; padding: 16px; }
+  .cp { background: #1C1D20; color: #F1F2F4; border: 1px solid #3C3E43; border-radius: 12px; padding: 14px; display: flex; gap: 12px; flex-wrap: wrap; max-width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .cp h2 { flex-basis: 100%; margin: 0; font-size: 13px; font-weight: 700; }
+  .cp canvas { display: block; cursor: crosshair; border-radius: 2px; touch-action: none; }
+  .cp-side { display: flex; flex-direction: column; gap: 6px; width: 120px; }
+  .cp-cmp { height: 44px; border: 1px solid #3C3E43; display: grid; grid-template-rows: 1fr 1fr; }
+  .cp-f { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #BEC0C4; }
+  .cp-f span { width: 14px; }
+  .cp-f input { width: 100%; min-width: 0; height: 24px; background: #1F2024; color: #F1F2F4; border: 1px solid #3C3E43; border-radius: 6px; padding: 0 6px; font: inherit; }
+  .cp-btns { display: flex; gap: 6px; margin-top: 4px; }
+  .cp-btns .btn { height: 30px; padding: 0; background: #2B2D31; border-color: #3C3E43; color: #F1F2F4; }
+  .cp-btns .btn.primary { background: #0A6CFF; border-color: #0A6CFF; color: #fff; }
   .pick { width: auto; height: 26px; padding: 0 10px; flex: none; }
 
   button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
@@ -353,21 +367,106 @@
     return key === "style" ? ctl : el("div", { class: "row" }, [el("span", { class: "lbl", text: "Bounce:" }), ctl]);
   }
 
+
+  // ---------- Color picker (same layout as the panel's: S/B square + hue strip + fields) ----------
+  function hsv2rgb(h, s, v) {
+    h = ((h % 360) + 360) % 360;
+    var c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c, i = Math.floor(h / 60), r = 0, g = 0, b = 0;
+    if (i === 0) { r = c; g = x; } else if (i === 1) { r = x; g = c; } else if (i === 2) { g = c; b = x; }
+    else if (i === 3) { g = x; b = c; } else if (i === 4) { r = x; b = c; } else { r = c; b = x; }
+    return [r + m, g + m, b + m];
+  }
+  function rgb2hsv(c) {
+    var r = c[0], g = c[1], b = c[2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, h = 0;
+    if (d > 0) { h = mx === r ? 60 * (((g - b) / d) % 6) : mx === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4); }
+    if (h < 0) h += 360;
+    return { h: h, s: mx === 0 ? 0 : d / mx, v: mx };
+  }
+  function hex2rgb(h) { var n = parseInt(h.replace("#", ""), 16) || 0; return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
+  function rgb2hex(c) { return "#" + c.map(function (v) { var t = Math.round(v * 255).toString(16).toUpperCase(); return t.length < 2 ? "0" + t : t; }).join(""); }
+
+  function openPicker(title, hex, done) {
+    var old = hex2rgb(hex), hsv = rgb2hsv(old), SQ = 200, HW = 22, dragging = null;
+    var sq = el("canvas", { width: SQ, height: SQ, "aria-label": "Saturation and brightness" });
+    var hb = el("canvas", { width: HW, height: SQ, "aria-label": "Hue" });
+    var cmpNew = el("div"), cmpOld = el("div", { style: "background:" + hex });
+    var fields = [], hexIn = el("input", { type: "text", "aria-label": "Hex" });
+    function cur() { return hsv2rgb(hsv.h, hsv.s, hsv.v); }
+    function css(c) { return "rgb(" + c.map(function (v) { return Math.round(v * 255); }).join(",") + ")"; }
+    function draw() {
+      var g = sq.getContext("2d"), n = SQ / 10, x, y, c;
+      for (y = 0; y < n; y++) for (x = 0; x < n; x++) { g.fillStyle = css(hsv2rgb(hsv.h, (x + .5) / n, 1 - (y + .5) / n)); g.fillRect(x * 10, y * 10, 10, 10); }
+      g.lineWidth = 3; g.strokeStyle = "#000"; g.beginPath(); g.arc(hsv.s * SQ, (1 - hsv.v) * SQ, 6, 0, 7); g.stroke();
+      g.lineWidth = 1.5; g.strokeStyle = "#fff"; g.beginPath(); g.arc(hsv.s * SQ, (1 - hsv.v) * SQ, 6, 0, 7); g.stroke();
+      var h = hb.getContext("2d");
+      for (y = 0; y < SQ / 5; y++) { h.fillStyle = css(hsv2rgb((y + .5) / (SQ / 5) * 360, 1, 1)); h.fillRect(0, y * 5, HW, 5); }
+      var my = Math.round(hsv.h / 360 * SQ);
+      h.lineWidth = 3; h.strokeStyle = "#000"; h.strokeRect(0, my - 2, HW, 4);
+      h.lineWidth = 1.5; h.strokeStyle = "#fff"; h.strokeRect(0, my - 2, HW, 4);
+      cmpNew.style.background = css(cur());
+      fields.forEach(function (f) { f.input.value = f.get(); });
+      hexIn.value = rgb2hex(cur()).slice(1);
+    }
+    function clamp(v) { return Math.max(0, Math.min(1, v)); }
+    function track(canvas, kind) {
+      function move(e) {
+        if (dragging !== kind) return;
+        var r = canvas.getBoundingClientRect();
+        if (kind === "sq") { hsv.s = clamp((e.clientX - r.left) / SQ); hsv.v = 1 - clamp((e.clientY - r.top) / SQ); }
+        else hsv.h = clamp((e.clientY - r.top) / SQ) * 360;
+        draw();
+      }
+      canvas.addEventListener("pointerdown", function (e) { dragging = kind; canvas.setPointerCapture(e.pointerId); move(e); });
+      canvas.addEventListener("pointermove", move);
+      canvas.addEventListener("pointerup", function () { dragging = null; });
+    }
+    track(sq, "sq"); track(hb, "hue");
+    function chan(i) { return function (v) { var c = cur(); c[i] = Math.max(0, Math.min(255, v)) / 255; var n = rgb2hsv(c); if (n.s === 0) n.h = hsv.h; hsv = n; }; }
+    function field(name, get, set) {
+      var input = el("input", { type: "text", "aria-label": name });
+      input.addEventListener("change", function () { var v = parseFloat(input.value); if (!isNaN(v)) set(v); draw(); });
+      fields.push({ input: input, get: get });
+      return el("label", { class: "cp-f" }, [el("span", { text: name }), input]);
+    }
+    hexIn.addEventListener("change", function () { if (/^#?[0-9a-f]{6}$/i.test(hexIn.value.trim())) { var n = rgb2hsv(hex2rgb(hexIn.value.trim())); if (n.s === 0) n.h = hsv.h; hsv = n; } draw(); });
+    function close() { overlay.remove(); document.removeEventListener("keydown", onKey); }
+    function onKey(e) { if (e.key === "Escape") close(); }
+    var ok = el("button", { class: "btn primary", type: "button", text: "OK", onclick: function () { var v = rgb2hex(cur()); close(); done(v); } });
+    var cancel = el("button", { class: "btn", type: "button", text: "Cancel", onclick: close });
+    var overlay = el("div", { class: "cp-overlay", role: "dialog", "aria-label": title }, [el("div", { class: "cp" }, [
+      el("h2", { text: title }), sq, hb,
+      el("div", { class: "cp-side" }, [
+        el("div", { class: "cp-cmp" }, [cmpNew, cmpOld]),
+        field("H", function () { return Math.round(hsv.h); }, function (v) { hsv.h = Math.max(0, Math.min(360, v)); }),
+        field("S", function () { return Math.round(hsv.s * 100); }, function (v) { hsv.s = Math.max(0, Math.min(100, v)) / 100; }),
+        field("B", function () { return Math.round(hsv.v * 100); }, function (v) { hsv.v = Math.max(0, Math.min(100, v)) / 100; }),
+        field("R", function () { return Math.round(cur()[0] * 255); }, chan(0)),
+        field("G", function () { return Math.round(cur()[1] * 255); }, chan(1)),
+        field("B", function () { return Math.round(cur()[2] * 255); }, chan(2)),
+        el("label", { class: "cp-f" }, [el("span", { text: "#" }), hexIn]),
+        el("div", { class: "cp-btns" }, [ok, cancel])
+      ])
+    ])]);
+    overlay.addEventListener("pointerdown", function (e) { if (e.target === overlay) close(); });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(overlay);
+    draw();
+  }
+
   function colorControl(label, hex, big) {
     var id = "c" + (++uid);
-    var sw = big ? el("button", { class: "swatch big", type: "button", title: "Click to choose a color", "aria-label": label + " color", style: "background:" + hex, onclick: function () { picker.click(); } }) : el("span", { class: "swatch", style: "background:" + hex });
+    var sw = big ? el("button", { class: "swatch big", type: "button", title: "Click to choose a color", "aria-label": label + " color", style: "background:" + hex, onclick: function () { choose(); } }) : el("span", { class: "swatch", style: "background:" + hex });
     var input = el("input", { type: "text", id: id, value: hex, "aria-label": label, style: "width:86px" });
-    var picker = el("input", { type: "color", value: hex, tabindex: "-1", "aria-hidden": "true" });
     function set(v) {
       if (!/^#?[0-9a-f]{6}$/i.test(v)) { input.value = sw.dataset.hex || hex; return; }
       v = ("#" + v.replace("#", "")).toUpperCase();
-      input.value = v; sw.style.background = v; sw.dataset.hex = v; picker.value = v;
+      input.value = v; sw.style.background = v; sw.dataset.hex = v;
     }
     input.addEventListener("change", function () { set(input.value.trim()); });
-    picker.addEventListener("input", function () { set(picker.value); });
-    var pick = big ? null : el("button", { class: "btn pick", type: "button", text: "Pick…", onclick: function () { picker.click(); } });
+    function choose() { openPicker(/color/i.test(label) ? label.replace(/:/g, "").trim() : label.replace(/:/g, "").trim() + " color", sw.dataset.hex || hex, set); }
+    var pick = big ? null : el("button", { class: "btn pick", type: "button", text: "Pick…", onclick: function () { choose(); } });
     set(hex);
-    return row(label, el("div", { class: "ctl", style: "position:relative" }, big ? [sw, input, picker] : [sw, input, pick, picker]), id);
+    return row(label, el("div", { class: "ctl", style: "position:relative" }, big ? [sw, input] : [sw, input, pick]), id);
   }
 
   function themeControl() {

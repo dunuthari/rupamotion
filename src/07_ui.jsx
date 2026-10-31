@@ -368,6 +368,185 @@
         }
     }
 
+    // ---- color picker (dark, After Effects style: saturation/brightness square + hue strip) ----
+
+    function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+    function hsvToRgb(h, s, v) {
+        h = ((h % 360) + 360) % 360;
+        var c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c, r = 0, g = 0, b = 0, i = Math.floor(h / 60);
+        if (i === 0) { r = c; g = x; }
+        else if (i === 1) { r = x; g = c; }
+        else if (i === 2) { g = c; b = x; }
+        else if (i === 3) { g = x; b = c; }
+        else if (i === 4) { r = x; b = c; }
+        else { r = c; b = x; }
+        return [r + m, g + m, b + m];
+    }
+
+    function rgbToHsv(c) {
+        var r = c[0], g = c[1], b = c[2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, h = 0;
+        if (d > 0) {
+            if (mx === r) { h = 60 * (((g - b) / d) % 6); }
+            else if (mx === g) { h = 60 * ((b - r) / d + 2); }
+            else { h = 60 * ((r - g) / d + 4); }
+        }
+        if (h < 0) { h += 360; }
+        return { h: h, s: (mx === 0) ? 0 : d / mx, v: mx };
+    }
+
+    function redraw(c) { try { c.notify("onDraw"); } catch (e) { repaint(c); } }
+
+    // Returns an rgb array [0..1], or null when cancelled.
+    function pickColor(title, startRgb) {
+        var hsv = rgbToHsv(startRgb), oldRgb = startRgb, result = null, fields = [];
+        var SQ = 200, HW = 22, CELL = 10;
+
+        function cur() { return hsvToRgb(hsv.h, hsv.s, hsv.v); }
+
+        var dlg = new Window("dialog", title);
+        dlg.orientation = "row";
+        dlg.alignChildren = ["left", "top"];
+        dlg.spacing = 12;
+        dlg.margins = 14;
+        try { dlg.graphics.backgroundColor = brush(dlg.graphics, DS.bg); } catch (e0) {}
+
+        var sq = dlg.add("group");
+        sq.preferredSize = [SQ, SQ];
+        var hb = dlg.add("group");
+        hb.preferredSize = [HW, SQ];
+        var side = dlg.add("group");
+        side.orientation = "column";
+        side.alignChildren = ["fill", "top"];
+        side.spacing = 6;
+        var cmp = side.add("group");
+        cmp.preferredSize = [96, 44];
+
+        sq.onDraw = function () {
+            var g = this.graphics, n = SQ / CELL, x, y, c;
+            for (y = 0; y < n; y++) {
+                for (x = 0; x < n; x++) {
+                    c = hsvToRgb(hsv.h, (x + 0.5) / n, 1 - (y + 0.5) / n);
+                    g.newPath();
+                    g.rectPath(x * CELL, y * CELL, CELL, CELL);
+                    g.fillPath(brush(g, [c[0], c[1], c[2], 1]));
+                }
+            }
+            var cx = hsv.s * SQ, cy = (1 - hsv.v) * SQ;
+            g.newPath(); g.ellipsePath(cx - 6, cy - 6, 12, 12); g.strokePath(pen(g, [0, 0, 0, 1], 3));
+            g.newPath(); g.ellipsePath(cx - 6, cy - 6, 12, 12); g.strokePath(pen(g, [1, 1, 1, 1], 1.5));
+        };
+
+        hb.onDraw = function () {
+            var g = this.graphics, n = SQ / 5, y, c;
+            for (y = 0; y < n; y++) {
+                c = hsvToRgb((y + 0.5) / n * 360, 1, 1);
+                g.newPath();
+                g.rectPath(0, y * 5, HW, 5);
+                g.fillPath(brush(g, [c[0], c[1], c[2], 1]));
+            }
+            var my = Math.round(hsv.h / 360 * SQ);
+            g.newPath(); g.rectPath(0, my - 2, HW, 4); g.strokePath(pen(g, [0, 0, 0, 1], 3));
+            g.newPath(); g.rectPath(0, my - 2, HW, 4); g.strokePath(pen(g, [1, 1, 1, 1], 1.5));
+        };
+
+        cmp.onDraw = function () {
+            var g = this.graphics, a = cur(), o = oldRgb;
+            g.newPath(); g.rectPath(0, 0, 96, 22); g.fillPath(brush(g, [a[0], a[1], a[2], 1]));
+            g.newPath(); g.rectPath(0, 22, 96, 22); g.fillPath(brush(g, [o[0], o[1], o[2], 1]));
+            rrPath(g, 0.5, 0.5, 95, 43, 2); g.strokePath(pen(g, DS.border, 1));
+        };
+
+        var down = null;
+        function mouseMove(e) {
+            if (!down) { return; }
+            if (down === "sq") { hsv.s = clamp01(e.clientX / SQ); hsv.v = 1 - clamp01(e.clientY / SQ); }
+            else { hsv.h = clamp01(e.clientY / SQ) * 360; }
+            refresh();
+        }
+        function bindMouse(ctrl, which) {
+            ctrl.addEventListener("mousedown", function (e) { down = which; mouseMove(e); });
+            ctrl.addEventListener("mousemove", mouseMove);
+            ctrl.addEventListener("mouseup", function () { down = null; });
+        }
+        bindMouse(sq, "sq");
+        bindMouse(hb, "hue");
+
+        function addNum(name, get, set) {
+            var r = side.add("group");
+            r.orientation = "row";
+            r.alignChildren = ["left", "center"];
+            var l = r.add("statictext", undefined, name);
+            l.preferredSize.width = 14;
+            setFg(l, DS.label);
+            var e = r.add("edittext", undefined, "");
+            e.characters = 5;
+            e.onChange = function () { set(num(e.text, get())); refresh(); };
+            fields.push({ edit: e, get: get });
+        }
+        function setChannel(i, v) {
+            var c = cur(), n;
+            c[i] = Math.max(0, Math.min(255, v)) / 255;
+            n = rgbToHsv(c);
+            if (n.s === 0) { n.h = hsv.h; }
+            hsv = n;
+        }
+        addNum("H", function () { return Math.round(hsv.h); }, function (v) { hsv.h = Math.max(0, Math.min(360, v)); });
+        addNum("S", function () { return Math.round(hsv.s * 100); }, function (v) { hsv.s = Math.max(0, Math.min(100, v)) / 100; });
+        addNum("B", function () { return Math.round(hsv.v * 100); }, function (v) { hsv.v = Math.max(0, Math.min(100, v)) / 100; });
+        addNum("R", function () { return Math.round(cur()[0] * 255); }, function (v) { setChannel(0, v); });
+        addNum("G", function () { return Math.round(cur()[1] * 255); }, function (v) { setChannel(1, v); });
+        addNum("B", function () { return Math.round(cur()[2] * 255); }, function (v) { setChannel(2, v); });
+
+        var hr = side.add("group");
+        hr.orientation = "row";
+        hr.alignChildren = ["left", "center"];
+        var hl = hr.add("statictext", undefined, "#");
+        hl.preferredSize.width = 14;
+        setFg(hl, DS.label);
+        var hexE = hr.add("edittext", undefined, "");
+        hexE.characters = 7;
+        hexE.onChange = function () {
+            var n = rgbToHsv(hexToRgb(hexE.text));
+            if (n.s === 0) { n.h = hsv.h; }
+            hsv = n;
+            refresh();
+        };
+
+        function refresh() {
+            for (var i = 0; i < fields.length; i++) { fields[i].edit.text = String(fields[i].get()); }
+            hexE.text = rgbToHex(cur()).replace("#", "");
+            redraw(sq); redraw(hb); redraw(cmp);
+        }
+
+        var br = side.add("group");
+        br.orientation = "row";
+        br.alignChildren = ["fill", "center"];
+        br.spacing = 6;
+        var okB = styleButton(br.add("button", undefined, "OK", { name: "ok" }), "primary", 30);
+        var noB = styleButton(br.add("button", undefined, "Cancel", { name: "cancel" }), "secondary", 30);
+        okB.preferredSize.width = 60;
+        noB.preferredSize.width = 60;
+        okB.onClick = function () { result = cur(); dlg.close(1); };
+        noB.onClick = function () { dlg.close(0); };
+
+        refresh();
+        dlg.show();
+        return result;
+    }
+
+    // Opens the dark picker; falls back to the system picker if it can't be built.
+    function colorTitle(label) {
+        var n = trim(String(label).replace(/:/g, ""));
+        return /color/i.test(n) ? n : n + " color";
+    }
+
+    function chooseColor(title, rgb) {
+        try { return pickColor(title, rgb); } catch (e) {}
+        var res = $.colorPicker((Math.round(rgb[0] * 255) << 16) | (Math.round(rgb[1] * 255) << 8) | Math.round(rgb[2] * 255));
+        return (res >= 0) ? [((res >> 16) & 255) / 255, ((res >> 8) & 255) / 255, (res & 255) / 255] : null;
+    }
+
     // Hex color field with a live swatch and a color picker. Returns { get: fn -> rgb }
     function colorChooser(parent, label, defHex, key, big) {
         var start = key ? getS(key, defHex) : defHex;
@@ -399,10 +578,9 @@
             if (key) { putS(key, hex.text); }
         }
         function choose() {
-            var c = hexToRgb(hex.text);
-            var res = $.colorPicker((Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255));
-            if (res >= 0) {
-                hex.text = rgbToHex([((res >> 16) & 255) / 255, ((res >> 8) & 255) / 255, (res & 255) / 255]);
+            var c = chooseColor(colorTitle(label), hexToRgb(hex.text));
+            if (c) {
+                hex.text = rgbToHex(c);
                 update();
             }
         }
@@ -916,11 +1094,9 @@
                 pick.preferredSize.width = 56;
                 e.onChange = function () { paintSwatch(sw, e.text); };
                 pick.onClick = function () {
-                    var c = hexToRgb(e.text);
-                    var start = (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
-                    var res = $.colorPicker(start);
-                    if (res >= 0) {
-                        e.text = rgbToHex([((res >> 16) & 255) / 255, ((res >> 8) & 255) / 255, (res & 255) / 255]);
+                    var c = chooseColor(colorTitle(label), hexToRgb(e.text));
+                    if (c) {
+                        e.text = rgbToHex(c);
                         paintSwatch(sw, e.text);
                     }
                 };

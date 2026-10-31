@@ -18,6 +18,7 @@ function el(type, text) {
     add(t,b,txt){ if(t==='item'){ const it={text:b,index:this.items.length}; this.items.push(it); return it; }
       const c = el(t, Array.isArray(txt)?'':txt); c.parent=this; if(t==='dropdownlist'&&Array.isArray(txt)) txt.forEach(s=>c.add('item',s)); this.children.push(c); return c; },
     remove(x){ const i = this.children.indexOf(x); if (i>=0) this.children.splice(i,1); },
+    addEventListener(t,f){ (this.listeners=this.listeners||{})[t]=f; }, notify(n){ if(n==='onDraw'&&this.onDraw) this.onDraw(); },
     removeAll(){ this.items=[]; }, hide(){ this.visible=false; }, show(){ this.visible=true; }, center(){}, close(){}
   };
   Object.defineProperty(o,'selection',{get(){return this._sel||null;},set(v){const it=(typeof v==='number')?this.items[v]:v;this._sel=it||null;if(this.onChange)this.onChange();}});
@@ -27,7 +28,7 @@ const settings = {}; let scheduled = null;
 const $g = { global: {}, colorPicker: ()=>-1 };
 const app = { settings:{haveSetting:(s,k)=>(s+k) in settings,getSetting:(s,k)=>settings[s+k],saveSetting:(s,k,v)=>{settings[s+k]=v;}},
   project:{activeItem:null}, fonts:null, beginUndoGroup(){}, endUndoGroup(){}, scheduleTask(code){ scheduled = code; } };
-function Panel(){}; function Window(){ return el('window'); }
+function Panel(){}; let lastWin = null; function Window(){ lastWin = el('window'); return lastWin; }
 const g = { app, Panel, Window, $: $g, alert: ()=>{}, ScriptUI: { newFont:(f,s,z)=>({f,s,z}) },
   CompItem:function(){}, FootageItem:function(){}, AVLayer:function(){}, ShapeLayer:function(){}, TextLayer:function(){},
   CameraLayer:function(){}, LightLayer:function(){}, Shape:function(){}, KeyframeEase:function(){}, KeyframeInterpolationType:{},
@@ -78,3 +79,21 @@ console.log('cards:', cards.length, '| cards with solid background:', withBg.len
 console.log('header has Classic/Designed switch:', walk(root).some(n => /Classic UI|Designed UI/.test(n.text)), '| Style has theme switch:', walk(root).some(n => n.items && n.items.length===2 && n.items[0].text==='Light'));
 let threw = 0; walk(root).filter(n => n.type==='button' && n.onClick && !n.groupName && !/Colors|Pick/.test(n.text)).forEach(b => { try { b.onClick(); } catch(e){ threw++; console.log('THREW', b.text, e.message);} });
 console.log('buttons clicked without errors, threw:', threw);
+
+// color picker: open it from the Solid Layer swatch, draw it, drag in the square, press OK
+const sw = walk(root).filter(n => n.isSwatch)[0];
+lastWin = null; sw.onClick();
+const pw = lastWin; let pickerErrs = 0;
+if (!pw) { console.log('color picker: no dialog opened'); }
+else {
+  const pn = walk(pw);
+  pn.forEach(n => { if (n.onDraw) { try { n.onDraw(); } catch (e) { pickerErrs++; console.log('PICKER DRAW ERROR', e.message); } } });
+  const square = pn.filter(n => n.listeners && n.listeners.mousedown)[0];
+  const hexE = pn.filter(n => n.type === 'edittext').pop();
+  const before = hexE.text;
+  square.listeners.mousedown({ clientX: 40, clientY: 150 });
+  square.listeners.mouseup({});
+  const okB = pn.filter(n => n.type === 'button' && n.text === 'OK')[0];
+  okB.onClick();
+  console.log(`color picker: draw errors ${pickerErrs} | controls ${pn.length} | hex ${before} -> ${hexE.text} | OK closes: ${typeof okB.onClick === 'function'}`);
+}
