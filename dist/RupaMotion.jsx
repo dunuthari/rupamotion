@@ -1909,7 +1909,7 @@
     }
 
     // independent: precomp copies get their own comp (deep copy), so edits don't affect the others
-    function doSmartDuplicate(count, offsetFrames, independent) {
+    function doSmartDuplicate(count, independent) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = selLayers(comp, 1, "Select the layers to duplicate."); if (!sel) { return; }
         var made = 0;
@@ -1923,7 +1923,6 @@
                     d.replaceSource(deepDuplicateComp(d.source, {}), false);
                     made++;
                 }
-                if (offsetFrames) { d.startTime = cur.startTime + offsetFrames * comp.frameDuration; }
                 cur = d;
             }
         }
@@ -2069,17 +2068,11 @@
         if (sel.length > 0) { a.moveBefore(topmost(sel)); }
     }
 
-    function doSolidLayer(colorKey, card) {
+    function doSolidLayer(rgb) {
         var comp = activeComp(); if (!comp) { return; }
         var s = comp.selectedLayers, sel = [];
         for (var i = 0; i < s.length; i++) { sel.push(s[i]); }
-        var L = addSolid(comp, col(colorKey), "MK Solid · " + colorKey);
-        if (card) {
-            var W = comp.width, H = comp.height;
-            addMask(L, roundRectShape(W / 2, H / 2, W * 0.8, H * 0.8, Math.min(W, H) * 0.05));
-            L.name = "MK Card · " + colorKey;
-            softShadow(L);
-        }
+        var L = addSolid(comp, rgb, "MK Solid · " + rgbToHex(rgb));
         if (sel.length > 0) { L.moveAfter(sel[sel.length - 1]); }
     }
 
@@ -2875,11 +2868,11 @@
     }
 
     // Hex color field with a live swatch and a color picker. Returns { get: fn -> rgb }
-    function colorChooser(parent, label, defHex, key) {
+    function colorChooser(parent, label, defHex, key, big) {
         var start = key ? getS(key, defHex) : defHex;
         var r = row(parent, label);
         var sw = r.add("group");
-        sw.preferredSize = [24, 20];
+        sw.preferredSize = big ? [64, 40] : [24, 20];
         var hex = r.add("edittext", undefined, start);
         hex.characters = 8;
         hex.helpTip = "Hex color, e.g. #4285F4";
@@ -2906,9 +2899,6 @@
     // ---------------- Layers ----------------
 
     feature("Layers", "Layer operations", function (p) {
-        var colorLabels = [], k;
-        for (k = 0; k < COLOR_KEYS.length; k++) { colorLabels.push(COLOR_KEYS[k][1]); }
-
         grid(p, [
             ["Pre-compose", function () { run("Pre-compose", doPrecomposeSafe); }, "Group layers safely — keeps their in/out range"],
             ["Smart Null", function () { run("Smart Null", doSmartNull); }, "50×50 null at the comp center (or the selection's center), parents selected layers"],
@@ -2920,20 +2910,18 @@
 
         var dup = subPanel(p, "Smart Duplicate");
         var dupN = field(dup, "Copies:", "1", 4);
-        var dupOff = field(dup, "Offset (frames):", "0", 4);
         var dupMode = drop(dup, "Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 0,
             "Linked: every copy uses the same comp, so editing one changes all.\nIndependent: each copy gets its own comp (nested comps copied too), so edits stay separate.");
         btn(dup, "Smart Duplicate", function () {
             run("Smart Duplicate", function () {
-                doSmartDuplicate(Math.round(num(dupN.text, 1, 1, 100)), num(dupOff.text, 0, -1000, 1000), dupMode.selection.index === 1);
+                doSmartDuplicate(Math.round(num(dupN.text, 1, 1, 100)), dupMode.selection.index === 1);
             });
         }, "Index duplicate: Card 01 → Card 02");
 
         var sol = subPanel(p, "Solid Layer");
-        var solidC = drop(sol, "Color:", colorLabels, 0);
-        var solidS = drop(sol, "Shape:", ["Full frame", "Rounded card"], 0);
+        var solidC = colorChooser(sol, "Color:", "#4285F4", "solid_color", true);
         btn(sol, "Solid Layer", function () {
-            run("Solid Layer", function () { doSolidLayer(COLOR_KEYS[solidC.selection.index][0], solidS.selection.index === 1); });
+            run("Solid Layer", function () { doSolidLayer(solidC.get()); });
         });
 
         var fp = subPanel(p, "Follow Path");

@@ -156,6 +156,8 @@
   .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .btns.four { grid-template-columns: repeat(4, 1fr); }
 
+  
+  .swatch.big { width: 64px; height: 40px; }
   .swatch { width: 24px; height: 20px; border-radius: 6px; border: 1px solid var(--hairline); flex: none; }
   input[type="color"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
   .pick { width: auto; height: 26px; padding: 0 10px; flex: none; }
@@ -233,7 +235,7 @@
   function ROW(buttons, cls) { return ["buttons", buttons, cls]; }
   function GRID(items) { return ["grid", items]; }
   function C(title, children) { return ["card", title, children]; }
-  function COLOR(label, hex) { return ["color", label, hex]; }
+  function COLOR(label, hex, big) { return ["color", label, hex, big]; }
   function SIZE(label, w, h) { return ["size", label, w, h]; }
   function BOUNCE(key) { return ["bounce", key]; }
 
@@ -241,8 +243,8 @@
   var FEATURES = [
     { group: "Layers", name: "Layer operations", ui: [
       GRID([["Pre-compose", "Pre-composed the selected layers, keeping their timing."], ["Smart Null", "Added a 50×50 null and parented the selection."], ["Adjustment Layer", "Added a full-size adjustment layer above the selection."], ["Unwrap Composition", "Moved the pre-comp's layers into this comp."]]),
-      C("Smart Duplicate", [F("Copies:", "1"), F("Offset (frames):", "0"), D("Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 0, "Linked copies share one comp; independent copies get their own."), B("Smart Duplicate", "Duplicated with numbered names.")]),
-      C("Solid Layer", [D("Color:", COLOR_LABELS), D("Shape:", ["Full frame", "Rounded card"]), B("Solid Layer", "Added a solid layer.")]),
+      C("Smart Duplicate", [F("Copies:", "1"), D("Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 0, "Linked copies share one comp; independent copies get their own."), B("Smart Duplicate", "Duplicated with numbered names.")]),
+      C("Solid Layer", [COLOR("Color:", "#4285F4", true), B("Solid Layer", "Added a solid layer.")]),
       C("Follow Path", [H("Select a path layer (mask or shape) + the follower."), F("Path time (s):", "3"), T("Loop along path", true), T("Orient along path", false), B("Follow Path", "The follower now moves along the path.")])
     ]},
     { group: "Quick Actions", name: "Motion quick actions", ui: [
@@ -351,9 +353,9 @@
     return key === "style" ? ctl : el("div", { class: "row" }, [el("span", { class: "lbl", text: "Bounce:" }), ctl]);
   }
 
-  function colorControl(label, hex) {
+  function colorControl(label, hex, big) {
     var id = "c" + (++uid);
-    var sw = el("span", { class: "swatch", style: "background:" + hex });
+    var sw = el("span", { class: big ? "swatch big" : "swatch", style: "background:" + hex });
     var input = el("input", { type: "text", id: id, value: hex, "aria-label": label, style: "width:86px" });
     var picker = el("input", { type: "color", value: hex, tabindex: "-1", "aria-hidden": "true" });
     function set(v) {
@@ -402,7 +404,7 @@
       }));
     }
     if (t === "card") return el("div", { class: "card" }, [el("h3", { text: spec[1] })].concat(spec[2].map(render)));
-    if (t === "color") return colorControl(spec[1], spec[2]);
+    if (t === "color") return colorControl(spec[1], spec[2], spec[3]);
     if (t === "size") {
       var w = el("input", { type: "text", value: spec[2], "aria-label": "Width" });
       var h = el("input", { type: "text", value: spec[3], "aria-label": "Height" });

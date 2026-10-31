@@ -78,7 +78,7 @@
     }
 
     // independent: precomp copies get their own comp (deep copy), so edits don't affect the others
-    function doSmartDuplicate(count, offsetFrames, independent) {
+    function doSmartDuplicate(count, independent) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = selLayers(comp, 1, "Select the layers to duplicate."); if (!sel) { return; }
         var made = 0;
@@ -92,7 +92,6 @@
                     d.replaceSource(deepDuplicateComp(d.source, {}), false);
                     made++;
                 }
-                if (offsetFrames) { d.startTime = cur.startTime + offsetFrames * comp.frameDuration; }
                 cur = d;
             }
         }
@@ -238,17 +237,11 @@
         if (sel.length > 0) { a.moveBefore(topmost(sel)); }
     }
 
-    function doSolidLayer(colorKey, card) {
+    function doSolidLayer(rgb) {
         var comp = activeComp(); if (!comp) { return; }
         var s = comp.selectedLayers, sel = [];
         for (var i = 0; i < s.length; i++) { sel.push(s[i]); }
-        var L = addSolid(comp, col(colorKey), "MK Solid · " + colorKey);
-        if (card) {
-            var W = comp.width, H = comp.height;
-            addMask(L, roundRectShape(W / 2, H / 2, W * 0.8, H * 0.8, Math.min(W, H) * 0.05));
-            L.name = "MK Card · " + colorKey;
-            softShadow(L);
-        }
+        var L = addSolid(comp, rgb, "MK Solid · " + rgbToHex(rgb));
         if (sel.length > 0) { L.moveAfter(sel[sel.length - 1]); }
     }
 

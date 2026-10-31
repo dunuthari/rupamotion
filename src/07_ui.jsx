@@ -369,11 +369,11 @@
     }
 
     // Hex color field with a live swatch and a color picker. Returns { get: fn -> rgb }
-    function colorChooser(parent, label, defHex, key) {
+    function colorChooser(parent, label, defHex, key, big) {
         var start = key ? getS(key, defHex) : defHex;
         var r = row(parent, label);
         var sw = r.add("group");
-        sw.preferredSize = [24, 20];
+        sw.preferredSize = big ? [64, 40] : [24, 20];
         var hex = r.add("edittext", undefined, start);
         hex.characters = 8;
         hex.helpTip = "Hex color, e.g. #4285F4";
@@ -400,9 +400,6 @@
     // ---------------- Layers ----------------
 
     feature("Layers", "Layer operations", function (p) {
-        var colorLabels = [], k;
-        for (k = 0; k < COLOR_KEYS.length; k++) { colorLabels.push(COLOR_KEYS[k][1]); }
-
         grid(p, [
             ["Pre-compose", function () { run("Pre-compose", doPrecomposeSafe); }, "Group layers safely — keeps their in/out range"],
             ["Smart Null", function () { run("Smart Null", doSmartNull); }, "50×50 null at the comp center (or the selection's center), parents selected layers"],
@@ -414,20 +411,18 @@
 
         var dup = subPanel(p, "Smart Duplicate");
         var dupN = field(dup, "Copies:", "1", 4);
-        var dupOff = field(dup, "Offset (frames):", "0", 4);
         var dupMode = drop(dup, "Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 0,
             "Linked: every copy uses the same comp, so editing one changes all.\nIndependent: each copy gets its own comp (nested comps copied too), so edits stay separate.");
         btn(dup, "Smart Duplicate", function () {
             run("Smart Duplicate", function () {
-                doSmartDuplicate(Math.round(num(dupN.text, 1, 1, 100)), num(dupOff.text, 0, -1000, 1000), dupMode.selection.index === 1);
+                doSmartDuplicate(Math.round(num(dupN.text, 1, 1, 100)), dupMode.selection.index === 1);
             });
         }, "Index duplicate: Card 01 → Card 02");
 
         var sol = subPanel(p, "Solid Layer");
-        var solidC = drop(sol, "Color:", colorLabels, 0);
-        var solidS = drop(sol, "Shape:", ["Full frame", "Rounded card"], 0);
+        var solidC = colorChooser(sol, "Color:", "#4285F4", "solid_color", true);
         btn(sol, "Solid Layer", function () {
-            run("Solid Layer", function () { doSolidLayer(COLOR_KEYS[solidC.selection.index][0], solidS.selection.index === 1); });
+            run("Solid Layer", function () { doSolidLayer(solidC.get()); });
         });
 
         var fp = subPanel(p, "Follow Path");
