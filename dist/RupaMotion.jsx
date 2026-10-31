@@ -3382,7 +3382,7 @@
     }
 
     feature("Flow", "Easing curves", function (p) {
-        var GW = 240, GH = 200, X0 = 32, XW = 176, Y0 = 136, YS = 80;     // plot: u 0..1 -> X0..X0+XW, v 0..1 -> Y0..Y0-YS
+        var GW = 204, GH = 190, X0 = 14, XW = 176, Y0 = 134, YS = 80;     // plot: u 0..1 -> X0..X0+XW, v 0..1 -> Y0..Y0-YS
         var cur = [0.66, 0, 0.34, 1], mode = "both", picked = -1, drag = -1, i;
         var saved = splitList(getS("flow_curve", ""));
         if (saved.length === 4) { for (i = 0; i < 4; i++) { cur[i] = num(saved[i], cur[i], -1, 2); } }
@@ -3403,10 +3403,10 @@
             rrPath(g, 0.5, 0.5, GW - 1, GH - 1, 10);
             g.fillPath(brush(g, DS.card));
             for (k = 0; k <= 4; k++) {
-                poly(g, [[xOf(k / 4), yOf(-0.7)], [xOf(k / 4), yOf(1.6)]], false); g.strokePath(pen(g, DS.border, 1));
+                poly(g, [[xOf(k / 4), yOf(-0.6)], [xOf(k / 4), yOf(1.6)]], false); g.strokePath(pen(g, DS.border, 1));
             }
             for (k = -2; k <= 6; k++) {
-                poly(g, [[X0 - 20, yOf(k / 4)], [X0 + XW + 20, yOf(k / 4)]], false); g.strokePath(pen(g, DS.border, 1));
+                poly(g, [[X0 - 8, yOf(k / 4)], [X0 + XW + 8, yOf(k / 4)]], false); g.strokePath(pen(g, DS.border, 1));
             }
             g.newPath(); g.rectPath(X0, yOf(1), XW, YS); g.strokePath(pen(g, DS.primary, 1));
             poly(g, [[xOf(0), yOf(0)], [xOf(1), yOf(1)]], false); g.strokePath(pen(g, DS.muted, 1));
@@ -3446,7 +3446,7 @@
 
         function moveHandle(e) {
             if (drag < 0) { return; }
-            var u = Math.max(0, Math.min(1, (e.clientX - X0) / XW)), v = Math.max(-0.7, Math.min(1.6, (Y0 - e.clientY) / YS));
+            var u = Math.max(0, Math.min(1, (e.clientX - X0) / XW)), v = Math.max(-0.6, Math.min(1.6, (Y0 - e.clientY) / YS));
             cur[drag * 2] = Math.round(u * 100) / 100;
             cur[drag * 2 + 1] = Math.round(v * 100) / 100;
             refresh(false);
