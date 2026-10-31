@@ -824,6 +824,14 @@
         return "on";
     }
 
+    // Eases the segment between the keys at t0 and t1 with a cubic-bezier c (same engine as Flow)
+    function easeBetweenKeys(prop, t0, t1, c) {
+        var a = prop.nearestKeyIndex(t0), b = prop.nearestKeyIndex(t1), st = {}, report = { failed: 0, error: "" };
+        if (b <= a) { return; }
+        flowSegment(prop, st, a, b, c, "both");
+        flowCommit(prop, st, report);
+    }
+
     // Segments (pairs of key indices) to ease for the chosen keys
     function flowSegments(idx, numKeys) {
         var segs = [], i, has = {};

@@ -981,6 +981,9 @@
     // ANIMATION GROUP — Pop, Move, List stagger, Hold push-in
     // =====================================================================
 
+    // cubic-bezier for Pop Out: handles (0.45, -0.45) and (0.25, 1)
+    var POP_OUT_CURVE = [0.45, -0.45, 0.25, 1];
+
     function doPop(mode, o) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = selLayers(comp, 1, "Select at least one layer."); if (!sel) { return; }
@@ -999,13 +1002,16 @@
             if (mode === "up") {
                 setKeys(sp, [[t, scaled(base, 0)], [t + d, base]], { bounce: true, clamp: true });
             } else {
-                setKeys(sp, [[t, base], [t + d * 0.35, scaled(base, 1.08)], [t + d, scaled(base, 0)]]);
+                // One continuous curve instead of three keys: a small anticipation (~9% up), a sweep down,
+                // and a soft landing at zero. (Easing each key to speed 0 made the scale stop at the peak.)
+                setKeys(sp, [[t, base], [t + d, scaled(base, 0)]]);
+                easeBetweenKeys(sp, t, t + d, POP_OUT_CURVE);
             }
             if (o.fade) {
                 var op = L.transform.opacity.valueAtTime(t, false);
                 if (mode === "up" && op === 0) { op = 100; }
                 if (mode === "up") { setKeys(L.transform.opacity, [[t, 0], [t + d * 0.4, op]]); }
-                else { setKeys(L.transform.opacity, [[t + d * 0.6, op], [t + d, 0]]); }
+                else { setKeys(L.transform.opacity, [[t + d * 0.45, op], [t + d, 0]]); }
             }
             mb(L);
         }
@@ -2656,6 +2662,14 @@
         if (ex !== "" && ex.indexOf("Motion Kit") < 0) { return "skipped"; }
         prop.expression = flowBounceExpr(pct);
         return "on";
+    }
+
+    // Eases the segment between the keys at t0 and t1 with a cubic-bezier c (same engine as Flow)
+    function easeBetweenKeys(prop, t0, t1, c) {
+        var a = prop.nearestKeyIndex(t0), b = prop.nearestKeyIndex(t1), st = {}, report = { failed: 0, error: "" };
+        if (b <= a) { return; }
+        flowSegment(prop, st, a, b, c, "both");
+        flowCommit(prop, st, report);
     }
 
     // Segments (pairs of key indices) to ease for the chosen keys

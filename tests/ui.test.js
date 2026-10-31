@@ -213,3 +213,34 @@ try {
   if (!exprOk) console.log('FLOW bounce numbers', peak, before, late, done);
 } catch (e) { console.log('FLOW bounce expression failed', e.message); }
 console.log(`flow bounce: on ${onOk}, change % ${changeOk}, off ${offOk}, user expression kept ${userOk && userOffOk}, parses ${exprOk}`);
+
+// Pop Out: two keys and one smooth curve (anticipation, sweep, soft landing), no stop at a middle key
+function fakeAnimProp(dims, base) {
+  const keys = [], E = () => Array.from({ length: dims }, () => new g.KeyframeEase(0, 16.67));
+  return { propertyType: 1, keys, value: base, isSpatial: false, expression: '', dimensionsSeparated: false,
+    get numKeys() { return keys.length; },
+    setValueAtTime(t, v) { const i = keys.findIndex(k => Math.abs(k.t - t) < 1e-9); const k = { t, v, in: E(), out: E(), inT: 'B', outT: 'B' }; if (i >= 0) keys[i] = k; else { keys.push(k); keys.sort((a, b) => a.t - b.t); } },
+    nearestKeyIndex(t) { let best = 0; keys.forEach((k, i) => { if (Math.abs(k.t - t) < Math.abs(keys[best].t - t)) best = i; }); return best + 1; },
+    valueAtTime() { return base; }, keyTime: i => keys[i - 1].t, keyValue: i => keys[i - 1].v,
+    keyInTemporalEase: i => keys[i - 1].in, keyOutTemporalEase: i => keys[i - 1].out,
+    keyInInterpolationType: i => keys[i - 1].inT, keyOutInterpolationType: i => keys[i - 1].outT,
+    setInterpolationTypeAtKey(i, a, b) { keys[i - 1].inT = a; keys[i - 1].outT = b; },
+    setTemporalContinuousAtKey() {}, setTemporalAutoBezierAtKey() {},
+    setTemporalEaseAtKey(i, inn, out) { keys[i - 1].in = inn; keys[i - 1].out = out; } };
+}
+{
+  const sc = fakeAnimProp(2, [100, 100]), op = fakeAnimProp(1, 100);
+  const layer = { transform: { scale: sc, opacity: op }, motionBlur: false, containingComp: {} };
+  const comp = new g.CompItem(); comp.selectedLayers = [layer]; comp.time = 0; comp.frameDuration = 0.04;
+  app.project.activeItem = comp;
+  const popBtn = walk(root).filter(n => n.type === 'button' && n.text === 'Pop Out')[0];
+  const centerT = walk(root).filter(n => n.type === 'button' && n.text === 'Scale from layer center' && typeof n.value === 'boolean')[0];
+  if (centerT.value) centerT.onClick();
+  popBtn.onClick();
+  app.project.activeItem = null;
+  const k = sc.keys, dt = k.length === 2 ? k[1].t - k[0].t : 0;
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const ok = k.length === 2 && near(dt, 0.72) && near(k[0].out[0].influence, 45) && near(k[0].out[0].speed, -0.45 * -100 / (0.45 * dt))
+    && near(k[1].in[0].influence, 75) && near(k[1].in[0].speed, 0) && near(k[0].out[1].speed, k[0].out[0].speed);
+  console.log(`pop out: ${ok ? 'smooth single curve OK' : 'WRONG'} (keys ${k.length}, out influence ${k[0] && k[0].out[0].influence}, end speed ${k[1] && k[1].in[0].speed})`);
+}
