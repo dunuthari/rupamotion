@@ -2187,6 +2187,10 @@
         }
     }
 
+    // Ramp start/end follow the layer's bounds. Effect points on shape and text layers live in
+    // comp space, so the corners go through toComp(): the gradient then moves, scales and rotates
+    // with the element. (A fixed half-comp offset only works while the layer sits at the comp center.)
+    // Footage and solids use plain layer pixels.
     function addLockedGradient(L, dir) {
         var e = fxAdd(L, "ADBE Ramp");
         if (!e) { return; }
@@ -2194,22 +2198,24 @@
         var g = L.property("ADBE Effect Parade").property("MK Locked Gradient");
         fxSet(g, 2, c4(col("gradStart")));
         fxSet(g, 4, c4(col("gradEnd")));
-        // Shape/text layers: effect points start at the top-left of the comp-sized layer area
-        var r = "var r = thisLayer.sourceRectAtTime(time, false);\n" +
-            (isVectorLayer(L) ? "var o = [thisComp.width / 2, thisComp.height / 2];\n" : "var o = [0, 0];\n");
+        var r = "var r = thisLayer.sourceRectAtTime(time, false);\n";
         var a, b;
         if (dir === 1) {
-            a = "[r.left + r.width / 2 + o[0], r.top + o[1]]";
-            b = "[r.left + r.width / 2 + o[0], r.top + r.height + o[1]]";
+            a = "[r.left + r.width / 2, r.top]";
+            b = "[r.left + r.width / 2, r.top + r.height]";
         } else if (dir === 2) {
-            a = "[r.left + o[0], r.top + o[1]]";
-            b = "[r.left + r.width + o[0], r.top + r.height + o[1]]";
+            a = "[r.left, r.top]";
+            b = "[r.left + r.width, r.top + r.height]";
         } else {
-            a = "[r.left + o[0], r.top + r.height / 2 + o[1]]";
-            b = "[r.left + r.width + o[0], r.top + r.height / 2 + o[1]]";
+            a = "[r.left, r.top + r.height / 2]";
+            b = "[r.left + r.width, r.top + r.height / 2]";
         }
-        g.property(1).expression = r + a + ";";
-        g.property(3).expression = r + b + ";";
+        function pointExpr(pt) {
+            if (!isVectorLayer(L)) { return r + pt + ";"; }
+            return r + "var q = thisLayer.toComp(" + pt + ");\n[q[0], q[1]];";
+        }
+        g.property(1).expression = pointExpr(a);
+        g.property(3).expression = pointExpr(b);
     }
 
     // o: type, w, h, radius, points, inner, fill(rgb), fillOpacity, gradient, gradDir,
@@ -2462,7 +2468,7 @@
     }
 
     function physicsExpr(amp) {
-        return "// Motion Kit bounce physics (inertial bounce after each keyframe)\n" +
+        return "// Motion Kit bounce physics (ball-like bounce after each keyframe)\n" +
             "var amp = " + amp.toFixed(3) + ", freq = 3, decay = 6;\n" +
             "var n = 0, out = value;\n" +
             "if (numKeys > 0) { n = nearestKey(time).index; if (key(n).time > time) { n--; } }\n" +
@@ -2476,7 +2482,7 @@
             "out;";
     }
 
-    function doBouncePhysics() {
+    function doBouncePhysics(strength) {
         var comp = activeComp(); if (!comp) { return; }
         var props = targetProps(comp, 1), i;
         if (props.length === 0) {
@@ -2489,7 +2495,7 @@
             }
         }
         if (props.length === 0) { alert("Select keyframed layers (position, scale or rotation) or keyframed properties.", NAME); return; }
-        var amp = 0.05 * num(style.bounceAmt, 10, 1, 60) / 10, skipped = 0;
+        var amp = 0.05 * num(strength, 10, 1, 100) / 10, skipped = 0;
         for (i = 0; i < props.length; i++) {
             var ex = props[i].expression;
             if (ex !== "" && !/Motion Kit/.test(ex)) { skipped++; continue; }
@@ -2524,6 +2530,9 @@
             primary: [0.039, 0.424, 1.000, 1],
             onPrimary: [1, 1, 1, 1],
             tint:    [0.910, 0.945, 1.000, 1],
+            press:   [0.890, 0.898, 0.914, 1],
+            pressPrimary: [0.020, 0.300, 0.780, 1],
+            pressTint: [0.800, 0.890, 1.000, 1],
             shadow:  [0.06, 0.09, 0.16, 0.07],
             knob:    [1, 1, 1, 1]
         },
@@ -2538,6 +2547,9 @@
             primary: [0.039, 0.424, 1.000, 1],
             onPrimary: [1, 1, 1, 1],
             tint:    [0.118, 0.200, 0.341, 1],
+            press:   [0.250, 0.262, 0.290, 1],
+            pressPrimary: [0.020, 0.300, 0.780, 1],
+            pressTint: [0.070, 0.140, 0.260, 1],
             shadow:  [0, 0, 0, 0.25],
             knob:    [1, 1, 1, 1]
         }
@@ -2626,29 +2638,38 @@
     // variants: primary (blue pill) · secondary (white pill, hairline) · chip / chip-on (feature tabs)
 
     function drawButton() {
-        var g = this.graphics, w = this.size[0], h = this.size[1], v = this.variant || "primary";
+        var g = this.graphics, w = this.size[0], h = this.size[1], v = this.variant || "primary", pr = !!this.pressed;
         var fill, stroke = null, tc, bold = false;
-        if (v === "primary") { fill = DS.primary; tc = DS.onPrimary; bold = true; }
-        else if (v === "chip-on") { fill = DS.tint; tc = DS.primary; bold = true; }
-        else if (v === "chip") { fill = DS.card; tc = DS.label; stroke = DS.border; }
-        else { fill = DS.card; tc = DS.text; stroke = DS.border; }
+        if (v === "primary") { fill = pr ? DS.pressPrimary : DS.primary; tc = DS.onPrimary; bold = true; }
+        else if (v === "chip-on") { fill = pr ? DS.pressTint : DS.tint; tc = DS.primary; bold = true; }
+        else if (v === "chip") { fill = pr ? DS.press : DS.card; tc = DS.label; stroke = DS.border; }
+        else { fill = pr ? DS.press : DS.card; tc = DS.text; stroke = DS.border; }
+        if (pr && v !== "primary") { stroke = DS.primary; }
         rrPath(g, 0.5, 0.5, w - 1, h - 1, (h - 1) / 2);
         g.fillPath(brush(g, fill));
-        if (stroke) { g.strokePath(pen(g, stroke, 1)); }
+        if (stroke) { g.strokePath(pen(g, stroke, pr ? 2 : 1)); }
         var f = font(bold ? "BOLD" : "REGULAR", 12), m = measure(g, this.text, f);
-        textAt(g, this.text, tc, Math.round((w - m[0]) / 2), Math.round((h - m[1]) / 2), f);
+        textAt(g, this.text, tc, Math.round((w - m[0]) / 2), Math.round((h - m[1]) / 2) + (pr ? 1 : 0), f);
     }
 
+    // Click feedback: the button shows a pressed state while the mouse is down.
     function styleButton(b, variant, height) {
         b.variant = variant || "secondary";
         b.preferredSize.height = height || 32;
-        if (!CLASSIC) { b.onDraw = drawButton; }
+        if (!CLASSIC) {
+            b.onDraw = drawButton;
+            b.addEventListener("mousedown", function () { b.pressed = true; redraw(b); });
+            b.addEventListener("mouseup", function () { b.pressed = false; redraw(b); });
+            b.addEventListener("mouseout", function () { if (b.pressed) { b.pressed = false; redraw(b); } });
+        }
         return b;
     }
 
     // ---- form rows ----
 
     var LABEL_W = 116;
+
+    var STAGGER_TIP = "Delay between layers, in frames.\n0 = every selected layer starts together.\n3 = each next layer starts 3 frames after the one before it, so they animate one after another.";
 
     function row(parent, label) {
         var g = parent.add("group");
@@ -2723,7 +2744,16 @@
     function btn(parent, label, fn, tip, variant) {
         var b = parent.add("button", undefined, label);
         styleButton(b, variant || (parent.isBtnRow ? "secondary" : "primary"));
-        b.onClick = fn;
+        b.onClick = function () {
+            b.pressed = true;
+            redraw(b);
+            try { fn.call(b); }
+            finally {
+                try { $.sleep(80); } catch (e) {}
+                b.pressed = false;
+                redraw(b);
+            }
+        };
         if (tip) { b.helpTip = tip; }
         return b;
     }
@@ -3137,23 +3167,13 @@
 
     feature("Quick Actions", "Motion quick actions", function (p) {
         var qb = getS("quick_bounce", style.bounceOn) === "1";
-        var br = row(p, "Bounce:");
-        var bBtn = styleButton(br.add("button", undefined, qb ? "Bounce: ON" : "Bounce: OFF"), qb ? "primary" : "secondary", 30);
-        bBtn.preferredSize.width = 128;
-        bBtn.helpTip = "ON: every animation below bounces (slides, pops and fades overshoot and settle).\nOFF: clean eased motion with no bounce.\nStrength comes from Style › Strength %.";
-        var bInfo = br.add("statictext", undefined, qb ? "with bounce" : "no bounce");
-        setFg(bInfo, DS.muted);
-        bInfo.preferredSize.width = 90;
-        bBtn.onClick = function () {
-            qb = !qb;
-            bBtn.text = qb ? "Bounce: ON" : "Bounce: OFF";
-            bInfo.text = qb ? "with bounce" : "no bounce";
-            bBtn.variant = qb ? "primary" : "secondary";
-            repaint(bBtn);
+        var bT = check(p, "Bounce effect", qb, "ON: every animation below bounces (slides, pops and fades overshoot and settle).\nOFF: clean eased motion with no bounce.\nStrength comes from Style › Strength %.");
+        bT.onToggle = function () {
+            qb = bT.value;
             putS("quick_bounce", qb ? "1" : "0");
         };
 
-        var stag = field(p, "Stagger (frames):", "0", 4);
+        var stag = field(p, "Stagger (frames):", "0", 4, STAGGER_TIP);
         var dist = field(p, "Slide distance (px):", "200", 5);
         var gdir = drop(p, "Gradient direction:", ["Horizontal", "Vertical", "Diagonal"], 0);
         function st() { return num(stag.text, 0, 0, 120); }
@@ -3177,11 +3197,19 @@
             ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: true, stagger: st() }); })],
             ["Blur Fade", anim("Blur Fade", function () { doBlurFade(st(), qb); })],
             ["Reverse Keys", function () { run("Reverse Keys", doReverseKeys); }, "Reverses selected keyframed properties (or all on the selected layers)"],
-            ["Lock Gradient", function () { run("Lock Gradient", function () { doLockGradient(gdir.selection.index); }); }, "Gradient that stays locked to the layer's bounds"],
-            ["Bounce Physics", function () { run("Bounce Physics", doBouncePhysics); }, "Inertial bounce after keyframes (uses Style › Strength %)"]
+            ["Lock Gradient", function () { run("Lock Gradient", function () { doLockGradient(gdir.selection.index); }); }, "Gradient that stays locked to the layer: it moves, scales and rotates with it"]
         ]);
         hint(p, "Bounce applies to Fade, Slide, Scale Pop and Blur Fade.");
         hint(p, "Uses Duration, Curve and Strength from the Style group.");
+
+        var ball = subPanel(p, "Bounce the ball effect");
+        hint(ball, "Keyframed layers bounce like a ball after each key.");
+        var ballAmt = field(ball, "Amount (%):", getS("quick_ball", "10"), 4,
+            "How far it bounces after each keyframe.\n5 = small settle, 10 = default, 30+ = big rubber-ball bounce.");
+        ballAmt.onChange = function () { ballAmt.text = String(num(ballAmt.text, 10, 1, 100)); putS("quick_ball", ballAmt.text); };
+        btn(ball, "Bounce the ball effect", function () {
+            run("Bounce the ball effect", function () { doBouncePhysics(num(ballAmt.text, 10, 1, 100)); });
+        }, "Adds a ball-like bounce after every keyframe of the selected layers (position, scale, rotation) or selected keyframed properties.");
     });
 
     // ---------------- Camera ----------------
@@ -3272,7 +3300,7 @@
     feature("Animation", "Pop", function (p) {
         var fade = check(p, "Fade opacity too", true);
         var center = check(p, "Scale from layer center", true, "Moves the anchor point to the layer's center first.");
-        var stag = field(p, "Stagger (frames):", "0", 4);
+        var stag = field(p, "Stagger (frames):", "0", 4, STAGGER_TIP);
         var r = btnRow(p);
         function go(mode) {
             run("Pop " + mode, function () { doPop(mode, { fade: fade.value, center: center.value, stagger: num(stag.text, 0, 0, 120) }); });
@@ -3286,7 +3314,7 @@
         var dist = drop(p, "Distance:", ["Off screen", "Custom"], 0);
         var px = field(p, "Custom (px):", "300", 5);
         var fade = check(p, "Fade opacity too", false);
-        var stag = field(p, "Stagger (frames):", "0", 4);
+        var stag = field(p, "Stagger (frames):", "0", 4, STAGGER_TIP);
         hint(p, "Arrow = direction of travel:");
         var r = btnRow(p);
         function go(dir) {
@@ -3306,7 +3334,7 @@
     feature("Animation", "UI list stagger", function (p) {
         hint(p, "Select imported UI rows. Animates top to bottom.");
         var off = field(p, "Slide up (px):", "40", 5);
-        var stag = field(p, "Stagger (frames):", "2", 4);
+        var stag = field(p, "Stagger (frames):", "2", 4, STAGGER_TIP);
         var fade = check(p, "Fade opacity too", true);
         btn(p, "Stagger selected layers", function () {
             run("UI list stagger", function () {

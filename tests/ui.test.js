@@ -97,3 +97,10 @@ else {
   okB.onClick();
   console.log(`color picker: draw errors ${pickerErrs} | controls ${pn.length} | hex ${before} -> ${hexE.text} | OK closes: ${typeof okB.onClick === 'function'}`);
 }
+
+// click feedback: mouse down shows the pressed state, mouse up clears it, draw stays valid
+const pb = walk(root).filter(n => n.type === 'button' && n.variant && n.listeners && n.listeners.mousedown)[0];
+let pressErrs = 0;
+pb.listeners.mousedown({}); const wasPressed = pb.pressed; try { pb.onDraw(); } catch (e) { pressErrs++; }
+pb.listeners.mouseup({}); const after = pb.pressed;
+console.log(`click effect: pressed on mousedown ${wasPressed}, cleared on mouseup ${!after}, draw errors ${pressErrs}`);

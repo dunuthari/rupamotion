@@ -356,6 +356,10 @@
         }
     }
 
+    // Ramp start/end follow the layer's bounds. Effect points on shape and text layers live in
+    // comp space, so the corners go through toComp(): the gradient then moves, scales and rotates
+    // with the element. (A fixed half-comp offset only works while the layer sits at the comp center.)
+    // Footage and solids use plain layer pixels.
     function addLockedGradient(L, dir) {
         var e = fxAdd(L, "ADBE Ramp");
         if (!e) { return; }
@@ -363,22 +367,24 @@
         var g = L.property("ADBE Effect Parade").property("MK Locked Gradient");
         fxSet(g, 2, c4(col("gradStart")));
         fxSet(g, 4, c4(col("gradEnd")));
-        // Shape/text layers: effect points start at the top-left of the comp-sized layer area
-        var r = "var r = thisLayer.sourceRectAtTime(time, false);\n" +
-            (isVectorLayer(L) ? "var o = [thisComp.width / 2, thisComp.height / 2];\n" : "var o = [0, 0];\n");
+        var r = "var r = thisLayer.sourceRectAtTime(time, false);\n";
         var a, b;
         if (dir === 1) {
-            a = "[r.left + r.width / 2 + o[0], r.top + o[1]]";
-            b = "[r.left + r.width / 2 + o[0], r.top + r.height + o[1]]";
+            a = "[r.left + r.width / 2, r.top]";
+            b = "[r.left + r.width / 2, r.top + r.height]";
         } else if (dir === 2) {
-            a = "[r.left + o[0], r.top + o[1]]";
-            b = "[r.left + r.width + o[0], r.top + r.height + o[1]]";
+            a = "[r.left, r.top]";
+            b = "[r.left + r.width, r.top + r.height]";
         } else {
-            a = "[r.left + o[0], r.top + r.height / 2 + o[1]]";
-            b = "[r.left + r.width + o[0], r.top + r.height / 2 + o[1]]";
+            a = "[r.left, r.top + r.height / 2]";
+            b = "[r.left + r.width, r.top + r.height / 2]";
         }
-        g.property(1).expression = r + a + ";";
-        g.property(3).expression = r + b + ";";
+        function pointExpr(pt) {
+            if (!isVectorLayer(L)) { return r + pt + ";"; }
+            return r + "var q = thisLayer.toComp(" + pt + ");\n[q[0], q[1]];";
+        }
+        g.property(1).expression = pointExpr(a);
+        g.property(3).expression = pointExpr(b);
     }
 
     // o: type, w, h, radius, points, inner, fill(rgb), fillOpacity, gradient, gradDir,
@@ -631,7 +637,7 @@
     }
 
     function physicsExpr(amp) {
-        return "// Motion Kit bounce physics (inertial bounce after each keyframe)\n" +
+        return "// Motion Kit bounce physics (ball-like bounce after each keyframe)\n" +
             "var amp = " + amp.toFixed(3) + ", freq = 3, decay = 6;\n" +
             "var n = 0, out = value;\n" +
             "if (numKeys > 0) { n = nearestKey(time).index; if (key(n).time > time) { n--; } }\n" +
@@ -645,7 +651,7 @@
             "out;";
     }
 
-    function doBouncePhysics() {
+    function doBouncePhysics(strength) {
         var comp = activeComp(); if (!comp) { return; }
         var props = targetProps(comp, 1), i;
         if (props.length === 0) {
@@ -658,7 +664,7 @@
             }
         }
         if (props.length === 0) { alert("Select keyframed layers (position, scale or rotation) or keyframed properties.", NAME); return; }
-        var amp = 0.05 * num(style.bounceAmt, 10, 1, 60) / 10, skipped = 0;
+        var amp = 0.05 * num(strength, 10, 1, 100) / 10, skipped = 0;
         for (i = 0; i < props.length; i++) {
             var ex = props[i].expression;
             if (ex !== "" && !/Motion Kit/.test(ex)) { skipped++; continue; }

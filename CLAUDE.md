@@ -37,6 +37,9 @@ Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.js
   re-fetch (see `addVec`, `addTextAnimator`). Add effects **before** grabbing other property references.
 - Effect *point* parameters on **shape and text layers** are measured from the top-left of the comp-sized
   layer area, not the layer origin → add `fxPointOffset(L)` (half the comp size). Footage/solids need no offset.
+- Locked gradients (`addLockedGradient`) feed Ramp points through `thisLayer.toComp()` on shape/text layers, so
+  they move, scale and rotate with the element. Don't use a fixed half-comp offset there: it is only right while the
+  layer sits at the comp center.
 - Track mattes: use `setMatte()` (new `setTrackMatte` API on AE 2023+, falls back to `trackMatteType`).
 - Drop Shadow opacity is stored 0–255 (38 ≈ 15%).
 
@@ -47,7 +50,8 @@ Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.js
   plus a bold `statictext` title (`card()` in `07_ui.jsx`). Large cards can't have rounded corners;
   buttons, chips, toggles, tab tiles and the logo are custom-drawn and rounded (`rrPath`).
 - Native edittext/dropdown always render dark, which is why the panel ships a single **dark** theme.
-- Redraw a custom control with `repaint(ctrl)` (hide/show). Toggles expose `.value` and `.onToggle`.
+- Redraw a custom control with `redraw(ctrl)` (`notify("onDraw")`) or `repaint(ctrl)` (hide/show). Buttons made by
+  `styleButton` show a pressed state on mouse down; `btn()` keeps it through the action so quick clicks are visible. Toggles expose `.value` and `.onToggle`.
 
 ## Design system (dark)
 page `#1C1D20` · surface `#232428` · card `#2B2D31` · hairline `#3C3E43` · text `#F1F2F4` · label `#BEC0C4` ·

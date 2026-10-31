@@ -152,7 +152,9 @@
   }
   .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 700; }
   .btn.primary:active { background: var(--primary-press); }
-  .btn:not(.primary):active { background: var(--surface); }
+  .btn { transition: background .08s, border-color .08s, transform .08s; }
+  .btn:not(.primary):active { background: var(--hairline); border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); transform: translateY(1px); }
+  .btn.primary:active { transform: translateY(1px); }
   .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .btns.four { grid-template-columns: repeat(4, 1fr); }
 
@@ -241,6 +243,7 @@
 
   // ---------- control helpers ----------
   // Each returns [type, ...args]; render() turns them into DOM.
+  var STAGGER_TIP = "Delay between layers, in frames. 0 = every selected layer starts together. 3 = each next layer starts 3 frames after the one before it, so they animate one after another.";
   function F(label, value, opts) { return ["field", label, value, opts || {}]; }
   function D(label, items, sel, tip) { return ["drop", label, items, sel || 0, tip]; }
   function T(label, on, tip) { return ["toggle", label, !!on, tip]; }
@@ -262,11 +265,12 @@
       C("Follow Path", [H("Select a path layer (mask or shape) + the follower."), F("Path time (s):", "3"), T("Loop along path", true), T("Orient along path", false), B("Follow Path", "The follower now moves along the path.")])
     ]},
     { group: "Quick Actions", name: "Motion quick actions", ui: [
-      BOUNCE("quick"),
-      F("Stagger (frames):", "0"), F("Slide distance (px):", "200"), D("Gradient direction:", ["Horizontal", "Vertical", "Diagonal"]),
-      GRID([["Fade In"], ["Fade Out"], ["Slide Left"], ["Slide Right"], ["Slide Up"], ["Slide Down"], ["Scale Pop"], ["Blur Fade"], ["Reverse Keys"], ["Lock Gradient"], ["Bounce Physics"]]),
+      T("Bounce effect", true, "ON: every animation below bounces. OFF: clean eased motion."),
+      F("Stagger (frames):", "0", { tip: STAGGER_TIP }), F("Slide distance (px):", "200"), D("Gradient direction:", ["Horizontal", "Vertical", "Diagonal"]),
+      GRID([["Fade In"], ["Fade Out"], ["Slide Left"], ["Slide Right"], ["Slide Up"], ["Slide Down"], ["Scale Pop"], ["Blur Fade"], ["Reverse Keys"], ["Lock Gradient"]]),
       H("Bounce applies to Fade, Slide, Scale Pop and Blur Fade."),
-      H("Uses Duration, Curve and Strength from the Style group.")
+      H("Uses Duration, Curve and Strength from the Style group."),
+      C("Bounce the ball effect", [H("Keyframed layers bounce like a ball after each key."), F("Amount (%):", "10", { tip: "How far it bounces after each keyframe. 5 = small settle, 10 = default, 30+ = big rubber-ball bounce." }), B("Bounce the ball effect", "Added the ball bounce.")])
     ]},
     { group: "Camera", name: "Camera", ui: [
       C("3-node camera", [H("Orbit null › Dolly null › Camera"), T("Depth of field", true), F("Aperture (blur):", "60"), B("Create 3-node camera", "Added the camera rig.")]),
@@ -281,7 +285,7 @@
     { group: "Animation", name: "Shape morph", ui: [H("Select 2 shape layers, playhead at the start."), D("Morph from:", ["Lower layer", "Upper layer"]), T("Morph fill color", true), T("Hide target layer", true), T("Put morph in a new composition", true), B("Morph", "Morphed the shapes.")] },
     { group: "Animation", name: "Pop", ui: [T("Fade opacity too", true), T("Scale from layer center", true), F("Stagger (frames):", "0"), ROW([["Pop Up"], ["Pop Out"]])] },
     { group: "Animation", name: "Move in / out", ui: [D("Mode:", ["In", "Out"]), D("Distance:", ["Off screen", "Custom"]), F("Custom (px):", "300"), T("Fade opacity too", false), F("Stagger (frames):", "0"), H("Arrow = direction of travel:"), ROW([["←", "Move left"], ["↑", "Move up"], ["↓", "Move down"], ["→", "Move right"]], "four")] },
-    { group: "Animation", name: "UI list stagger", ui: [H("Select imported UI rows. Animates top to bottom."), F("Slide up (px):", "40"), F("Stagger (frames):", "2"), T("Fade opacity too", true), B("Stagger selected layers", "Staggered the rows.")] },
+    { group: "Animation", name: "UI list stagger", ui: [H("Select imported UI rows. Animates top to bottom."), F("Slide up (px):", "40"), F("Stagger (frames):", "2", { tip: STAGGER_TIP }), T("Fade opacity too", true), B("Stagger selected layers", "Staggered the rows.")] },
     { group: "Animation", name: "Hold push-in", ui: [H("Slow scale-up on holds (100% → 105%)."), F("Amount (%):", "5"), D("Range:", ["Whole layer", "Playhead to layer end"]), B("Push in selected", "Added the push-in.")] },
     { group: "Transitions", name: "Zoom cut", ui: [H("Select 2 clips, or put the playhead on the cut."), F("Frames each side:", "6"), F("Intensity (×):", "3"), F("Blur (shutter °):", "270"), ROW([["Zoom In"], ["Zoom Out"]])] },
     { group: "Transitions", name: "Swipe cut", ui: [H("Select 2 clips, or put the playhead on the cut."), F("Frames each side:", "6"), F("Blur (shutter °):", "300"), ROW([["←", "Swipe left"], ["↑", "Swipe up"], ["↓", "Swipe down"], ["→", "Swipe right"]], "four")] },
@@ -481,7 +485,7 @@
     var t = spec[0];
     if (t === "field") {
       var id = "f" + (++uid);
-      return row(spec[1], el("input", { type: "text", id: id, value: spec[2], class: spec[3].wide ? "wide" : "" }), id);
+      return row(spec[1], el("input", { type: "text", id: id, value: spec[2], class: spec[3].wide ? "wide" : "", title: spec[3].tip || "" }), id);
     }
     if (t === "drop") {
       var did = "d" + (++uid);
