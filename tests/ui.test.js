@@ -105,17 +105,26 @@ pb.listeners.mousedown({}); const wasPressed = pb.pressed; try { pb.onDraw(); } 
 pb.listeners.mouseup({}); const after = pb.pressed;
 console.log(`click effect: pressed on mousedown ${wasPressed}, cleared on mouseup ${!after}, draw errors ${pressErrs}`);
 
-// Flow: apply presets to a fake keyframed property and check the resulting AE ease values
-function fakeProp(v0, v1, dt) {
-  const set = {};
-  return { propertyType: 1, numKeys: 2, selectedKeys: [1, 2], set,
-    keyTime: i => (i === 1 ? 0 : dt), keyValue: i => (i === 1 ? v0 : v1),
-    keyInTemporalEase: () => [new g.KeyframeEase(0, 33)], keyOutTemporalEase: () => [new g.KeyframeEase(0, 33)],
-    keyInInterpolationType: () => 'B', keyOutInterpolationType: () => 'B',
-    setInterpolationTypeAtKey(k, a, b) { (set[k] = set[k] || {}).types = [a, b]; },
-    setTemporalEaseAtKey(k, i, o) { (set[k] = set[k] || {}).ease = [i[0], o[0]]; } };
+// Flow: apply every preset, repeatedly and in different orders, to a fake 3-key property and check that
+// the ease After Effects stores reproduces each curve. The fake enforces the AE rule that keys with
+// "continuous" or "auto bezier" on cannot have different in/out speeds (it throws, like the real API can).
+function fakeKeyProp(times, values) {
+  const keys = times.map((t, i) => ({ t, v: values[i], in: [new g.KeyframeEase(0, 16.67)], out: [new g.KeyframeEase(0, 16.67)],
+    inT: 'L', outT: 'L', cont: true, auto: false }));
+  const P = { propertyType: 1, numKeys: keys.length, keys, selectedKeys: keys.map((k, i) => i + 1),
+    keyTime: i => keys[i - 1].t, keyValue: i => keys[i - 1].v,
+    keyInTemporalEase: i => keys[i - 1].in, keyOutTemporalEase: i => keys[i - 1].out,
+    keyInInterpolationType: i => keys[i - 1].inT, keyOutInterpolationType: i => keys[i - 1].outT,
+    setInterpolationTypeAtKey(i, a, b) { keys[i - 1].inT = a; keys[i - 1].outT = b; },
+    setTemporalContinuousAtKey(i, v) { keys[i - 1].cont = v; }, setTemporalAutoBezierAtKey(i, v) { keys[i - 1].auto = v; },
+    setTemporalEaseAtKey(i, inn, out) {
+      const k = keys[i - 1];
+      if ((k.cont || k.auto) && Math.abs(inn[0].speed - out[0].speed) > 1e-9) throw new Error('speeds must match while continuous/auto bezier is on');
+      k.in = inn; k.out = out;
+    } };
+  return P;
 }
-function applyPreset(name, prop, value) {
+function applyOn(prop, name) {
   const comp = new g.CompItem(); comp.selectedLayers = [{ selectedProperties: [prop], property() {} }];
   app.project.activeItem = comp;
   walk(root).filter(n => n.modeId === 'both')[0].onClick();
@@ -123,17 +132,45 @@ function applyPreset(name, prop, value) {
   walk(root).filter(n => n.type === 'button' && n.text === 'Apply')[0].onClick();
   app.project.activeItem = null;
 }
-function near(a, b) { return Math.abs(a - b) < 1e-6 * Math.max(1, Math.abs(b)); }
-let flowOk = 0, flowTotal = 0;
-function check(label, got, want) { flowTotal++; if (near(got, want)) flowOk++; else console.log('FLOW MISMATCH', label, got, want); }
-let fp = fakeProp(0, 100, 2); applyPreset('cubic', fp);
-check('cubic out influence', fp.set[1].ease[1].influence, 66); check('cubic out speed', fp.set[1].ease[1].speed, 0);
-check('cubic in influence', fp.set[2].ease[0].influence, 66); check('cubic in speed', fp.set[2].ease[0].speed, 0);
-fp = fakeProp(0, 100, 2); applyPreset('backOut', fp);
-check('backOut out speed', fp.set[1].ease[1].speed, 1.56 * 100 / (0.34 * 2)); check('backOut out influence', fp.set[1].ease[1].influence, 34);
-check('backOut in influence', fp.set[2].ease[0].influence, 36);
-fp = fakeProp(100, 0, 1); applyPreset('expoOut', fp);
-check('expoOut falling speed', fp.set[1].ease[1].speed, 1 * -100 / (0.16 * 1));
-fp = fakeProp(0, 100, 1); applyPreset('linear', fp);
-flowTotal++; if (fp.set[1].types[1] === 'L' && fp.set[2].types[0] === 'L') flowOk++; else console.log('FLOW MISMATCH linear types', fp.set);
-console.log(`flow easing: ${flowOk}/${flowTotal} checks match the bezier math`);
+function segCurve(P, a, b) {
+  const dv = P.keys[b - 1].v - P.keys[a - 1].v, dt = P.keys[b - 1].t - P.keys[a - 1].t, o = P.keys[a - 1].out[0], n = P.keys[b - 1].in[0];
+  const x1 = o.influence / 100, x2 = 1 - n.influence / 100;
+  return [x1, o.speed * x1 * dt / dv, x2, 1 - n.speed * (n.influence / 100) * dt / dv];
+}
+const presetData = {}; walk(root).filter(n => n.presetIndex !== undefined).forEach(n => { presetData[n.text] = n.curve; });
+const names = Object.keys(presetData);
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const order = names.concat(names.slice().reverse(), names.slice().sort(() => rnd() - 0.5));
+const FP = fakeKeyProp([0, 1, 3], [0, 100, 40]);
+let applied = 0, wrong = 0;
+order.forEach(nm => {
+  applyOn(FP, nm); applied++;
+  const want = presetData[nm];
+  if (nm === 'linear') {
+    const ok = FP.keys[0].outT === 'L' && FP.keys[1].inT === 'L' && FP.keys[1].outT === 'L' && FP.keys[2].inT === 'L';
+    if (!ok) { wrong++; console.log('FLOW linear types wrong'); }
+    return;
+  }
+  [[1, 2], [2, 3]].forEach(([a, b]) => {
+    const got = segCurve(FP, a, b), w = [Math.max(want[0], 0.001), want[1], Math.min(want[2], 0.999), want[3]];
+    if (!got.every((v, i) => Math.abs(v - w[i]) < 1e-6 * Math.max(1, Math.abs(w[i])))) { wrong++; console.log('FLOW MISMATCH', nm, 'seg', a + '-' + b, got.map(v => +v.toFixed(4)), 'want', w); }
+  });
+});
+console.log(`flow easing: ${applied} applies in a row on one property (${names.length} curves x3), ${wrong} wrong`);
+
+// Flow side modes: "out" touches only the outgoing side at the first key, "in" only the incoming side at the last key
+function applyMode(prop, name, mode) {
+  const comp = new g.CompItem(); comp.selectedLayers = [{ selectedProperties: [prop], property() {} }];
+  app.project.activeItem = comp;
+  walk(root).filter(n => n.modeId === mode)[0].onClick();
+  walk(root).filter(n => n.presetIndex !== undefined && n.text === name)[0].onClick();
+  walk(root).filter(n => n.type === 'button' && n.text === 'Apply')[0].onClick();
+  app.project.activeItem = null;
+}
+const MP = fakeKeyProp([0, 2], [0, 100]);
+applyMode(MP, 'cubic', 'both');
+applyMode(MP, 'expoOut', 'out');
+const outOk = Math.abs(MP.keys[0].out[0].influence - 16) < 1e-6 && Math.abs(MP.keys[1].in[0].influence - 66) < 1e-6; // out from expoOut, in still cubic (1-0.34)
+applyMode(MP, 'backIn', 'in');
+const inOk = Math.abs(MP.keys[1].in[0].influence - 34) < 1e-6 && Math.abs(MP.keys[0].out[0].influence - 16) < 1e-6; // in from backIn (1-0.66), out untouched
+console.log(`flow modes: out-only ${outOk}, in-only ${inOk}`);

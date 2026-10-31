@@ -749,15 +749,40 @@
         return true;
     }
 
-    function flowCommit(prop, st) {
+    // True when the ease After Effects stored matches what we asked for (influence is what tells us it took)
+    function flowEaseTook(prop, k, s, inT, outT) {
+        var T = KeyframeInterpolationType;
+        function same(a, b) {
+            if (a.length !== b.length) { return false; }
+            for (var j = 0; j < a.length; j++) { if (Math.abs(a[j].influence - b[j].influence) > 0.5) { return false; } }
+            return true;
+        }
+        if (s.to && outT === T.BEZIER && !same(prop.keyOutTemporalEase(k), s.o)) { return false; }
+        if (s.ti && inT === T.BEZIER && !same(prop.keyInTemporalEase(k), s.i)) { return false; }
+        return true;
+    }
+
+    // Writes the planned ease to every touched key. report.failed counts keys that would not take it.
+    function flowCommit(prop, st, report) {
         for (var key in st) {
             var k = parseInt(key, 10), s = st[key], T = KeyframeInterpolationType;
+            if (!s.ti && !s.to) { continue; }
             var inT = s.ti ? (s.lin ? T.LINEAR : T.BEZIER) : prop.keyInInterpolationType(k);
             var outT = s.to ? (s.lin ? T.LINEAR : T.BEZIER) : prop.keyOutInterpolationType(k);
             prop.setInterpolationTypeAtKey(k, inT, outT);
-            if (inT === T.BEZIER || outT === T.BEZIER) {
-                try { prop.setTemporalEaseAtKey(k, s.i, s.o); } catch (e) {}
+            if (inT !== T.BEZIER && outT !== T.BEZIER) { continue; }
+            // A key that is "continuous" or "auto bezier" must keep the same speed on both sides, so After Effects
+            // rejects a new curve whose in and out speeds differ. That is why the first curve applied and later ones
+            // did not. Untie the key first.
+            try { prop.setTemporalAutoBezierAtKey(k, false); } catch (e1) {}
+            try { prop.setTemporalContinuousAtKey(k, false); } catch (e2) {}
+            var tries = 0, ok = false;
+            while (tries < 2 && !ok) {
+                try { prop.setTemporalEaseAtKey(k, s.i, s.o); } catch (e3) { report.error = e3.toString(); }
+                ok = flowEaseTook(prop, k, s, inT, outT);
+                tries++;
             }
+            if (!ok) { report.failed++; }
         }
     }
 
@@ -807,14 +832,17 @@
     function doFlowApply(c, mode) {
         var comp = activeComp(); if (!comp) { return; }
         if (comp.selectedLayers.length === 0) { alert("Select a layer with keyframes (or select the keyframes).", NAME); return; }
-        var targets = flowTargets(comp), done = 0, i;
+        var targets = flowTargets(comp), done = 0, i, report = { failed: 0, error: "" };
         for (i = 0; i < targets.length; i++) {
             var t = targets[i], st = {}, segs = flowSegments(t.idx, t.prop.numKeys), s;
             try {
                 for (s = 0; s < segs.length; s++) { if (flowSegment(t.prop, st, segs[s][0], segs[s][1], c, mode)) { done++; } }
-                flowCommit(t.prop, st);
-            } catch (e) {}
+                flowCommit(t.prop, st, report);
+            } catch (e) { report.failed++; report.error = e.toString(); }
         }
         if (done === 0) { alert("No keyframes to ease. Select a layer or properties with 2 or more keyframes.", NAME); }
+        else if (report.failed > 0) {
+            alert(report.failed + " keyframe(s) did not accept this curve." + (report.error ? "\n\n" + report.error : ""), NAME);
+        }
         return done;
     }
