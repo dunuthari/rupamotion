@@ -190,6 +190,8 @@
   .flow-tile:active { transform: translateY(1px); border-color: var(--primary); }
   .pick { width: auto; height: 26px; padding: 0 10px; flex: none; }
 
+  input:disabled { opacity: .45; cursor: not-allowed; }
+  .row.off label, .row.off .lbl { opacity: .45; }
   button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
   /* Toast */
@@ -298,7 +300,7 @@
     ]},
     { group: "Animation", name: "Shape morph", ui: [H("Select 2 shape layers, playhead at the start."), D("Morph from:", ["Lower layer", "Upper layer"]), T("Morph fill color", true), T("Hide target layer", true), T("Put morph in a new composition", true), B("Morph", "Morphed the shapes.")] },
     { group: "Animation", name: "Pop", ui: [T("Fade opacity too", true), T("Scale from layer center", true), F("Stagger (frames):", "0"), ROW([["Pop Up"], ["Pop Out"]])] },
-    { group: "Animation", name: "Move in / out", ui: [D("Mode:", ["In", "Out"]), D("Distance:", ["Off screen", "Custom"]), F("Custom (px):", "300"), T("Fade opacity too", false), F("Stagger (frames):", "0"), H("Arrow = direction of travel:"), ROW([["←", "Move left"], ["↑", "Move up"], ["↓", "Move down"], ["→", "Move right"]], "four")] },
+    { group: "Animation", name: "Move in / out", ui: [D("Mode:", ["In", "Out"]), D("Distance:", ["Off screen", "Custom"]), F("Custom (px):", "300", { enabledWhen: 1, tip: "Used when Distance is Custom." }), T("Fade opacity too", false), F("Stagger (frames):", "0"), H("Arrow = direction of travel:"), ROW([["←", "Move left"], ["↑", "Move up"], ["↓", "Move down"], ["→", "Move right"]], "four")] },
     { group: "Animation", name: "UI list stagger", ui: [H("Select imported UI rows. Animates top to bottom."), F("Slide up (px):", "40"), F("Stagger (frames):", "2", { tip: STAGGER_TIP }), T("Fade opacity too", true), B("Stagger selected layers", "Staggered the rows.")] },
     { group: "Animation", name: "Hold push-in", ui: [H("Slow scale-up on holds (100% → 105%)."), F("Amount (%):", "5"), D("Range:", ["Whole layer", "Playhead to layer end"]), B("Push in selected", "Added the push-in.")] },
     { group: "Transitions", name: "Zoom cut", ui: [H("Select 2 clips, or put the playhead on the cut."), F("Frames each side:", "6"), F("Intensity (×):", "3"), F("Blur (shutter °):", "270"), ROW([["Zoom In"], ["Zoom Out"]])] },
@@ -330,7 +332,7 @@
   FEATURES.forEach(function (f) { if (GROUPS.indexOf(f.group) < 0) GROUPS.push(f.group); });
 
   // ---------- DOM helpers ----------
-  var uid = 0;
+  var uid = 0, lastDrop = null;
   function el(tag, attrs, kids) {
     var n = document.createElement(tag);
     if (attrs) Object.keys(attrs).forEach(function (k) {
@@ -625,12 +627,21 @@
     var t = spec[0];
     if (t === "field") {
       var id = "f" + (++uid);
-      return row(spec[1], el("input", { type: "text", id: id, value: spec[2], class: spec[3].wide ? "wide" : "", title: spec[3].tip || "" }), id);
+      var inp = el("input", { type: "text", id: id, value: spec[2], class: spec[3].wide ? "wide" : "", title: spec[3].tip || "" });
+      var fr = row(spec[1], inp, id);
+      if (spec[3].enabledWhen !== undefined && lastDrop) {
+        // enabled only while the dropdown above is on the given option
+        var dd = lastDrop, want = spec[3].enabledWhen;
+        var sync = function () { var on = dd.selectedIndex === want; inp.disabled = !on; fr.classList.toggle("off", !on); };
+        dd.addEventListener("change", sync); sync();
+      }
+      return fr;
     }
     if (t === "drop") {
       var did = "d" + (++uid);
       var s = el("select", { id: did, title: spec[4] || "" }, spec[2].map(function (o) { return el("option", { text: o }); }));
       s.selectedIndex = spec[3];
+      lastDrop = s;
       return row(spec[1], s, did);
     }
     if (t === "toggle") return toggle(spec[1], spec[2], spec[3]);

@@ -991,7 +991,15 @@
     feature("Animation", "Move in / out", function (p) {
         var mode = drop(p, "Mode:", ["In", "Out"], 0);
         var dist = drop(p, "Distance:", ["Off screen", "Custom"], 0);
-        var px = field(p, "Custom (px):", "300", 5);
+        var px = field(p, "Custom (px):", "300", 5, "Used when Distance is Custom.");
+        // The custom distance only applies when Distance is "Custom": grey it out otherwise
+        function syncCustom() {
+            var on = !!dist.selection && dist.selection.index === 1;
+            px.enabled = on;
+            try { px.parent.children[0].enabled = on; } catch (e) {}
+        }
+        dist.onChange = syncCustom;
+        syncCustom();
         var fade = check(p, "Fade opacity too", false);
         var stag = field(p, "Stagger (frames):", "0", 4, STAGGER_TIP);
         hint(p, "Arrow = direction of travel:");

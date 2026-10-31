@@ -244,3 +244,14 @@ function fakeAnimProp(dims, base) {
     && near(k[1].in[0].influence, 75) && near(k[1].in[0].speed, 0) && near(k[0].out[1].speed, k[0].out[0].speed);
   console.log(`pop out: ${ok ? 'smooth single curve OK' : 'WRONG'} (keys ${k.length}, out influence ${k[0] && k[0].out[0].influence}, end speed ${k[1] && k[1].in[0].speed})`);
 }
+
+// Move in/out: the custom distance field is only enabled while Distance is "Custom"
+{
+  const dd = walk(root).filter(n => n.type === 'dropdownlist' && n.items.length === 2 && n.items[0].text === 'Off screen' && n.items[1].text === 'Custom')[0];
+  const field = walk(root).filter(n => n.type === 'edittext' && n.parent && n.parent.children[0] && n.parent.children[0].text === 'Custom (px):')[0];
+  const label = field.parent.children[0];
+  const start = [field.enabled, label.enabled];
+  dd.selection = 1; const custom = [field.enabled, label.enabled];
+  dd.selection = 0; const off = [field.enabled, label.enabled];
+  console.log(`move distance: off screen -> disabled ${start[0] === false && off[0] === false && off[1] === false}, custom -> enabled ${custom[0] === true && custom[1] === true}`);
+}
