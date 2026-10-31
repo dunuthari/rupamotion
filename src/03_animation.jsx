@@ -186,7 +186,10 @@
             if (L instanceof CameraLayer || L instanceof LightLayer) { continue; }
             var t = comp.time + i * o.stagger * fr;
             if (mode === "up") { ensureBounce(L); }
-            if (o.center) { anchorTo(L, "center", t); }
+            // center: true = always re-center; "auto" = respect a hand-placed anchor and only
+            // center a text layer that still has its default anchor (baseline-left, at 0,0)
+            var recenter = (o.center === "auto") ? ((L instanceof TextLayer) && allZero(L.transform.anchorPoint.value)) : o.center;
+            if (recenter) { anchorTo(L, "center", t); }
             var sp = L.transform.scale, base = sp.valueAtTime(t, false);
             if (mode === "up" && allZero(base)) { base = scaled(base, 0); for (var k = 0; k < base.length; k++) { base[k] = 100; } }
             if (mode === "up") {

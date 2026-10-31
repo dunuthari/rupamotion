@@ -662,40 +662,41 @@
 
     feature("Quick Actions", "Motion quick actions", function (p) {
         var qb = getS("quick_bounce", style.bounceOn) === "1";
-        var bT = check(p, "Bounce effect", qb, "ON: every animation below bounces (slides, pops and fades overshoot and settle).\nOFF: clean eased motion with no bounce.\nStrength comes from Style › Strength %.");
+        var bT = check(p, "Bounce effect", qb, "ON: every animation below bounces (slides, pops and fades overshoot and settle).\nOFF: clean eased motion with no bounce.\nSet how much with Bounce (%) below.");
         bT.onToggle = function () {
             qb = bT.value;
             putS("quick_bounce", qb ? "1" : "0");
         };
 
-        var stag = field(p, "Stagger (frames):", "0", 4, STAGGER_TIP);
+        var bPct = field(p, "Bounce (%):", getS("quick_bounce_pct", style.bounceAmt), 4,
+            "How far animations overshoot before settling.\n5 = subtle, 10 = default, 30 = very springy.");
+        bPct.onChange = function () { bPct.text = String(num(bPct.text, 10, 1, 60)); putS("quick_bounce_pct", bPct.text); };
         var dist = field(p, "Slide distance (px):", "200", 5);
         var gdir = drop(p, "Gradient direction:", ["Horizontal", "Vertical", "Diagonal"], 0);
-        function st() { return num(stag.text, 0, 0, 120); }
 
         // Runs an animation action with the Quick Actions bounce state
         function anim(label, fn) {
-            return function () { run(label, function () { withBounce(qb, fn); }); };
+            return function () { run(label, function () { withBounce(qb, fn, num(bPct.text, 10, 1, 60)); }); };
         }
         function slide(dir, label) {
             return anim(label, function () {
-                doMove(dir, { mode: "in", offscreen: false, distance: num(dist.text, 200, 1, 20000), fade: true, stagger: st() });
+                doMove(dir, { mode: "in", offscreen: false, distance: num(dist.text, 200, 1, 20000), fade: true, stagger: 0 });
             });
         }
         grid(p, [
-            ["Fade In", anim("Fade In", function () { doFade(true, st(), qb); })],
-            ["Fade Out", anim("Fade Out", function () { doFade(false, st(), qb); })],
+            ["Fade In", anim("Fade In", function () { doFade(true, 0, qb); })],
+            ["Fade Out", anim("Fade Out", function () { doFade(false, 0, qb); })],
             ["Slide Left", slide([-1, 0], "Slide Left"), "Slides in, travelling left"],
             ["Slide Right", slide([1, 0], "Slide Right"), "Slides in, travelling right"],
             ["Slide Up", slide([0, -1], "Slide Up"), "Slides in, travelling up"],
             ["Slide Down", slide([0, 1], "Slide Down"), "Slides in, travelling down"],
-            ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: true, stagger: st() }); })],
-            ["Blur Fade", anim("Blur Fade", function () { doBlurFade(st(), qb); })],
+            ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: 0 }); })],
+            ["Blur Fade", anim("Blur Fade", function () { doBlurFade(0, qb); })],
             ["Reverse Keys", function () { run("Reverse Keys", doReverseKeys); }, "Reverses selected keyframed properties (or all on the selected layers)"],
             ["Lock Gradient", function () { run("Lock Gradient", function () { doLockGradient(gdir.selection.index); }); }, "Gradient that stays locked to the layer: it moves, scales and rotates with it"]
         ]);
         hint(p, "Bounce applies to Fade, Slide, Scale Pop and Blur Fade.");
-        hint(p, "Uses Duration, Curve and Strength from the Style group.");
+        hint(p, "Uses Duration and Curve from the Style group. Anchor points are kept as you set them.");
 
         var ball = subPanel(p, "Bounce the ball effect");
         hint(ball, "Keyframed layers bounce like a ball after each key.");

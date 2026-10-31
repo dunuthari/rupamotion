@@ -523,11 +523,12 @@
         }
     }
 
-    // Temporarily uses a given bounce state (Quick Actions has its own toggle)
-    function withBounce(on, fn) {
-        var old = style.bounceOn;
+    // Temporarily uses a given bounce state and strength (Quick Actions has its own toggle and Bounce %)
+    function withBounce(on, fn, amount) {
+        var old = style.bounceOn, oldAmt = style.bounceAmt;
         style.bounceOn = on ? "1" : "0";
-        try { fn(); } finally { style.bounceOn = old; }
+        if (amount !== undefined) { style.bounceAmt = String(amount); }
+        try { fn(); } finally { style.bounceOn = old; style.bounceAmt = oldAmt; }
     }
 
     // Bounce for fades: in = springy scale-up, out = small anticipation before shrinking
