@@ -177,8 +177,91 @@
     // ANIMATION GROUP — Pop, Move, List stagger, Hold push-in
     // =====================================================================
 
-    // cubic-bezier for Pop Out: handles (0.45, -0.45) and (0.25, 1)
+    // cubic-bezier for the old Pop Out (Quick actions): handles (0.45, -0.45) and (0.25, 1)
     var POP_OUT_CURVE = [0.45, -0.45, 0.25, 1];
+
+    // Curves for the smooth-bounce pops. The bounce expression works from the speed at each keyframe, so unlike
+    // an ease to zero these arrive / leave with real speed:
+    //   up:  starts gently, arrives fast (about 1.8x the average speed) -> a clear, speed-matched overshoot
+    //   out: leaves at about the average speed (the expression winds up first), then lands softly on zero
+    var POP_UP_CURVE = [0.4, 0.2, 0.75, 0.55];
+    var POP_OUT_SMOOTH = [0.3, 0.36, 0.6, 1];
+
+    // "Smooth Bounce In + Out": overshoot where motion stops, wind-up where motion starts (speed-matched).
+    // Edit freq / decay / amp in the expression to taste. clampZero keeps Scale from going negative.
+    function smoothBounceExpr(clampZero) {
+        var L = [];
+        L.push("// Motion Kit smooth bounce in + out (Animation > Pop). Edit freq / decay / amp to taste.");
+        L.push("freq     = 2.5;   // bounces per second");
+        L.push("decay    = 5.0;   // how fast the bounce settles");
+        L.push("amp      = 1.0;   // 1.0 = smoothest (speed-matched). Lower = softer, higher = bouncier");
+        L.push("fadeTime = 0.2;   // seconds to fade a bounce before the next key");
+        L.push("clampZero = " + (clampZero ? "true" : "false") + "; // true for Scale/Opacity, false for Position/Rotation");
+        L.push("");
+        L.push("w   = 2 * Math.PI * freq;");
+        L.push("eps = thisComp.frameDuration / 10;");
+        L.push("");
+        L.push("function mag(v){ return (v instanceof Array) ? length(v) : Math.abs(v); }");
+        L.push("function clamp0(v){");
+        L.push("  if (v instanceof Array){");
+        L.push("    var r = [];");
+        L.push("    for (var i = 0; i < v.length; i++) r[i] = Math.max(0, v[i]);");
+        L.push("    return r;");
+        L.push("  }");
+        L.push("  return Math.max(0, v);");
+        L.push("}");
+        L.push("");
+        L.push("result = value;");
+        L.push("");
+        L.push("if (numKeys > 1){");
+        L.push("  n = nearestKey(time).index;");
+        L.push("  if (key(n).time > time) n--;");
+        L.push("");
+        L.push("  // ---- OUT: smooth overshoot where motion STOPS ----");
+        L.push("  if (n > 0){");
+        L.push("    vIn  = velocityAtTime(key(n).time - eps);");
+        L.push("    vAft = velocityAtTime(key(n).time + eps);");
+        L.push("    if (mag(vIn) > 0.01 && mag(vAft) < 0.01 && mag(key(n).value) > 0.001){");
+        L.push("      t = time - key(n).time;");
+        L.push("      k = amp * Math.sin(w * t) / w * Math.exp(-decay * t);");
+        L.push("      if (n < numKeys){");
+        L.push("        seg = key(n + 1).time - key(n).time;");
+        L.push("        f   = Math.min(fadeTime, seg / 2);");
+        L.push("        k  *= ease(time, key(n + 1).time - f, key(n + 1).time, 1, 0);");
+        L.push("      }");
+        L.push("      result = add(result, mul(vIn, k));");
+        L.push("    }");
+        L.push("  }");
+        L.push("");
+        L.push("  // ---- IN: smooth wind-up where motion STARTS ----");
+        L.push("  m = n + 1;");
+        L.push("  if (m <= numKeys){");
+        L.push("    vPrev = velocityAtTime(key(m).time - eps);");
+        L.push("    vOut  = velocityAtTime(key(m).time + eps);");
+        L.push("    if (mag(vPrev) < 0.01 && mag(vOut) > 0.01){");
+        L.push("      t2 = key(m).time - time;");
+        L.push("      k2 = amp * Math.sin(w * t2) / w * Math.exp(-decay * t2);");
+        L.push("      if (n > 0){");
+        L.push("        seg2 = key(m).time - key(n).time;");
+        L.push("        f2   = Math.min(fadeTime, seg2 / 2);");
+        L.push("        k2  *= ease(time, key(n).time, key(n).time + f2, 0, 1);");
+        L.push("      }");
+        L.push("      result = sub(result, mul(vOut, k2));");
+        L.push("    }");
+        L.push("  }");
+        L.push("}");
+        L.push("");
+        L.push("clampZero ? clamp0(result) : result;");
+        return L.join("\n");
+    }
+
+    // Puts the smooth bounce on a property unless it already has an expression of the user's
+    function applySmoothBounce(prop, clampZero) {
+        var ex = "";
+        try { ex = prop.expression; } catch (e0) { return; }
+        if (ex !== "" && ex.indexOf("Motion Kit") < 0) { return; }
+        try { prop.expression = smoothBounceExpr(clampZero); } catch (e1) {}
+    }
 
     function doPop(mode, o) {
         var comp = activeComp(); if (!comp) { return; }
@@ -188,14 +271,20 @@
             var L = sel[i];
             if (L instanceof CameraLayer || L instanceof LightLayer) { continue; }
             var t = comp.time + i * o.stagger * fr;
-            if (mode === "up") { ensureBounce(L); }
+            if (mode === "up" && !o.smooth) { ensureBounce(L); }
             // center: true = always re-center; "auto" = respect a hand-placed anchor and only
             // center a text layer that still has its default anchor (baseline-left, at 0,0)
             var recenter = (o.center === "auto") ? ((L instanceof TextLayer) && allZero(L.transform.anchorPoint.value)) : o.center;
             if (recenter) { anchorTo(L, "center", t); }
             var sp = L.transform.scale, base = sp.valueAtTime(t, false);
             if (mode === "up" && allZero(base)) { base = scaled(base, 0); for (var k = 0; k < base.length; k++) { base[k] = 100; } }
-            if (mode === "up") {
+            if (o.smooth) {
+                // keys that arrive / leave with speed, then the smooth bounce expression does the springing
+                var up = (mode === "up");
+                setKeys(sp, [[t, up ? scaled(base, 0) : base], [t + d, up ? base : scaled(base, 0)]]);
+                easeBetweenKeys(sp, t, t + d, up ? POP_UP_CURVE : POP_OUT_SMOOTH);
+                applySmoothBounce(sp, true);
+            } else if (mode === "up") {
                 setKeys(sp, [[t, scaled(base, 0)], [t + d, base]], { bounce: true, clamp: true });
             } else {
                 // One continuous curve instead of three keys: a small anticipation (~9% up), a sweep down,

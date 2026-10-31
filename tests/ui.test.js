@@ -214,7 +214,7 @@ try {
 } catch (e) { console.log('FLOW bounce expression failed', e.message); }
 console.log(`flow bounce: on ${onOk}, change % ${changeOk}, off ${offOk}, user expression kept ${userOk && userOffOk}, parses ${exprOk}`);
 
-// Pop Out: two keys and one smooth curve (anticipation, sweep, soft landing), no stop at a middle key
+// Animation > Pop: real buttons against a fake layer; checks keys, ease and the smooth bounce expression
 function fakeAnimProp(dims, base) {
   const keys = [], E = () => Array.from({ length: dims }, () => new g.KeyframeEase(0, 16.67));
   return { propertyType: 1, keys, value: base, isSpatial: false, expression: '', dimensionsSeparated: false,
@@ -228,30 +228,60 @@ function fakeAnimProp(dims, base) {
     setTemporalContinuousAtKey() {}, setTemporalAutoBezierAtKey() {},
     setTemporalEaseAtKey(i, inn, out) { keys[i - 1].in = inn; keys[i - 1].out = out; } };
 }
-{
+function runPop(label) {
   const sc = fakeAnimProp(2, [100, 100]), op = fakeAnimProp(1, 100);
   const layer = { transform: { scale: sc, opacity: op }, motionBlur: false, containingComp: {} };
-  const comp = new g.CompItem(); comp.selectedLayers = [layer]; comp.time = 0; comp.frameDuration = 0.04;
+  const comp = new g.CompItem(); comp.selectedLayers = [layer]; comp.time = 1; comp.frameDuration = 1 / 24;
   app.project.activeItem = comp;
-  const popBtn = walk(root).filter(n => n.type === 'button' && n.text === 'Pop Out')[0];
+  const btn = walk(root).filter(n => n.type === 'button' && n.text === label)[0];
   const centerT = walk(root).filter(n => n.type === 'button' && n.text === 'Scale from layer center' && typeof n.value === 'boolean')[0];
   if (centerT.value) centerT.onClick();
-  popBtn.onClick();
+  btn.onClick();
   app.project.activeItem = null;
-  const k = sc.keys, dt = k.length === 2 ? k[1].t - k[0].t : 0;
-  const near = (a, b) => Math.abs(a - b) < 1e-6;
-  const ok = k.length === 2 && near(dt, 0.72) && near(k[0].out[0].influence, 45) && near(k[0].out[0].speed, -0.45 * -100 / (0.45 * dt))
-    && near(k[1].in[0].influence, 75) && near(k[1].in[0].speed, 0) && near(k[0].out[1].speed, k[0].out[0].speed);
-  console.log(`pop out: ${ok ? 'smooth single curve OK' : 'WRONG'} (keys ${k.length}, out influence ${k[0] && k[0].out[0].influence}, end speed ${k[1] && k[1].in[0].speed})`);
+  return { sc, op };
 }
-
-// Move in/out: the custom distance field is only enabled while Distance is "Custom"
+const near2 = (a, b) => Math.abs(a - b) < 1e-6;
 {
-  const dd = walk(root).filter(n => n.type === 'dropdownlist' && n.items.length === 2 && n.items[0].text === 'Off screen' && n.items[1].text === 'Custom')[0];
-  const field = walk(root).filter(n => n.type === 'edittext' && n.parent && n.parent.children[0] && n.parent.children[0].text === 'Custom (px):')[0];
-  const label = field.parent.children[0];
-  const start = [field.enabled, label.enabled];
-  dd.selection = 1; const custom = [field.enabled, label.enabled];
-  dd.selection = 0; const off = [field.enabled, label.enabled];
-  console.log(`move distance: off screen -> disabled ${start[0] === false && off[0] === false && off[1] === false}, custom -> enabled ${custom[0] === true && custom[1] === true}`);
+  const { sc } = runPop('Pop Out'), k = sc.keys, dt = k.length === 2 ? k[1].t - k[0].t : 0;
+  const ok = k.length === 2 && near2(dt, 0.75) && near2(k[0].out[0].influence, 30) && near2(k[0].out[0].speed, 0.36 * -100 / (0.3 * dt))
+    && near2(k[1].in[0].influence, 40) && near2(k[1].in[0].speed, 0) && /Motion Kit smooth bounce/.test(sc.expression) && /clampZero = true/.test(sc.expression);
+  console.log(`pop out: ${ok ? 'OK' : 'WRONG'} (2 keys, speed at start ${k[0] && Math.round(k[0].out[0].speed)}, lands at speed ${k[1] && k[1].in[0].speed}, smooth bounce on scale)`);
+}
+{
+  const { sc } = runPop('Pop Up'), k = sc.keys, dt = k.length === 2 ? k[1].t - k[0].t : 0;
+  const ok = k.length === 2 && near2(k[0].out[0].influence, 40) && near2(k[1].in[0].influence, 25)
+    && near2(k[1].in[0].speed, (1 - 0.55) * 100 / (0.25 * dt)) && /Motion Kit smooth bounce/.test(sc.expression);
+  console.log(`pop up: ${ok ? 'OK' : 'WRONG'} (arrives at speed ${k[1] && Math.round(k[1].in[0].speed)}/s, smooth bounce on scale)`);
+}
+console.log(`pop group: stagger field removed ${!walk(root).some(n => n.type === 'statictext' && n.text === 'Stagger (frames):' && n.parent && n.parent.parent && n.parent.parent.cardTitle === 'Pop')}`);
+
+// Play the generated expression frame by frame (a small AE shim) and check what the motion actually does
+function playExpr(expr, keys, curve) {
+  const prog = x => { let lo = 0, hi = 1; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2, u = 1 - m; (3*u*u*m*curve[0] + 3*u*m*m*curve[2] + m*m*m < x) ? lo = m : hi = m; } const m = (lo + hi) / 2, u = 1 - m; return 3*u*u*m*curve[1] + 3*u*m*m*curve[3] + m*m*m; };
+  const base = t => { const [k0, k1] = keys; if (t <= k0.t) return k0.v; if (t >= k1.t) return k1.v; return k0.v + (k1.v - k0.v) * prog((t - k0.t) / (k1.t - k0.t)); };
+  const vel = t => (base(t + 1e-5) - base(t - 1e-5)) / 2e-5;
+  const len = v => Math.sqrt(v.reduce((a, x) => a + x * x, 0));
+  const arr = (a, b, f) => (Array.isArray(a) || Array.isArray(b)) ? [].concat(a).map((x, i) => f(x, Array.isArray(b) ? b[i] : b)) : f(a, b);
+  const nearestKey = t => ({ index: keys.reduce((b, k, i) => Math.abs(k.t - t) < Math.abs(keys[b].t - t) ? i : b, 0) + 1 });
+  const ease = (t, t1, t2, v1, v2) => { const x = Math.min(1, Math.max(0, (t - t1) / (t2 - t1))); return v1 + (v2 - v1) * x * x * (3 - 2 * x); };
+  return time => {
+    const v = [base(time), base(time)];
+    return new Function('value', 'numKeys', 'time', 'nearestKey', 'key', 'velocityAtTime', 'ease', 'length', 'add', 'sub', 'mul', 'thisComp', 'expr', 'return eval(expr);')(
+      v, 2, time, nearestKey, i => ({ time: keys[i - 1].t, value: [keys[i - 1].v, keys[i - 1].v] }), t => [vel(t), vel(t)], ease, len,
+      (a, b) => arr(a, b, (x, y) => x + y), (a, b) => arr(a, b, (x, y) => x - y), (a, b) => arr(a, b, (x, y) => x * y), { frameDuration: 1 / 24 }, expr)[0];
+  };
+}
+{
+  const up = runPop('Pop Up').sc, out = runPop('Pop Out').sc;
+  const UPC = [0.4, 0.2, 0.75, 0.55], OUTC = [0.3, 0.36, 0.6, 1], T = 0.75, t0 = 1;
+  const U = playExpr(up.expression, [{ t: t0, v: 0 }, { t: t0 + T, v: 100 }], UPC);
+  let peak = 0, minV = 1e9; for (let t = t0; t < t0 + T + 2; t += 0.004) { peak = Math.max(peak, U(t)); minV = Math.min(minV, U(t)); }
+  const settled = Math.abs(U(t0 + T + 1.9) - 100) < 0.05;
+  const e = 1e-3, vL = (U(t0 + T - e) - U(t0 + T - 2 * e)) / e, vR = (U(t0 + T + 2 * e) - U(t0 + T + e)) / e;   // slope just before / after the key
+  console.log(`pop up motion: overshoots to ${peak.toFixed(1)}, never below ${minV.toFixed(1)}, settles on 100 ${settled}, speed before/after the key ${vL.toFixed(0)} / ${vR.toFixed(0)}`);
+  const O = playExpr(out.expression, [{ t: t0, v: 100 }, { t: t0 + T, v: 0 }], OUTC);
+  let maxBefore = 0; for (let t = t0 - 0.5; t < t0; t += 0.004) maxBefore = Math.max(maxBefore, O(t));
+  let afterMax = 0; for (let t = t0 + T; t < t0 + T + 1; t += 0.004) afterMax = Math.max(afterMax, Math.abs(O(t)));
+  const sL = (O(t0 - 2 * e) - O(t0 - 3 * e)) / e, sR = (O(t0 + 3 * e) - O(t0 + 2 * e)) / e;
+  console.log(`pop out motion: winds up to ${maxBefore.toFixed(1)} before leaving 100, ends and stays at 0 (max after ${afterMax.toFixed(3)}), speed before/after start ${sL.toFixed(0)} / ${sR.toFixed(0)}`);
 }

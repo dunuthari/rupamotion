@@ -299,7 +299,7 @@
       ROW([["Create shape", "Created the shape.", true], ["Update selected", "Updated the selected shapes."]])
     ]},
     { group: "Animation", name: "Shape morph", ui: [H("Select 2 shape layers, playhead at the start."), D("Morph from:", ["Lower layer", "Upper layer"]), T("Morph fill color", true), T("Hide target layer", true), T("Put morph in a new composition", true), B("Morph", "Morphed the shapes.")] },
-    { group: "Animation", name: "Pop", ui: [T("Fade opacity too", true), T("Scale from layer center", true), F("Stagger (frames):", "0"), ROW([["Pop Up"], ["Pop Out"]])] },
+    { group: "Animation", name: "Pop", ui: [T("Fade opacity too", true), T("Scale from layer center", true), H("Springs past the end size and settles. Edit freq / decay / amp in the scale expression to tune."), ROW([["Pop Up"], ["Pop Out"]])] },
     { group: "Animation", name: "Move in / out", ui: [D("Mode:", ["In", "Out"]), D("Distance:", ["Off screen", "Custom"]), F("Custom (px):", "300", { enabledWhen: 1, tip: "Used when Distance is Custom." }), T("Fade opacity too", false), F("Stagger (frames):", "0"), H("Arrow = direction of travel:"), ROW([["←", "Move left"], ["↑", "Move up"], ["↓", "Move down"], ["→", "Move right"]], "four")] },
     { group: "Animation", name: "UI list stagger", ui: [H("Select imported UI rows. Animates top to bottom."), F("Slide up (px):", "40"), F("Stagger (frames):", "2", { tip: STAGGER_TIP }), T("Fade opacity too", true), B("Stagger selected layers", "Staggered the rows.")] },
     { group: "Animation", name: "Hold push-in", ui: [H("Slow scale-up on holds (100% → 105%)."), F("Amount (%):", "5"), D("Range:", ["Whole layer", "Playhead to layer end"]), B("Push in selected", "Added the push-in.")] },

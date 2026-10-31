@@ -979,10 +979,10 @@
     feature("Animation", "Pop", function (p) {
         var fade = check(p, "Fade opacity too", true);
         var center = check(p, "Scale from layer center", true, "Moves the anchor point to the layer's center first.");
-        var stag = field(p, "Stagger (frames):", "0", 4, STAGGER_TIP);
+        hint(p, "Springs past the end size and settles. Edit freq / decay / amp in the scale expression to tune.");
         var r = btnRow(p);
         function go(mode) {
-            run("Pop " + mode, function () { doPop(mode, { fade: fade.value, center: center.value, stagger: num(stag.text, 0, 0, 120) }); });
+            run("Pop " + mode, function () { doPop(mode, { fade: fade.value, center: center.value, stagger: 0, smooth: true }); });
         }
         btn(r, "Pop Up", function () { go("up"); });
         btn(r, "Pop Out", function () { go("out"); });
