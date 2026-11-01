@@ -116,8 +116,13 @@
 
         var nul = comp.layers.addNull();
         nul.name = "MK Text+Icon · Move";
-        setXY(nul.transform.anchorPoint, 0, 0);
-        setXY(nul.transform.position, 0, 0);
+        // Anchor at the null's own centre, null sitting at the comp centre (so scaling/rotating it pivots on the middle of
+        // the frame). The children are placed relative to it: local = comp position - (null position - null anchor).
+        var nw = 100, nh = 100;
+        try { nw = nul.source.width; nh = nul.source.height; } catch (eN) {}
+        setXY(nul.transform.anchorPoint, nw / 2, nh / 2);
+        setXY(nul.transform.position, cx, cy);
+        var offX = cx - nw / 2, offY = cy - nh / 2;
 
         // words: one text layer each, measured at 100%
         var layers = [], widths = [], lefts = [], top = 0;
@@ -143,7 +148,7 @@
             setXY(W.transform.anchorPoint, lefts[i] + widths[i] / 2, anchorY);
             W.parent = nul;
             var pp = W.transform.position, sp = W.transform.scale;
-            setKeys(pp, [[t0, vecLike(pp, from.centers[i], cy)], [t0 + TI.posDur, vecLike(pp, to.centers[i], cy)]]);
+            setKeys(pp, [[t0, vecLike(pp, from.centers[i] - offX, cy - offY)], [t0 + TI.posDur, vecLike(pp, to.centers[i] - offX, cy - offY)]]);
             easeBetweenKeys(pp, t0, t0 + TI.posDur, TI.posCurve);
             setKeys(sp, [[t0, [TI.scaleFrom, TI.scaleFrom]], [t0 + TI.sclDur, [100, 100]]]);
             easeBetweenKeys(sp, t0, t0 + TI.sclDur, TI.sclCurve);
@@ -154,7 +159,7 @@
         var iconSize = TI.iconH * h * o.iconPct / 100, icon;
         icon = o.iconFile ? tiIconFromFile(comp, o.iconFile, iconSize) : tiSparkleLayer(comp, iconSize, o.iconColor);
         icon.parent = nul;
-        setXY(icon.transform.position, to.iconX, cy);
+        setXY(icon.transform.position, to.iconX - offX, cy - offY);
 
         var all = layers.concat([icon, nul]);
         for (i = 0; i < all.length; i++) {
@@ -162,4 +167,5 @@
             all[i].selected = false;
         }
         icon.selected = true;
+        try { nul.moveToBeginning(); } catch (eT) {}      // the Move null sits on top of the stack
     }

@@ -467,9 +467,12 @@ function baseLayer(kind) {
   const L = { kind, name: '', inPoint: 0, outPoint: 100, selected: false, parent: null,
     transform: { anchorPoint: fakeAnimProp(2, [0, 0]), position: fakeAnimProp(2, [0, 0]), scale: fakeAnimProp(2, [100, 100]), opacity: fakeAnimProp(1, 100) } };
   L.nodes = {};
+  L.moveToBeginning = function () { this.onTop = true; };
   L.property = function (x) { return (this.nodes[x] = this.nodes[x] || fakeNode(x)); };
   return L;
 }
+// the Move null is 100x100 at the comp centre (960,540) with its anchor at its centre (50,50): children are stored relative to it
+const OX = 910, OY = 490;
 function fakeBuild() {
   const made = [];
   const comp = new g.CompItem();
@@ -523,14 +526,14 @@ function buildTextIcon(sentence, atIndex, opts) {
   const s0 = 0.95, wd0 = wd.map(w => w * s0);
   let x0 = cx - (wd0[0] + slot0 + wd0[1] + 27 * s0 + wd0[2]) / 2;
   const ini = [x0 + wd0[0] / 2]; x0 += wd0[0] + slot0; ini.push(x0 + wd0[1] / 2); x0 += wd0[1] + 27 * s0; ini.push(x0 + wd0[2] / 2);
-  R['words end centred around the 3.03x-height gap'] = words.every((W, i) => { const k = W.transform.position.keys; return k.length === 2 && near(k[1].v[0], fin[i]) && near(k[1].v[1], cy); });
-  R['words start closer together (slot at 56%) and 5% smaller'] = words.every((W, i) => { const k = W.transform.position.keys, sc = W.transform.scale.keys; return near(k[0].v[0], ini[i]) && sc[0].v[0] === 95 && sc[1].v[0] === 100; });
+  R['words end centred around the 3.03x-height gap'] = words.every((W, i) => { const k = W.transform.position.keys; return k.length === 2 && near(k[1].v[0] + OX, fin[i]) && near(k[1].v[1] + OY, cy); });
+  R['words start closer together (slot at 56%) and 5% smaller'] = words.every((W, i) => { const k = W.transform.position.keys, sc = W.transform.scale.keys; return near(k[0].v[0] + OX, ini[i]) && sc[0].v[0] === 95 && sc[1].v[0] === 100; });
   R['position keys: 2.0 -> 2.8 s, scale keys: 2.0 -> 3.3 s'] = words.every(W => { const k = W.transform.position.keys, sc = W.transform.scale.keys; return near(k[0].t, 2) && near(k[1].t, 2.8) && near(sc[0].t, 2) && near(sc[1].t, 3.3); });
   R['measured ease on position (5% / 5% influence) and scale'] = words.every(W => { const k = W.transform.position.keys, sc = W.transform.scale.keys; return near(k[0].out[0].influence, 5) && near(k[1].in[0].influence, 5) && near(sc[0].out[0].influence, 5) && near(sc[1].in[0].influence, 5); });
-  R['icon sits centred in its slot, not animated'] = !!icon && near(icon.transform.position.value[0], iconX) && near(icon.transform.position.value[1], cy) && icon.transform.position.numKeys === 0 && icon.transform.scale.numKeys === 0;
+  R['icon sits centred in its slot, not animated'] = !!icon && near(icon.transform.position.value[0] + OX, iconX) && near(icon.transform.position.value[1] + OY, cy) && icon.transform.position.numKeys === 0 && icon.transform.scale.numKeys === 0;
   const vg = icon && icon.property('ADBE Root Vectors Group').children[0];
   R['built-in sparkle is a 4-point path'] = !!vg && vg.property('ADBE Vectors Group').children.some(c => c.matchName === 'ADBE Vector Shape - Group' && c.property('ADBE Vector Shape').value.vertices.length === 4);
-  R['everything is linked to the identity Move null'] = words.concat([icon]).every(L => L.parent === nul) && nul.transform.position.value[0] === 0 && nul.transform.anchorPoint.value[1] === 0;
+  R['everything is linked to the Move null, which sits on top, centred on the comp with its anchor at its own centre'] = words.concat([icon]).every(L => L.parent === nul) && nul.onTop === true && nul.transform.position.value[0] === 960 && nul.transform.position.value[1] === 540 && nul.transform.anchorPoint.value[0] === 50 && nul.transform.anchorPoint.value[1] === 50;
   R['layers last 4 s from the playhead'] = made.every(L => near(L.inPoint, 2) && near(L.outPoint, 6));
   R['icon is the selected layer (ready to animate)'] = icon.selected === true && words.every(W => !W.selected);
   // highlight sweep
@@ -548,8 +551,8 @@ function buildTextIcon(sentence, atIndex, opts) {
   const h = 67.5, slot1 = 3.03 * h, end = (slot1 + 1.85 * h) / 2;     // "hello world": two words of 225
   // icon at the very start / very end / middle
   const a = buildTextIcon('hello world', 0).made, b = buildTextIcon('hello world', 2).made, c = buildTextIcon('hello world', 1).made;
-  const ix = m => m.find(L => L.kind === 'shape').transform.position.value[0];
-  const wx = m => m.filter(L => L.kind === 'text').map(L => L.transform.position.keys[1].v[0]);
+  const ix = m => m.find(L => L.kind === 'shape').transform.position.value[0] + OX;
+  const wx = m => m.filter(L => L.kind === 'text').map(L => L.transform.position.keys[1].v[0] + OX);
   let st = 960 - (end + 225 + 27 + 225) / 2;
   R['icon before the first word'] = near(ix(a), st + end / 2) && near(wx(a)[0], st + end + 112.5);
   st = 960 - (225 + 27 + 225 + end) / 2;
@@ -587,7 +590,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   const anchors = words.map(L => L.transform.anchorPoint.value[1]), posY = words.map(L => L.transform.position.keys[1].v[1]);
   R['"beauty" has a descender in the fake font'] = byName('beauty').sourceRectAtTime().height > byName('Hello').sourceRectAtTime().height;
   R['all words share one anchor height (one baseline)'] = anchors.every(a => near(a, anchors[0])) && near(anchors[0], -67.5 / 2);
-  R['all words share one position height at both keys'] = posY.every(y => near(y, 540)) && words.every(L => near(L.transform.position.keys[0].v[1], 540));
+  R['all words share one position height at both keys'] = posY.every(y => near(y, 540 - OY)) && words.every(L => near(L.transform.position.keys[0].v[1], 540 - OY));
   R['anchor x is the word centre'] = words.every(L => near(L.transform.anchorPoint.value[0], L.sourceRectAtTime().width / 2));
   // default colours: words and icon use the Style gray (#9AA0A6); the sparkle has no coloured stroke
   const gray = [154 / 255, 160 / 255, 166 / 255];
