@@ -1117,6 +1117,81 @@
         }
     });
 
+    feature("Text", "Text + Icon", function (p) {
+        hint(p, "Type 2–6 words, choose where the icon goes, browse for your icon.");
+        var sent = field(p, "Sentence:", getS("ti_sentence", "feature requests"), 24, "Your words. The icon is placed in the gap you choose below.");
+        var where = drop(p, "Icon position:", ["…"], 0, "Where the icon sits in the sentence.");
+        var look = hint(p, "");
+        look.alignment = ["fill", "top"];
+
+        // icon file (browse) or the built-in sparkle
+        var iconFile = null;
+        var iconRow = row(p, "Icon:");
+        var iconName = iconRow.add("statictext", undefined, "Built-in sparkle");
+        iconName.preferredSize.width = 112;
+        setFg(iconName, DS.label);
+        var browseB = styleButton(iconRow.add("button", undefined, "Browse…"), "secondary", 26);
+        browseB.preferredSize.width = 74;
+        browseB.helpTip = "Choose your own icon: PNG, SVG, AI, PSD or JPG.";
+        var sparkB = styleButton(iconRow.add("button", undefined, "Sparkle"), "secondary", 26);
+        sparkB.preferredSize.width = 66;
+        sparkB.helpTip = "Go back to the built-in sparkle.";
+
+        function iconFilter() {
+            try { if ($.os.indexOf("Windows") >= 0) { return "Images:*.png;*.svg;*.ai;*.psd;*.jpg;*.jpeg;*.gif;*.tif;*.tiff,All files:*.*"; } } catch (e) {}
+            return function (f) { return (f instanceof Folder) || /\.(png|svg|ai|psd|jpe?g|gif|tiff?|eps)$/i.test(f.name); };
+        }
+        browseB.onClick = function () {
+            var f = null;
+            try { f = File.openDialog("Choose an icon (PNG, SVG, AI, PSD, JPG)", iconFilter()); } catch (e) {}
+            if (f) { iconFile = f; iconName.text = f.name; putS("ti_icon", f.fsName); }
+        };
+        sparkB.onClick = function () { iconFile = null; iconName.text = "Built-in sparkle"; putS("ti_icon", ""); };
+        var savedIcon = getS("ti_icon", "");
+        if (savedIcon !== "") {
+            try { var sf = new File(savedIcon); if (sf.exists) { iconFile = sf; iconName.text = sf.name; } } catch (e2) {}
+        }
+
+        // the position list follows the words you type
+        function updateLine() {
+            var words = tiWords(sent.text), at = where.selection ? where.selection.index : 1, out = [], i;
+            for (i = 0; i <= words.length; i++) {
+                if (i === at) { out.push("(icon)"); }
+                if (i < words.length) { out.push(words[i]); }
+            }
+            look.text = "Preview:  " + out.join(" ");
+        }
+        function refresh() {
+            var labels = tiSlotLabels(tiWords(sent.text)), keep = where.selection ? where.selection.index : 1, i;
+            where.removeAll();
+            for (i = 0; i < labels.length; i++) { where.add("item", labels[i]); }
+            if (labels.length > 0) { where.selection = Math.max(0, Math.min(keep, labels.length - 1)); }
+            updateLine();
+        }
+        where.onChange = updateLine;
+        sent.onChanging = refresh;
+        sent.onChange = function () { putS("ti_sentence", sent.text); refresh(); };
+        refresh();
+
+        var size = field(p, "Font size:", getS("ti_size", "90"), 4, "Text size in pixels.");
+        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ti_size", size.text); };
+        var pct = field(p, "Icon size (%):", "100", 4, "100% = the icon at its natural size for this text. Scale it freely afterwards.");
+        var len = field(p, "Length (s):", "4", 4, "How long the layers last from the playhead.");
+        var hi = check(p, "Highlight words", true, "Colour sweep: each word goes white, lavender, magenta, then back to white.");
+        var step = field(p, "Highlight (s/word):", "1", 4, "How long each word keeps the highlight.");
+        hint(p, "The icon is left still, so you can animate it yourself.");
+
+        btn(p, "Build text + icon", function () {
+            run("Text + icon", function () {
+                doTextIcon({
+                    sentence: sent.text, iconIndex: where.selection ? where.selection.index : 1, iconFile: iconFile,
+                    size: num(size.text, 90, 12, 600), iconPct: num(pct.text, 100, 10, 500), length: num(len.text, 4, 0.5, 120),
+                    highlight: hi.value, step: num(step.text, 1, 0.3, 10)
+                });
+            });
+        }, "Builds the words (sliding apart and growing), the icon slot and the highlight at the playhead.");
+    });
+
     // ---------------- UI Kit ----------------
 
     feature("UI Kit", "Pill button", function (p) {

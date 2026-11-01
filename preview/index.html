@@ -191,6 +191,15 @@
   .flow-tile canvas { width: 100%; height: 38px; display: block; }
   .flow-tile[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
   .flow-tile:active { transform: translateY(1px); border-color: var(--primary); }
+
+  /* Text + Icon */
+  .ti-stage { position: relative; height: 96px; border-radius: 12px; background: #0E111C; overflow: hidden; }
+  .ti-stage .w { position: absolute; top: 50%; left: 0; transform-origin: center; white-space: nowrap; font-weight: 600; font-size: 30px; line-height: 1; color: #F1F2F4; will-change: transform; }
+  .ti-stage svg { position: absolute; top: 50%; left: 0; }
+  .ti-line { font-size: 12px; color: var(--hint); min-height: 16px; }
+  .ti-file { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .ti-file .name { font-size: 12px; color: var(--label); width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ti-file .btn { width: auto; height: 26px; padding: 0 10px; flex: none; }
   .pick { width: auto; height: 26px; padding: 0 10px; flex: none; }
 
   input:disabled { opacity: .45; cursor: not-allowed; }
@@ -314,6 +323,7 @@
     { group: "Transitions", name: "Swipe cut", ui: [H("Select the outgoing + incoming clips, or put the playhead on the cut."), H("Adds 3 linked nulls: Out, In and a Move null at the cut."), F("Frames each side:", "15", { tip: "How long the whoosh lasts on each side of the cut." }), F("Distance (%):", "27", { tip: "How far the clips slide. 27% is about 520 px on a 1920 frame, so both stay on screen. 100% = a full screen." }), F("Blur (shutter °):", "300", { tip: "Raises the comp's shutter angle to at least this, for motion blur." }), ROW([["←", "Swipe left"], ["↑", "Swipe up"], ["↓", "Swipe down"], ["→", "Swipe right"]], "four")] },
     { group: "Transitions", name: "Shape wipe", ui: [H("Select 2 clips, or put the playhead on the cut."), D("Shape:", ["Circle", "Triangle"]), D("Grow from:", ["Center", "Left", "Right", "Top", "Bottom"]), T("Blue accent shape leads the reveal", true), F("Accent lead (frames):", "3"), B("Add shape wipe", "Added the shape wipe.")] },
     { group: "Text", name: "Motion", ui: [H("Select text layer(s), put the playhead where it should start, click a preset."), /*TEXT_PRESET_BUTTONS*/ ROW([["1by1", "Applied the 1by1 preset."], ["Bounce text", "Applied the Bounce text preset."]]), ROW([["Bouncing Text HQ", "Applied the Bouncing Text HQ preset."], ["Bouncy Color FadeOut HQ", "Applied the Bouncy Color FadeOut HQ preset."]]), ROW([["Character down", "Applied the Character down preset."], ["Character right", "Applied the Character right preset."]]), ROW([["Color FadeOut HQ", "Applied the Color FadeOut HQ preset."], ["SNAP TEXT", "Applied the SNAP TEXT preset."]]), ROW([["SNAP TEXT 2", "Applied the SNAP TEXT 2 preset."], ["Snapping Text HQ", "Applied the Snapping Text HQ preset."]]), ROW([["Trix bounce", "Applied the Trix bounce preset."], ["Word down", "Applied the Word down preset."]]), ROW([["Word right", "Applied the Word right preset."]]) /*END_TEXT_PRESET_BUTTONS*/] },
+    { group: "Text", name: "Text + Icon", ui: [["textIcon"]] },
     { group: "UI Kit", name: "Pill button", ui: [F("Label:", "+ New", { wide: true }), D("Style:", ["Primary", "White glass", "Outline"]), T("Pop in at playhead", true), B("Create pill button", "Created the pill button.")] },
     { group: "UI Kit", name: "Frosted glass", ui: [H("Select shapes; blurs whatever is behind them."), F("Blur radius:", "30"), B("Frost selected shapes", "Frosted the selected shapes.")] },
     { group: "UI Kit", name: "AI glow button", ui: [F("Label:", "Creating…", { wide: true }), B("Create AI glow button", "Created the AI glow button.")] },
@@ -602,6 +612,131 @@
     return wrap;
   }
 
+
+  // ---------- Text + Icon: same layout numbers and easing as the panel, replayed here ----------
+  var TI = { slotH: 3.03, slotStart: 0.56, iconH: 1.85, spaceK: 0.3, scaleFrom: 95, pos: [0.05, 1.1, 0.95, 1], posDur: 0.8, scl: [0.05, 1, 0.95, 1], sclDur: 1.3 };
+  function tiWords(str) { return str.trim().split(/\s+/).filter(Boolean); }
+  function tiLabels(w) {
+    return w.length === 0 ? [] : w.map(function (x, i) { return i === 0 ? 'Before "' + w[0] + '"' : 'Between "' + w[i - 1] + '" and "' + x + '"'; }).concat(['After "' + w[w.length - 1] + '"']);
+  }
+  function tiProg(c, x) {
+    x = Math.max(0, Math.min(1, x)); var lo = 0, hi = 1, m, i;
+    for (i = 0; i < 40; i++) { m = (lo + hi) / 2; (bez(c, m)[0] < x) ? lo = m : hi = m; }
+    return bez(c, (lo + hi) / 2)[1];
+  }
+  function tiLayout(widths, idx, scale, slot, space, cx, endGap) {
+    var tokens = [], total = 0, x, i, centers = [], iconX = cx;
+    for (i = 0; i <= widths.length; i++) {
+      if (i === idx) tokens.push({ icon: true, w: (i === 0 || i === widths.length) ? endGap : slot });
+      if (i < widths.length) tokens.push({ k: i, w: widths[i] * scale });
+    }
+    tokens.forEach(function (t, j) { total += t.w; if (j > 0 && !t.icon && !tokens[j - 1].icon) total += space; });
+    x = cx - total / 2;
+    tokens.forEach(function (t, j) {
+      if (j > 0 && !t.icon && !tokens[j - 1].icon) x += space;
+      if (t.icon) iconX = x + t.w / 2; else centers[t.k] = x + t.w / 2;
+      x += t.w;
+    });
+    return { centers: centers, iconX: iconX };
+  }
+  var LAV = [178, 130, 215], MAG = [193, 88, 190], BASE = [241, 242, 244];
+  function mix(a, b, t) { return a.map(function (v, i) { return Math.round(v + (b[i] - v) * t); }); }
+
+  function textIconControl() {
+    var wrap = el("div", { class: "ti", style: "display:grid;gap:7px" });
+    var sid = "ti" + (++uid), sent = el("input", { type: "text", id: sid, value: load("ti_sentence", "feature requests"), class: "wide" });
+    var where = el("select", { id: "ti" + (++uid), title: "Where the icon sits in the sentence." });
+    var line = el("div", { class: "ti-line" });
+    var name = el("span", { class: "name", text: "Built-in sparkle" });
+    var fileIn = el("input", { type: "file", accept: ".png,.svg,.ai,.psd,.jpg,.jpeg", style: "display:none" });
+    var browse = el("button", { class: "btn", type: "button", text: "Browse…", title: "Choose your own icon: PNG, SVG, AI, PSD or JPG.", onclick: function () { fileIn.click(); } });
+    var spark = el("button", { class: "btn", type: "button", text: "Sparkle", title: "Go back to the built-in sparkle.", onclick: function () { name.textContent = "Built-in sparkle"; fileIn.value = ""; draw(1e9); } });
+    fileIn.addEventListener("change", function () { if (fileIn.files[0]) { name.textContent = fileIn.files[0].name; } });
+    var size = el("input", { type: "text", id: "ti" + (++uid), value: "90", style: "width:52px" });
+    var pct = el("input", { type: "text", id: "ti" + (++uid), value: "100", style: "width:52px" });
+    var len = el("input", { type: "text", id: "ti" + (++uid), value: "4", style: "width:52px" });
+    var step = el("input", { type: "text", id: "ti" + (++uid), value: "1", style: "width:52px" });
+    var hl = toggle("Highlight words", true, "Colour sweep: each word goes white, lavender, magenta, then back to white.");
+    var stage = el("div", { class: "ti-stage", "aria-label": "Replay of the word animation" });
+
+    function wordsNow() { return tiWords(sent.value); }
+    function updateLine() {
+      var w = wordsNow(), at = +where.value, out = [];
+      for (var i = 0; i <= w.length; i++) { if (i === at) out.push("(icon)"); if (i < w.length) out.push(w[i]); }
+      line.textContent = "Preview:  " + out.join(" ");
+    }
+    function refresh() {
+      var keep = where.value === "" ? 1 : +where.value, labels = tiLabels(wordsNow());
+      where.innerHTML = ""; labels.forEach(function (t, i) { where.appendChild(el("option", { value: String(i), text: t })); });
+      if (labels.length) where.value = String(Math.max(0, Math.min(keep, labels.length - 1)));
+      updateLine(); draw(1e9); save("ti_sentence", sent.value);
+    }
+    sent.addEventListener("input", refresh);
+    where.addEventListener("change", function () { updateLine(); draw(1e9); });
+
+    // the replay: words are spans placed by the same layout maths, the icon stays still
+    var spans = [], svg = null, startT = null, raf = 0;
+    function build() {
+      stage.innerHTML = ""; spans = [];
+      wordsNow().forEach(function (w) { var s = el("span", { class: "w", text: w }); stage.appendChild(s); spans.push(s); });
+      svg = el("div", { style: "position:absolute;top:50%;left:0" });
+      svg.innerHTML = '<svg viewBox="-50 -50 100 100" style="position:absolute;left:-50%;top:-50%;width:100%;height:100%;overflow:visible"><path d="M0 -50 C3.5 -22 22 -3.5 50 0 C22 3.5 3.5 22 0 50 C-3.5 22 -22 3.5 -50 0 C-22 -3.5 -3.5 -22 0 -50Z" fill="#fff" stroke="#C158BE" stroke-opacity=".7" stroke-width="2"/></svg>';
+      stage.appendChild(svg);
+    }
+    function draw(tau) {
+      var w = wordsNow(); if (spans.length !== w.length || spans.some(function (s, i) { return s.textContent !== w[i]; })) build();
+      if (!w.length) return;
+      var W = stage.clientWidth || 320, cx = W / 2, fs = 30, h = fs * 0.75, idx = +where.value || 0;
+      var widths = spans.map(function (s) { s.style.transform = "none"; return s.getBoundingClientRect().width; });
+      var space = fs * TI.spaceK, slot1 = TI.slotH * h, slot0 = TI.slotStart * slot1, sc = TI.scaleFrom / 100;
+      var pp = tiProg(TI.pos, tau / TI.posDur), sp = tiProg(TI.scl, tau / TI.sclDur);
+      var s = sc + (1 - sc) * sp, gap = slot0 + (slot1 - slot0) * pp;
+      var endGap = (gap + TI.iconH * h * (+pct.value || 100) / 100) / 2;
+      var L = tiLayout(widths, idx, s, gap, space * s, cx, endGap), step_ = +step.value || 1;
+      spans.forEach(function (sp_, i) {
+        sp_.style.left = (L.centers[i] - widths[i] / 2) + "px"; sp_.style.transform = "translateY(-50%) scale(" + s + ")";
+        var a = 0, t = tau - i * step_, last = i === spans.length - 1;
+        if (hl.getAttribute("aria-checked") === "true" && t > 0) { a = Math.min(1, t / 0.1); if (!last && t > step_ - 0.4) a = Math.max(0, (step_ - t) / 0.4); }
+        var m = Math.max(0, Math.min(1, (t - 0.1) / 0.5));
+        sp_.style.color = "rgb(" + mix(BASE, mix(LAV, MAG, m), a).join(",") + ")";
+      });
+      var isz = TI.iconH * h * (+pct.value || 100) / 100;
+      svg.style.left = L.iconX + "px"; svg.firstChild.style.width = svg.firstChild.style.height = isz + "px";
+      svg.firstChild.style.left = (-isz / 2) + "px"; svg.firstChild.style.top = (-isz / 2) + "px";
+    }
+    function play() {
+      cancelAnimationFrame(raf); startT = null;
+      (function tick(now) {
+        if (startT === null) startT = now; var tau = (now - startT) / 1000; draw(tau);
+        if (tau < 4) raf = requestAnimationFrame(tick); else draw(1e9);
+      })(performance.now());
+    }
+    var build_ = el("button", { class: "btn primary", type: "button", text: "Build text + icon",
+      title: "Builds the words (sliding apart and growing), the icon slot and the highlight at the playhead.",
+      onclick: function () {
+        var w = wordsNow();
+        if (w.length < 2) { toast("Type 2 to 6 words."); return; }
+        play(); toast("Built " + w.length + " words + icon at the playhead. The icon is left still, so you can animate it.");
+      } });
+
+    wrap.appendChild(el("p", { class: "hint", text: "Type 2–6 words, choose where the icon goes, browse for your icon." }));
+    wrap.appendChild(row("Sentence:", sent, sid));
+    wrap.appendChild(row("Icon position:", where, where.id));
+    wrap.appendChild(line);
+    wrap.appendChild(row("Icon:", el("div", { class: "ti-file" }, [name, browse, spark, fileIn])));
+    wrap.appendChild(row("Font size:", size, size.id));
+    wrap.appendChild(row("Icon size (%):", pct, pct.id));
+    wrap.appendChild(row("Length (s):", len, len.id));
+    wrap.appendChild(hl);
+    wrap.appendChild(row("Highlight (s/word):", step, step.id));
+    wrap.appendChild(el("p", { class: "hint", text: "The icon is left still, so you can animate it yourself." }));
+    wrap.appendChild(stage);
+    wrap.appendChild(build_);
+    refresh();
+    requestAnimationFrame(function () { draw(1e9); });
+    return wrap;
+  }
+
   function colorControl(label, hex, big) {
     var id = "c" + (++uid);
     var sw = big ? el("button", { class: "swatch big", type: "button", title: "Click to choose a color", "aria-label": label + " color", style: "background:" + hex, onclick: function () { choose(); } }) : el("span", { class: "swatch", style: "background:" + hex });
@@ -669,6 +804,7 @@
     }
     if (t === "bounce") return bounceControl(spec[1]);
     if (t === "flow") return flowControl();
+    if (t === "textIcon") return textIconControl();
     if (t === "theme") return themeControl();
     return null;
   }

@@ -24,16 +24,17 @@ function el(type, text) {
   Object.defineProperty(o,'selection',{get(){return this._sel||null;},set(v){const it=(typeof v==='number')?this.items[v]:v;this._sel=it||null;if(this.onChange)this.onChange();}});
   return o;
 }
-function FakeFile0(p) { this.path = p; this.data = ''; }
+function FakeFile0(p) { this.path = p; this.fsName = p; this.name = String(p).split('/').pop(); this.data = ''; }
+FakeFile0.openDialog = function () { return FakeFile0.nextDialog || null; };
 FakeFile0.written = [];
 FakeFile0.prototype.open = function () { return true; }; FakeFile0.prototype.write = function (d) { this.data += d; };
 FakeFile0.prototype.close = function () {}; FakeFile0.prototype.remove = function () { return true; };
 const settings = {}; let scheduled = null;
 const $g = { global: {}, colorPicker: ()=>-1 };
 const app = { settings:{haveSetting:(s,k)=>(s+k) in settings,getSetting:(s,k)=>settings[s+k],saveSetting:(s,k,v)=>{settings[s+k]=v;}},
-  project:{activeItem:null}, fonts:null, beginUndoGroup(){}, endUndoGroup(){}, scheduleTask(code){ scheduled = code; } };
+  project:{activeItem:null, importFile(io) { return { width: 200, height: 100, file: io.file, name: 'icon' }; }}, fonts:null, beginUndoGroup(){}, endUndoGroup(){}, scheduleTask(code){ scheduled = code; } };
 function Panel(){}; let lastWin = null; function Window(){ lastWin = el('window'); return lastWin; }
-const g = { File: FakeFile0, Folder: { temp: { fsName: '/tmp' } }, app, Panel, Window, $: $g, alert: ()=>{}, ScriptUI: { newFont:(f,s,z)=>({f,s,z}) },
+const g = { ImportOptions: function (f) { this.file = f; }, ImportAsType: { FOOTAGE: 1 }, File: FakeFile0, Folder: { temp: { fsName: '/tmp' } }, app, Panel, Window, $: $g, alert: ()=>{}, ScriptUI: { newFont:(f,s,z)=>({f,s,z}) },
   CompItem:function(){}, FootageItem:function(){}, AVLayer:function(){}, ShapeLayer:function(){}, TextLayer:function(){},
   CameraLayer:function(){}, LightLayer:function(){}, Shape:function(){}, KeyframeEase:function(sp,inf){ this.speed=sp; this.influence=inf; }, KeyframeInterpolationType:{LINEAR:'L',BEZIER:'B'},
   PropertyType:{PROPERTY:1}, MarkerValue:function(){}, TrackMatteType:{}, BlendingMode:{}, ParagraphJustification:{}, AutoOrientType:{} };
@@ -442,4 +443,138 @@ function runSwipe(arrow, mutate) {
   const chip = walk(root).filter(n => n.variant === 'chip-on' && n.text === 'Motion')[0];
   const cards = walk(root).filter(n => n.cardLevel === 0 && n.cardTitle === 'Motion' && n.visible);
   console.log(`text sub-group: chip "Motion" shown ${!!chip}, card "Motion" visible ${cards.length === 1}`);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Text + Icon: type a sentence, pick where the icon goes. A fake AE with text/shape layers,
+// text animators and file import checks the real numbers (layout, keys, highlight, icon slot).
+// ---------------------------------------------------------------------------------------------
+function fakeNode(matchName, dims, base) {
+  const n = fakeAnimProp(dims || 2, base === undefined ? [0, 0] : base);
+  n.matchName = matchName; n.children = []; n._name = matchName;
+  Object.defineProperty(n, 'name', { get() { return this._name; }, set(v) { this._name = v; } });
+  Object.defineProperty(n, 'numProperties', { get() { return this.children.length; } });
+  n.addProperty = function (mn) { const c = fakeNode(mn); this.children.push(c); return c; };
+  n.property = function (x) {
+    if (typeof x === 'number') return this.children[x - 1];
+    let c = this.children.find(k => k.matchName === x || k._name === x);
+    if (!c) { c = fakeNode(x); this.children.push(c); }
+    return c;
+  };
+  return n;
+}
+function baseLayer(kind) {
+  const L = { kind, name: '', inPoint: 0, outPoint: 100, selected: false, parent: null,
+    transform: { anchorPoint: fakeAnimProp(2, [0, 0]), position: fakeAnimProp(2, [0, 0]), scale: fakeAnimProp(2, [100, 100]), opacity: fakeAnimProp(1, 100) } };
+  L.nodes = {};
+  L.property = function (x) { return (this.nodes[x] = this.nodes[x] || fakeNode(x)); };
+  return L;
+}
+function fakeBuild() {
+  const made = [];
+  const comp = new g.CompItem();
+  const push = L => { made.push(L); return L; };
+  Object.assign(comp, { time: 2, width: 1920, height: 1080, duration: 20, frameDuration: 0.04, selectedLayers: [], numLayers: 0, shutterAngle: 180,
+    layers: {
+      addNull() { return push(baseLayer('null')); },
+      addShape() { return push(baseLayer('shape')); },
+      add(item) { const L = baseLayer('footage'); L.item = item; return push(L); },
+      addText(str) {
+        const L = baseLayer('text'), doc = { text: str, fontSize: 50, resetCharStyle() {} };
+        const props = fakeNode('ADBE Text Properties'), docNode = fakeNode('ADBE Text Document');
+        docNode.value = doc; docNode.setValue = v => { Object.assign(doc, v); };
+        props.children.push(docNode);
+        L.nodes['ADBE Text Properties'] = props; L.doc = doc;
+        L.sourceRectAtTime = () => ({ left: 0, top: -doc.fontSize * 0.75, width: doc.text.length * doc.fontSize * 0.5, height: doc.fontSize * 0.75 });
+        return push(L);
+      }
+    } });
+  return { comp, made };
+}
+function setField(label, text) {
+  const e = walk(root).filter(n => n.type === 'edittext' && n.parent && n.parent.children[0] && n.parent.children[0].text === label)[0];
+  e.text = text; if (e.onChanging) e.onChanging(); if (e.onChange) e.onChange(); return e;
+}
+function buildTextIcon(sentence, atIndex, opts) {
+  opts = opts || {};
+  const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+  setField('Sentence:', sentence);
+  const where = walk(root).filter(n => n.type === 'dropdownlist' && n.items.length && /Before|Between|After/.test(n.items[0].text))[0];
+  if (atIndex !== undefined) where.selection = atIndex;
+  const hl = walk(root).filter(n => n.type === 'button' && n.text === 'Highlight words' && typeof n.value === 'boolean')[0];
+  if (hl.value !== (opts.highlight !== false)) hl.onClick();
+  walk(root).filter(n => n.type === 'button' && n.text === 'Build text + icon')[0].onClick();
+  app.project.activeItem = null;
+  return { made, where };
+}
+{
+  const near = (a, b, tol) => Math.abs(a - b) < (tol || 1e-6);
+  const R = {};
+  // --- "my name is": icon between the first two words
+  const { made, where } = buildTextIcon('my name is', 1);
+  const nul = made[0], words = made.filter(L => L.kind === 'text'), icon = made.find(L => L.kind === 'shape');
+  R['dropdown follows the words (4 slots for 3 words)'] = where.items.length === 4 && where.items[0].text === 'Before "my"' && where.items[1].text === 'Between "my" and "name"' && where.items[3].text === 'After "is"';
+  R['3 word layers + icon + move null'] = words.length === 3 && !!icon && nul.kind === 'null' && made.length === 5;
+  // independent arithmetic: font 90 -> text height 67.5, widths chars*45, space 27
+  const h = 67.5, cx = 960, cy = 540, slot1 = 3.03 * h, slot0 = 0.56 * slot1;
+  const wd = [90, 180, 90];
+  let x = cx - (wd[0] + slot1 + wd[1] + 27 + wd[2]) / 2;
+  const fin = [x + 45]; const iconX = x + wd[0] + slot1 / 2; x += wd[0] + slot1; fin.push(x + 90); x += wd[1] + 27; fin.push(x + 45);
+  const s0 = 0.95, wd0 = wd.map(w => w * s0);
+  let x0 = cx - (wd0[0] + slot0 + wd0[1] + 27 * s0 + wd0[2]) / 2;
+  const ini = [x0 + wd0[0] / 2]; x0 += wd0[0] + slot0; ini.push(x0 + wd0[1] / 2); x0 += wd0[1] + 27 * s0; ini.push(x0 + wd0[2] / 2);
+  R['words end centred around the 3.03x-height gap'] = words.every((W, i) => { const k = W.transform.position.keys; return k.length === 2 && near(k[1].v[0], fin[i]) && near(k[1].v[1], cy); });
+  R['words start closer together (slot at 56%) and 5% smaller'] = words.every((W, i) => { const k = W.transform.position.keys, sc = W.transform.scale.keys; return near(k[0].v[0], ini[i]) && sc[0].v[0] === 95 && sc[1].v[0] === 100; });
+  R['position keys: 2.0 -> 2.8 s, scale keys: 2.0 -> 3.3 s'] = words.every(W => { const k = W.transform.position.keys, sc = W.transform.scale.keys; return near(k[0].t, 2) && near(k[1].t, 2.8) && near(sc[0].t, 2) && near(sc[1].t, 3.3); });
+  R['measured ease on position (5% / 5% influence) and scale'] = words.every(W => { const k = W.transform.position.keys, sc = W.transform.scale.keys; return near(k[0].out[0].influence, 5) && near(k[1].in[0].influence, 5) && near(sc[0].out[0].influence, 5) && near(sc[1].in[0].influence, 5); });
+  R['icon sits centred in its slot, not animated'] = !!icon && near(icon.transform.position.value[0], iconX) && near(icon.transform.position.value[1], cy) && icon.transform.position.numKeys === 0 && icon.transform.scale.numKeys === 0;
+  const vg = icon && icon.property('ADBE Root Vectors Group').children[0];
+  R['built-in sparkle is a 4-point path'] = !!vg && vg.property('ADBE Vectors Group').children.some(c => c.matchName === 'ADBE Vector Shape - Group' && c.property('ADBE Vector Shape').value.vertices.length === 4);
+  R['everything is linked to the identity Move null'] = words.concat([icon]).every(L => L.parent === nul) && nul.transform.position.value[0] === 0 && nul.transform.anchorPoint.value[1] === 0;
+  R['layers last 4 s from the playhead'] = made.every(L => near(L.inPoint, 2) && near(L.outPoint, 6));
+  R['icon is the selected layer (ready to animate)'] = icon.selected === true && words.every(W => !W.selected);
+  // highlight sweep
+  const amt = W => W.property('ADBE Text Properties').property('ADBE Text Animators').children[0].property('ADBE Text Selectors').children[0].property('ADBE Text Range Advanced').property('ADBE Text Selector Max Amount');
+  const fillC = W => W.property('ADBE Text Properties').property('ADBE Text Animators').children[0].property('ADBE Text Animator Properties').property('ADBE Text Fill Color');
+  R['highlight: 4 amount keys on the first word, from 2.0 s'] = near(amt(words[0]).keys[0].t, 2) && amt(words[0]).keys.length === 4 && amt(words[0]).keys[1].v === 100 && near(amt(words[0]).keys[3].t, 3);
+  R['highlight: second word starts one step (1 s) later'] = near(amt(words[1]).keys[0].t, 3);
+  R['highlight: last word keeps it (2 keys)'] = amt(words[2]).keys.length === 2 && near(amt(words[2]).keys[0].t, 4);
+  R['highlight colour goes lavender -> magenta'] = fillC(words[1]).keys.length === 2 && near(fillC(words[1]).keys[0].v[0], 178 / 255) && near(fillC(words[1]).keys[1].v[0], 193 / 255) && near(fillC(words[1]).keys[0].t, 3.1) && near(fillC(words[1]).keys[1].t, 3.6);
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`text + icon (my name is): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
+  const h = 67.5, slot1 = 3.03 * h, end = (slot1 + 1.85 * h) / 2;     // "hello world": two words of 225
+  // icon at the very start / very end / middle
+  const a = buildTextIcon('hello world', 0).made, b = buildTextIcon('hello world', 2).made, c = buildTextIcon('hello world', 1).made;
+  const ix = m => m.find(L => L.kind === 'shape').transform.position.value[0];
+  const wx = m => m.filter(L => L.kind === 'text').map(L => L.transform.position.keys[1].v[0]);
+  let st = 960 - (end + 225 + 27 + 225) / 2;
+  R['icon before the first word'] = near(ix(a), st + end / 2) && near(wx(a)[0], st + end + 112.5);
+  st = 960 - (225 + 27 + 225 + end) / 2;
+  R['icon after the last word'] = near(ix(b), st + 225 + 27 + 225 + end / 2) && near(wx(b)[1], st + 225 + 27 + 112.5);
+  st = 960 - (225 + slot1 + 225) / 2;
+  R['icon between two words: no extra word space'] = near(ix(c), st + 225 + slot1 / 2) && near(wx(c)[1], st + 225 + slot1 + 112.5);
+  // highlight can be switched off
+  const off = buildTextIcon('hello world', 1, { highlight: false }).made.filter(L => L.kind === 'text');
+  R['highlight off: no animators'] = off.every(W => W.property('ADBE Text Properties').property('ADBE Text Animators').numProperties === 0);
+  // one word is not a sentence: nothing is built
+  const one = buildTextIcon('hello', 1).made;
+  R['one word: nothing built'] = one.length === 0;
+  // browse for an icon file: used instead of the sparkle, fitted to the icon size
+  const browse = walk(root).filter(n => n.type === 'button' && n.text === 'Browse…')[0];
+  FakeFile0.nextDialog = new FakeFile0('/icons/star.png'); browse.onClick();
+  const shown = walk(root).filter(n => n.type === 'statictext' && n.text === 'star.png').length === 1;
+  const withFile = buildTextIcon('hello world', 1).made;
+  const fl = withFile.find(L => L.kind === 'footage');
+  R['browse shows the file name'] = shown;
+  R['icon file replaces the sparkle, scaled to 1.85x text height'] = !!fl && !withFile.some(L => L.kind === 'shape') && fl.name === 'MK Text+Icon · Icon' && near(fl.transform.scale.value[0], 1.85 * 67.5 / 200 * 100) && fl.item.file.name === 'star.png';
+  walk(root).filter(n => n.type === 'button' && n.text === 'Sparkle')[0].onClick();
+  R['"Sparkle" goes back to the built-in icon'] = buildTextIcon('hello world', 1).made.some(L => L.kind === 'shape');
+  // the position list follows the typing
+  const fresh = buildTextIcon('one two three four', 1).where;
+  R['4 words give 5 slots'] = fresh.items.length === 5 && fresh.items[4].text === 'After "four"';
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`text + icon (positions, file, highlight off): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

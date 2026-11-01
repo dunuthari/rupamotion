@@ -8,7 +8,7 @@
     "TextLayer": "readonly", "CameraLayer": "readonly", "LightLayer": "readonly", "Shape": "readonly",
     "KeyframeEase": "readonly", "KeyframeInterpolationType": "readonly", "PropertyType": "readonly",
     "MarkerValue": "readonly", "TrackMatteType": "readonly", "BlendingMode": "readonly",
-    "ParagraphJustification": "readonly", "AutoOrientType": "readonly", "ScriptUI": "readonly", "File": "readonly", "Folder": "readonly", "RegExp": "readonly", "alert": "readonly", "Math": "readonly", "String": "readonly",
+    "ParagraphJustification": "readonly", "AutoOrientType": "readonly", "ScriptUI": "readonly", "File": "readonly", "Folder": "readonly", "ImportOptions": "readonly", "ImportAsType": "readonly", "RegExp": "readonly", "alert": "readonly", "Math": "readonly", "String": "readonly",
     "parseFloat": "readonly", "parseInt": "readonly", "isNaN": "readonly", "Infinity": "readonly"
   },
   "rules": { "no-undef": "error", "no-unused-vars": ["warn", {"args": "none"}], "no-redeclare": "error", "no-dupe-keys": "error", "no-unreachable": "error" }

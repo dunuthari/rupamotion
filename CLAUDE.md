@@ -21,6 +21,7 @@ UI-kit elements, camera parallax and a live, toggleable bounce.
 | `src/02_builders.jsx` | Shape/text/effect/mask/matte/null builders, `makeFrosted`, `makePill`, `cameraPush`, `fxPointOffset` |
 | `src/03_animation.jsx` | Shape morph, Pop, Move in/out, UI list stagger, Hold push-in |
 | `src/04_transitions_text.jsx` | Zoom/swipe cuts, shape wipe |
+| `src/06_text_icon.jsx` | Text > Text + Icon: `doTextIcon` (one text layer per word + icon slot + identity Move null), `tiLayout`, `tiHighlight`, `sparkleShape`; every number in `TI` was measured from a reference clip |
 | `src/06_text_presets.jsx` | Text group: `TEXT_PRESETS` (filled by `build.js` from `presets/text/*.ffx`, base64), `b64decode`, `doTextPreset` (writes a temp .ffx, `applyPreset`) |
 | `src/05_uikit_media.jsx` | Pill button, frosted glass, AI glow button, fake cursor, avatar bubble, waveform, liquid glass; stock grid wall |
 | `src/06_tools.jsx` | Layers group (pre-compose, unwrap composition, smart duplicate, null, adjustment, solid, follow path), Camera group, Shapes group, Quick Actions, Flow (`FLOW_PRESETS`, `doFlowApply`: cubic-bezier → AE temporal ease, optional `flowBounce` overshoot expression) |
@@ -65,6 +66,10 @@ secondary = card fill + hairline (grids, rows). Feature chips: `chip` / `chip-on
 section 13/12 bold, body 12, nav 10. Tokens live in `THEMES` at the top of the design-system block.
 
 ## Text group
+**Text + Icon**: the user types 2–6 words, picks the icon slot (before / between / after words) and optionally browses for an icon file
+(else a built-in sparkle). Words slide apart and grow (`TI.pos*`/`TI.scl*` curves fitted to the reference), a lavender->magenta highlight sweeps
+word to word, and the icon is deliberately NOT animated (the user does that). Keep the `TI` numbers unless asked. Tests use a fake AE with text
+layers, shape layers and text animators; if you change the layout maths, update the independent arithmetic in `tests/ui.test.js`.
 The Text group has a sub-group chip row (`SUBGROUP_CHIPS`); the `.ffx` presets live in the **Motion** sub-group. More sub-groups can be added as extra `feature("Text", ...)`.
 The old built-in text effects were removed on purpose. Text animations are `.ffx` presets: put them in `presets/text/` and run
 `npm run build`; each becomes a button (file name = label). They are embedded in `dist/RupaMotion.jsx`, which stays the only file to install.
