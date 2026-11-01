@@ -1,14 +1,40 @@
 // Concatenates src/*.jsx (in file-name order) into dist/RupaMotion.jsx.
 // The source files are slices of ONE ExtendScript IIFE: 01_core opens it, 07_ui closes it.
+// presets/text/*.ffx are embedded (base64) into TEXT_PRESETS, so the built file is still the only thing to install.
 const fs = require("fs");
 const path = require("path");
 
-const srcDir = path.join(__dirname, "src");
-const out = path.join(__dirname, "dist", "RupaMotion.jsx");
-const files = fs.readdirSync(srcDir).filter((f) => f.endsWith(".jsx")).sort();
+function presetLiteral(dir) {
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ffx$/i.test(f)).sort() : [];
+  const items = files.map((f) => {
+    const name = f.replace(/\.ffx$/i, "").replace(/[-_]+/g, " ").trim();
+    const b64 = fs.readFileSync(path.join(dir, f)).toString("base64");
+    const lines = b64.match(/.{1,100}/g) || [""];
+    return `{ name: ${JSON.stringify(name)}, data: ${lines.map((l) => JSON.stringify(l)).join(" +\n            ")} }`;
+  });
+  return { literal: items.length ? "[\n        " + items.join(",\n        ") + "\n    ]" : "[]", count: items.length };
+}
 
-const code = files.map((f) => fs.readFileSync(path.join(srcDir, f), "utf8")).join("");
-new Function(code); // syntax check (throws on error)
-fs.mkdirSync(path.dirname(out), { recursive: true });
-fs.writeFileSync(out, code);
-console.log(`Built ${path.relative(__dirname, out)} from ${files.length} files (${code.split("\n").length} lines).`);
+function build(opts) {
+  opts = opts || {};
+  const srcDir = opts.srcDir || path.join(__dirname, "src");
+  const out = opts.out || path.join(__dirname, "dist", "RupaMotion.jsx");
+  const presetsDir = opts.presetsDir || path.join(__dirname, "presets", "text");
+  const files = fs.readdirSync(srcDir).filter((f) => f.endsWith(".jsx")).sort();
+  const presets = presetLiteral(presetsDir);
+
+  let code = files.map((f) => fs.readFileSync(path.join(srcDir, f), "utf8")).join("");
+  if (!code.includes("/*__TEXT_PRESETS__*/ []")) throw new Error("TEXT_PRESETS marker not found in src");
+  code = code.replace("/*__TEXT_PRESETS__*/ []", () => presets.literal);
+  new Function(code); // syntax check (throws on error)
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, code);
+  return { out, files: files.length, lines: code.split("\n").length, presets: presets.count };
+}
+
+module.exports = { build };
+
+if (require.main === module) {
+  const r = build();
+  console.log(`Built ${path.relative(__dirname, r.out)} from ${r.files} files (${r.lines} lines, ${r.presets} text preset${r.presets === 1 ? "" : "s"}).`);
+}

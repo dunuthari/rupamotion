@@ -107,15 +107,7 @@
         return null;
     }
 
-    // Effect point parameters on shape and text layers are measured from the top-left of
-    // their comp-sized layer area, not from the layer origin. Returns that offset.
     function isVectorLayer(L) { return (L instanceof ShapeLayer) || (L instanceof TextLayer); }
-
-    function fxPointOffset(L) {
-        if (!isVectorLayer(L)) { return [0, 0]; }
-        var c = L.containingComp;
-        return [c.width / 2, c.height / 2];
-    }
 
     function fxSet(e, idx, v) {
         if (!e) { return; }
@@ -160,13 +152,6 @@
         return L;
     }
 
-    function setTextSize(L, size) {
-        var sp = textDocProp(L);
-        var d = sp.value;
-        d.fontSize = size;
-        sp.setValue(d);
-    }
-
     // where: "center" | "left"  — keeps the layer's visual position
     function anchorTo(L, where, t) {
         var r = L.sourceRectAtTime(t, false);
@@ -179,38 +164,6 @@
     }
 
     function textWidth(L, t) { return L.sourceRectAtTime(t, false).width; }
-
-    function animatorAt(L, idx) { return L.property("ADBE Text Properties").property("ADBE Text Animators").property(idx); }
-
-    // props: [[matchName, value], ...]; basedOn: 1 characters, 3 words. Returns animator index.
-    function addTextAnimator(L, name, props, basedOn) {
-        var anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
-        anims.addProperty("ADBE Text Animator");
-        var idx = L.property("ADBE Text Properties").property("ADBE Text Animators").numProperties;
-        animatorAt(L, idx).name = name;
-        for (var i = 0; i < props.length; i++) {
-            animatorAt(L, idx).property("ADBE Text Animator Properties").addProperty(props[i][0]);
-            var p = animatorAt(L, idx).property("ADBE Text Animator Properties").property(props[i][0]);
-            var v = props[i][1];
-            try { p.setValue(v); }
-            catch (e) {
-                if (v instanceof Array && v.length > 2) {
-                    try { p.setValue([v[0], v[1]]); } catch (e2) {}
-                }
-                if (v instanceof Array && v.length === 4) {
-                    try { p.setValue([v[0], v[1], v[2]]); } catch (e3) {}
-                }
-            }
-        }
-        var sels = animatorAt(L, idx).property("ADBE Text Selectors");
-        if (sels.numProperties === 0) { sels.addProperty("ADBE Text Selector"); }
-        try {
-            selectorAt(L, idx).property("ADBE Text Range Advanced").property("ADBE Text Range Type2").setValue(basedOn || 1);
-        } catch (e4) {}
-        return idx;
-    }
-
-    function selectorAt(L, idx) { return animatorAt(L, idx).property("ADBE Text Selectors").property(1); }
 
     // ---- masks + mattes ----
 
@@ -231,8 +184,6 @@
         layer.trackMatteType = tm;
         return true;
     }
-
-    function newTrackMatteAPI(layer) { return typeof layer.setTrackMatte === "function"; }
 
     // ---- nulls, solids ----
 

@@ -1091,65 +1091,21 @@
 
     // ---------------- Text ----------------
 
-    feature("Text", "Word swap", function (p) {
-        var st = field(p, "Start text:", "Meet your", 18);
-        var pl = field(p, "Pill label:", "+ New", 18);
-        var wd = field(p, "Swap words:", "storyteller, producer, editor", 18, "Comma separated.");
-        var hold = field(p, "Hold per word (s):", "1.2", 4);
-        var size = field(p, "Font size:", "96", 4);
-        var fade = check(p, "Gradient fade on trailing letters", true, "Needs After Effects 2023 or newer.");
-        btn(p, "Build word swap", function () {
-            run("Word swap", function () {
-                doWordSwap({
-                    start: st.text, pill: pl.text, words: splitList(wd.text),
-                    hold: num(hold.text, 1.2, 0.3, 20), size: num(size.text, 96, 12, 600), fade: fade.value
-                });
-            });
-        });
-    });
-
-    feature("Text", "Typing prompt", function (p) {
-        var tx = field(p, "Prompt text:", "Make a launch video for our new app", 18);
-        var cps = field(p, "Typing speed (chars/s):", "22", 4);
-        var w = field(p, "Box width (px):", "1100", 5);
-        btn(p, "Build typing prompt", function () {
-            run("Typing prompt", function () {
-                doTypingPrompt({ text: tx.text, cps: num(cps.text, 22, 1, 200), width: num(w.text, 1100, 200, 4000) });
-            });
-        });
-    });
-
-    feature("Text", "Karaoke highlight", function (p) {
-        var timing = drop(p, "Timing:", ["Even", "Layer markers"], 0, "Markers: put one marker on the text layer where each word is spoken.");
-        var dur = field(p, "Duration (s):", "3", 4, "Used with Even timing.");
-        var unit = drop(p, "Highlight by:", ["Words", "Characters"], 0);
-        var grad = check(p, "Gradient overlay", false);
-        function opts() {
-            return { markers: timing.selection.index === 1, dur: num(dur.text, 3, 0.2, 600), words: unit.selection.index === 0, gradient: grad.value };
+    feature("Text", "Text presets", function (p) {
+        if (TEXT_PRESETS.length === 0) {
+            hint(p, "No text presets yet.");
+            hint(p, "Add .ffx files to presets/text and rebuild.");
+            return;
         }
-        btn(p, "Apply to selected text", function () { run("Karaoke highlight", function () { doKaraoke(opts()); }); });
-        var kt = field(p, "Big kinetic text:", "Never let a dead battery ruin your day", 18);
-        btn(p, "Create big kinetic text", function () { run("Kinetic text", function () { doKineticText(kt.text, opts()); }); });
-    });
-
-    feature("Text", "Title card", function (p) {
-        hint(p, "Uses the selected text layer, or creates the word.");
-        var wd = field(p, "Word:", "voice", 16);
-        btn(p, "Create title card", function () { run("Title card", function () { doTitleCard(wd.text); }); });
-    });
-
-    feature("Text", "Glow streak title", function (p) {
-        hint(p, "Uses the selected text layer, or creates the word.");
-        var wd = field(p, "Word:", "testimonials", 16);
-        var method = drop(p, "Method:", ["Light streaks", "CC Light Rays"], 0);
-        var dir = drop(p, "Streaks:", ["Vertical", "Horizontal"], 0);
-        var dg = check(p, "Use Deep Glow if installed", true);
-        var bg = check(p, "Add blue background", true);
-        btn(p, "Create glow title", function () {
-            run("Glow streak title", function () {
-                doGlowStreak(wd.text, { method: method.selection.index === 1 ? "rays" : "streaks", vertical: dir.selection.index === 0, deepGlow: dg.value, bg: bg.value });
-            });
-        });
+        hint(p, "Select text layer(s), put the playhead where it should start, click a preset.");
+        var items = [], i;
+        for (i = 0; i < TEXT_PRESETS.length; i++) {
+            (function (idx) {
+                items.push([TEXT_PRESETS[idx].name, function () { run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); }); },
+                    "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead."]);
+            })(i);
+        }
+        grid(p, items);
     });
 
     // ---------------- UI Kit ----------------

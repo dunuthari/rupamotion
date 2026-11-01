@@ -561,15 +561,7 @@
         return null;
     }
 
-    // Effect point parameters on shape and text layers are measured from the top-left of
-    // their comp-sized layer area, not from the layer origin. Returns that offset.
     function isVectorLayer(L) { return (L instanceof ShapeLayer) || (L instanceof TextLayer); }
-
-    function fxPointOffset(L) {
-        if (!isVectorLayer(L)) { return [0, 0]; }
-        var c = L.containingComp;
-        return [c.width / 2, c.height / 2];
-    }
 
     function fxSet(e, idx, v) {
         if (!e) { return; }
@@ -614,13 +606,6 @@
         return L;
     }
 
-    function setTextSize(L, size) {
-        var sp = textDocProp(L);
-        var d = sp.value;
-        d.fontSize = size;
-        sp.setValue(d);
-    }
-
     // where: "center" | "left"  — keeps the layer's visual position
     function anchorTo(L, where, t) {
         var r = L.sourceRectAtTime(t, false);
@@ -633,38 +618,6 @@
     }
 
     function textWidth(L, t) { return L.sourceRectAtTime(t, false).width; }
-
-    function animatorAt(L, idx) { return L.property("ADBE Text Properties").property("ADBE Text Animators").property(idx); }
-
-    // props: [[matchName, value], ...]; basedOn: 1 characters, 3 words. Returns animator index.
-    function addTextAnimator(L, name, props, basedOn) {
-        var anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
-        anims.addProperty("ADBE Text Animator");
-        var idx = L.property("ADBE Text Properties").property("ADBE Text Animators").numProperties;
-        animatorAt(L, idx).name = name;
-        for (var i = 0; i < props.length; i++) {
-            animatorAt(L, idx).property("ADBE Text Animator Properties").addProperty(props[i][0]);
-            var p = animatorAt(L, idx).property("ADBE Text Animator Properties").property(props[i][0]);
-            var v = props[i][1];
-            try { p.setValue(v); }
-            catch (e) {
-                if (v instanceof Array && v.length > 2) {
-                    try { p.setValue([v[0], v[1]]); } catch (e2) {}
-                }
-                if (v instanceof Array && v.length === 4) {
-                    try { p.setValue([v[0], v[1], v[2]]); } catch (e3) {}
-                }
-            }
-        }
-        var sels = animatorAt(L, idx).property("ADBE Text Selectors");
-        if (sels.numProperties === 0) { sels.addProperty("ADBE Text Selector"); }
-        try {
-            selectorAt(L, idx).property("ADBE Text Range Advanced").property("ADBE Text Range Type2").setValue(basedOn || 1);
-        } catch (e4) {}
-        return idx;
-    }
-
-    function selectorAt(L, idx) { return animatorAt(L, idx).property("ADBE Text Selectors").property(1); }
 
     // ---- masks + mattes ----
 
@@ -685,8 +638,6 @@
         layer.trackMatteType = tm;
         return true;
     }
-
-    function newTrackMatteAPI(layer) { return typeof layer.setTrackMatte === "function"; }
 
     // ---- nulls, solids ----
 
@@ -1382,279 +1333,6 @@
     }
 
     // =====================================================================
-    // TEXT GROUP
-    // =====================================================================
-
-    // Reveal (and optional hide) by character with opacity, position Y and blur.
-    function textInOut(L, size, tIn, inDur, tOut, outDur) {
-        var dy = size * 0.4;
-        var a = addTextAnimator(L, "MK In", [
-            ["ADBE Text Opacity", 0], ["ADBE Text Position 3D", [0, dy, 0]], ["ADBE Text Blur", [12, 12]]
-        ], 1);
-        setKeys(selectorAt(L, a).property("ADBE Text Percent Start"), [[tIn, 0], [tIn + inDur, 100]]);
-        if (tOut !== null) {
-            var b = addTextAnimator(L, "MK Out", [
-                ["ADBE Text Opacity", 0], ["ADBE Text Position 3D", [0, -dy, 0]], ["ADBE Text Blur", [12, 12]]
-            ], 1);
-            var sel = selectorAt(L, b);
-            sel.property("ADBE Text Percent Start").setValue(0);
-            setKeys(sel.property("ADBE Text Percent End"), [[tOut - outDur, 0], [tOut, 100]]);
-        }
-    }
-
-    function gradientRamp(L, t, c1, c2, blend) {
-        var r = L.sourceRectAtTime(t, false), o = fxPointOffset(L);
-        var e = fxAdd(L, "ADBE Ramp");
-        fxSet(e, 1, [r.left + o[0], r.top + o[1]]);
-        fxSet(e, 2, c4(c1));
-        fxSet(e, 3, [r.left + r.width + o[0], r.top + r.height + o[1]]);
-        fxSet(e, 4, c4(c2));
-        fxSet(e, 7, blend || 0);
-    }
-
-    function doWordSwap(o) {
-        var comp = activeComp(); if (!comp) { return; }
-        if (o.words.length === 0) { alert("Type at least one swap word (comma separated).", NAME); return; }
-        var t = comp.time, W = comp.width, H = comp.height, size = o.size, fr = comp.frameDuration;
-        var font = pickFont(false), cy = H / 2, gap = size * 0.28;
-        var inDur = 0.45, outDur = 0.35, hold = o.hold;
-
-        var A = makeText(comp, o.start, { size: size, color: col("textDark"), font: font, just: "left" });
-        A.name = "MK Swap · Start";
-        var wA = textWidth(A, t);
-
-        var words = [], maxW = 0, i;
-        for (i = 0; i < o.words.length; i++) {
-            var w = makeText(comp, o.words[i], { size: size, color: col("textDark"), font: pickFont(true), just: "left" });
-            w.name = "MK Swap · " + o.words[i];
-            maxW = Math.max(maxW, textWidth(w, t));
-            words.push(w);
-        }
-
-        var p = makePill(comp, { label: o.pill, size: size * 0.5, fill: col("primary"), textColor: [1, 1, 1] });
-        var total = wA + gap + p.w + gap + maxW;
-        var x0 = (W - total) / 2;
-        var wordsX0 = x0 + wA + gap, wordsX1 = wordsX0 + p.w + gap;
-
-        anchorTo(A, "left", t);
-        setXY(A.transform.position, x0, cy);
-        textInOut(A, size, t, inDur, null, 0);
-        mb(A);
-
-        setXY(p.pill.transform.position, x0 + wA + gap + p.w / 2, cy);
-        var tPill = t + hold * 0.6;
-        ensureBounce(p.pill);
-        setKeys(p.pill.transform.scale, [[tPill, [0, 0]], [tPill + 0.5, [100, 100]]], { bounce: true, clamp: true });
-
-        var nul = addNull(comp, "MK Swap · Words", [wordsX0, cy]);
-        for (i = 0; i < words.length; i++) {
-            var L = words[i];
-            anchorTo(L, "left", t);
-            setXY(L.transform.position, wordsX0, cy);
-            L.parent = nul;
-            var tw = t + i * hold, last = (i === words.length - 1);
-            L.inPoint = Math.max(0, tw);
-            if (!last) { L.outPoint = tw + hold + fr; }
-            textInOut(L, size, tw, inDur, last ? null : tw + hold, outDur);
-            mb(L);
-        }
-        setKeys(nul.transform.position, [[tPill, [wordsX0, cy]], [tPill + 0.5, [wordsX1, cy]]]);
-
-        if (o.fade && newTrackMatteAPI(A)) {
-            var m = addSolid(comp, [1, 1, 1], "MK Swap · Fade Matte");
-            var e = fxAdd(m, "ADBE Ramp");
-            fxSet(e, 1, [wordsX0 + maxW * 0.55, cy]);
-            fxSet(e, 2, [1, 1, 1, 1]);
-            fxSet(e, 3, [wordsX0 + maxW + size * 0.35, cy]);
-            fxSet(e, 4, [0, 0, 0, 1]);
-            m.parent = nul;
-            for (i = 0; i < words.length; i++) { setMatte(words[i], m, "luma"); }
-        }
-    }
-
-    function doTypingPrompt(o) {
-        var comp = activeComp(); if (!comp) { return; }
-        var t = comp.time, W = comp.width, H = comp.height, d = animDur(comp), id = stamp(comp);
-        var bw = o.width, bh = 120, cx = W / 2, cy = H / 2, size = 44;
-
-        var box = shapeLayer(comp, "MK Prompt Box " + id);
-        var g1 = newGroup(box, "Inner Stroke");
-        addRect(box, g1, bw - 6, bh - 6, (bh - 6) / 2);
-        addStroke(box, g1, [1, 1, 1], 2, 70);
-        var g2 = newGroup(box, "Glass");
-        addRect(box, g2, bw, bh, bh / 2);
-        addFill(box, g2, [1, 1, 1], 72);
-        softShadow(box);
-        setXY(box.transform.position, cx, cy);
-        makeFrosted(comp, box, 30);
-
-        var txtName = "MK Prompt Text " + id;
-        var txt = makeText(comp, o.text, { size: size, color: col("textDark"), font: pickFont(false), just: "left" });
-        txt.name = txtName;
-        anchorTo(txt, "left", t);
-        setXY(txt.transform.position, cx - bw / 2 + 52, cy);
-        var delay = d + 0.2, cps = o.cps, typeEnd = delay + o.text.length / cps;
-        txt.property("ADBE Text Properties").property("ADBE Text Document").expression =
-            "var s = String(value);\n" +
-            "var n = Math.floor(Math.max(0, time - inPoint - " + delay + ") * " + cps + ");\n" +
-            "s.substr(0, n);";
-        txt.inPoint = Math.max(0, t);
-
-        var caret = shapeLayer(comp, "MK Prompt Caret " + id);
-        var gc = newGroup(caret, "Caret");
-        addRect(caret, gc, 3, size * 1.15, 1.5);
-        addFill(caret, gc, col("primary"), 100);
-        caret.transform.position.expression =
-            "var L = thisComp.layer(\"" + esc(txtName) + "\");\n" +
-            "var r = L.sourceRectAtTime(time, false);\n" +
-            "var a = L.toComp(L.transform.anchorPoint);\n" +
-            "var x = (r.width > 0) ? L.toComp([r.left + r.width, 0])[0] + 6 : a[0] + 2;\n" +
-            "[x, a[1]];";
-        caret.transform.opacity.expression =
-            "var L = thisComp.layer(\"" + esc(txtName) + "\");\n" +
-            "var t0 = L.inPoint + " + delay + ", t1 = L.inPoint + " + typeEnd + ";\n" +
-            "(time > t0 && time < t1) ? 100 : (Math.floor(time * 2.2) % 2 == 0 ? 100 : 0);";
-        caret.inPoint = Math.max(0, t);
-
-        var send = shapeLayer(comp, "MK Prompt Send " + id);
-        var gA = newGroup(send, "Arrow");
-        addStar(send, gA, 2, 3, 15, 0, 90, [2, 0]);
-        addFill(send, gA, [1, 1, 1], 100);
-        var gB = newGroup(send, "Circle");
-        addEllipse(send, gB, 68, 68);
-        addFill(send, gB, col("primary"), 100);
-        setXY(send.transform.position, cx + bw / 2 - 64, cy);
-        ensureBounce(send);
-        var ts = t + typeEnd;
-        setKeys(send.transform.scale, [[ts, [0, 0]], [ts + d, [100, 100]]], { bounce: true, clamp: true });
-
-        var nul = addNull(comp, "MK Prompt " + id, [cx, cy]);
-        box.parent = nul; txt.parent = nul; send.parent = nul;
-        var matte = comp.layer(box.index + 1);
-        if (/glass matte/.test(matte.name)) { matte.parent = nul; }
-        setKeys(nul.transform.scale, [[t, [92, 92]], [t + d, [100, 100]]]);
-        setKeys(box.transform.opacity, [[t, 0], [t + d * 0.6, 100]]);
-        mb(box); mb(send);
-    }
-
-    function doKaraoke(o) {
-        var comp = activeComp(); if (!comp) { return; }
-        var sel = selLayers(comp, 1, "Select a text layer."); if (!sel) { return; }
-        for (var i = 0; i < sel.length; i++) {
-            if (sel[i] instanceof TextLayer) { karaokeOn(comp, sel[i], o); }
-        }
-    }
-
-    function karaokeOn(comp, L, o) {
-        var t = comp.time;
-        try {
-            var sp = textDocProp(L), d = sp.value;
-            d.fillColor = col("textGray");
-            sp.setValue(d);
-        } catch (e) {}
-        var basedOn = (o.markers || o.words) ? 3 : 1;
-        var a = addTextAnimator(L, "MK Highlight", [["ADBE Text Fill Color", c4(col("primary"))]], basedOn);
-        var end = selectorAt(L, a).property("ADBE Text Percent End");
-        if (o.markers) {
-            var txt = String(textDocProp(L).value.text);
-            var units = splitList(txt.replace(/\s+/g, ",")).length || 1;
-            end.expression =
-                "var m = thisLayer.marker, n = m.numKeys, units = " + units + ", out = 0;\n" +
-                "if (n > 0) {\n" +
-                "  var i = 0;\n" +
-                "  for (var k = 1; k <= n; k++) { if (time >= m.key(k).time) { i = k; } }\n" +
-                "  if (i > 0) {\n" +
-                "    var t0 = m.key(i).time;\n" +
-                "    var t1 = (i < n) ? m.key(i + 1).time : t0 + 0.4;\n" +
-                "    var f = linear(time, t0, Math.min(t1, t0 + 0.35), 0, 1);\n" +
-                "    out = Math.min(units, (i - 1) + f) / units * 100;\n" +
-                "  }\n" +
-                "}\n" +
-                "out;";
-        } else {
-            setKeys(end, [[t, 0], [t + o.dur, 100]], { linear: true });
-        }
-        if (o.gradient) { gradientRamp(L, t, col("primary"), col("gradEnd"), 55); }
-    }
-
-    function doKineticText(text, o) {
-        var comp = activeComp(); if (!comp) { return; }
-        var t = comp.time;
-        var L = makeText(comp, text, { size: 100, color: col("textGray"), font: pickFont(true), just: "center" });
-        L.name = "MK Kinetic · " + text.substr(0, 24);
-        var w = textWidth(L, t) || 1;
-        setTextSize(L, Math.min(420, Math.round(100 * comp.width * 0.86 / w)));
-        anchorTo(L, "center", t);
-        setXY(L.transform.position, comp.width / 2, comp.height / 2);
-        karaokeOn(comp, L, o);
-        mb(L);
-    }
-
-    function doTitleCard(word) {
-        var comp = activeComp(); if (!comp) { return; }
-        var t = comp.time, d = Math.max(animDur(comp), 0.5);
-        var sel = comp.selectedLayers, L = null;
-        if (sel.length > 0 && sel[0] instanceof TextLayer) {
-            L = sel[0];
-        } else {
-            if (trim(word) === "") { alert("Type a word or select a text layer.", NAME); return; }
-            L = makeText(comp, word, { size: 100, color: [1, 1, 1], font: pickFont(true), just: "center" });
-            L.name = "MK Title · " + word;
-            var w = textWidth(L, t) || 1;
-            setTextSize(L, Math.min(320, Math.round(100 * comp.width * 0.6 / w)));
-            anchorTo(L, "center", t);
-            setXY(L.transform.position, comp.width / 2, comp.height / 2);
-        }
-        ensureBounce(L);
-        gradientRamp(L, t, col("gradStart"), col("gradEnd"), 0);
-        var s = L.transform.scale.valueAtTime(t, false);
-        setKeys(L.transform.scale, [[t, scaled(s, 0.8)], [t + d, s]], { bounce: true });
-        setKeys(L.transform.opacity, [[t, 0], [t + d * 0.5, 100]]);
-        mb(L);
-    }
-
-    function doGlowStreak(word, o) {
-        var comp = activeComp(); if (!comp) { return; }
-        var t = comp.time, sel = comp.selectedLayers, L = null;
-        if (sel.length > 0 && sel[0] instanceof TextLayer) {
-            L = sel[0];
-        } else {
-            if (trim(word) === "") { alert("Type a word or select a text layer.", NAME); return; }
-            L = makeText(comp, word, { size: 100, color: [1, 1, 1], font: pickFont(true), just: "center" });
-            L.name = "MK Glow Title · " + word;
-            var w = textWidth(L, t) || 1;
-            setTextSize(L, Math.min(260, Math.round(100 * comp.width * 0.6 / w)));
-            anchorTo(L, "center", t);
-            setXY(L.transform.position, comp.width / 2, comp.height / 2);
-        }
-        if (o.bg) {
-            var bg = addSolid(comp, col("primary"), "MK Glow Title BG");
-            bg.moveAfter(L);
-        }
-        if (o.method === "rays") {
-            var r = L.sourceRectAtTime(t, false), po = fxPointOffset(L);
-            var lr = fxAdd(L, "CC Light Rays");
-            fxSet(lr, 1, 60);
-            fxSet(lr, 2, [r.left + r.width / 2 + po[0], r.top + r.height / 2 + po[1]]);
-            fxSet(lr, 3, 50);
-        } else {
-            var dup = L.duplicate();
-            dup.name = L.name + " · streaks";
-            clearEffects(dup);
-            var db = fxAdd(dup, "ADBE Motion Blur");
-            fxSet(db, 1, o.vertical ? 0 : 90);
-            fxSet(db, 2, 160);
-            dup.blendingMode = BlendingMode.ADD;
-            dup.transform.opacity.setValue(85);
-        }
-        var g = fxAdd(L, o.deepGlow ? ["Deep Glow", "ADBE Glo2"] : ["ADBE Glo2"]);
-        if (g && g.matchName === "ADBE Glo2") {
-            fxSet(g, 3, 60);
-            fxSet(g, 4, 1.2);
-        }
-    }
-
-    // =====================================================================
     // UI KIT GROUP
     // =====================================================================
 
@@ -1983,6 +1661,56 @@
         var gl = comp.layers.add(g);
         gl.name = "MK Media Grid";
         mb(gl);
+    }
+
+    // =====================================================================
+    // TEXT GROUP — animation presets (.ffx) embedded in the script
+    // =====================================================================
+    // build.js fills this from presets/text/*.ffx (base64), so dist/RupaMotion.jsx stays the only file to install.
+    var TEXT_PRESETS = [];
+
+    var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var B64_INDEX = null;
+
+    // base64 -> binary string (one char per byte), ES3
+    function b64decode(s) {
+        var i, c;
+        if (!B64_INDEX) {
+            B64_INDEX = {};
+            for (i = 0; i < B64.length; i++) { B64_INDEX[B64.charAt(i)] = i; }
+        }
+        var out = [], buf = 0, bits = 0;
+        for (i = 0; i < s.length; i++) {
+            c = s.charAt(i);
+            if (c === "=") { break; }
+            if (B64_INDEX[c] === undefined) { continue; }
+            buf = (buf << 6) | B64_INDEX[c];
+            bits += 6;
+            if (bits >= 8) {
+                bits -= 8;
+                out.push(String.fromCharCode((buf >> bits) & 255));
+                buf = buf & ((1 << bits) - 1);
+            }
+        }
+        return out.join("");
+    }
+
+    // Writes the embedded preset to a temp .ffx and applies it to every selected layer
+    function doTextPreset(idx) {
+        var comp = activeComp(); if (!comp) { return; }
+        var sel = selLayers(comp, 1, "Select the text layer(s) to animate."); if (!sel) { return; }
+        var preset = TEXT_PRESETS[idx], safe = preset.name.replace(/[^A-Za-z0-9_-]+/g, "_");
+        var f = new File(Folder.temp.fsName + "/RupaMotion_" + safe + ".ffx");
+        f.encoding = "BINARY";
+        if (!f.open("w")) { alert("Couldn't write the preset to the temp folder.", NAME); return; }
+        f.write(b64decode(preset.data));
+        f.close();
+        var failed = "", i;
+        for (i = 0; i < sel.length; i++) {
+            try { sel[i].applyPreset(f); } catch (e) { failed = e.toString(); }
+        }
+        try { f.remove(); } catch (e2) {}
+        if (failed !== "") { alert("After Effects couldn't apply \"" + preset.name + "\":\n" + failed, NAME); }
     }
 
     // =====================================================================
@@ -3975,65 +3703,21 @@
 
     // ---------------- Text ----------------
 
-    feature("Text", "Word swap", function (p) {
-        var st = field(p, "Start text:", "Meet your", 18);
-        var pl = field(p, "Pill label:", "+ New", 18);
-        var wd = field(p, "Swap words:", "storyteller, producer, editor", 18, "Comma separated.");
-        var hold = field(p, "Hold per word (s):", "1.2", 4);
-        var size = field(p, "Font size:", "96", 4);
-        var fade = check(p, "Gradient fade on trailing letters", true, "Needs After Effects 2023 or newer.");
-        btn(p, "Build word swap", function () {
-            run("Word swap", function () {
-                doWordSwap({
-                    start: st.text, pill: pl.text, words: splitList(wd.text),
-                    hold: num(hold.text, 1.2, 0.3, 20), size: num(size.text, 96, 12, 600), fade: fade.value
-                });
-            });
-        });
-    });
-
-    feature("Text", "Typing prompt", function (p) {
-        var tx = field(p, "Prompt text:", "Make a launch video for our new app", 18);
-        var cps = field(p, "Typing speed (chars/s):", "22", 4);
-        var w = field(p, "Box width (px):", "1100", 5);
-        btn(p, "Build typing prompt", function () {
-            run("Typing prompt", function () {
-                doTypingPrompt({ text: tx.text, cps: num(cps.text, 22, 1, 200), width: num(w.text, 1100, 200, 4000) });
-            });
-        });
-    });
-
-    feature("Text", "Karaoke highlight", function (p) {
-        var timing = drop(p, "Timing:", ["Even", "Layer markers"], 0, "Markers: put one marker on the text layer where each word is spoken.");
-        var dur = field(p, "Duration (s):", "3", 4, "Used with Even timing.");
-        var unit = drop(p, "Highlight by:", ["Words", "Characters"], 0);
-        var grad = check(p, "Gradient overlay", false);
-        function opts() {
-            return { markers: timing.selection.index === 1, dur: num(dur.text, 3, 0.2, 600), words: unit.selection.index === 0, gradient: grad.value };
+    feature("Text", "Text presets", function (p) {
+        if (TEXT_PRESETS.length === 0) {
+            hint(p, "No text presets yet.");
+            hint(p, "Add .ffx files to presets/text and rebuild.");
+            return;
         }
-        btn(p, "Apply to selected text", function () { run("Karaoke highlight", function () { doKaraoke(opts()); }); });
-        var kt = field(p, "Big kinetic text:", "Never let a dead battery ruin your day", 18);
-        btn(p, "Create big kinetic text", function () { run("Kinetic text", function () { doKineticText(kt.text, opts()); }); });
-    });
-
-    feature("Text", "Title card", function (p) {
-        hint(p, "Uses the selected text layer, or creates the word.");
-        var wd = field(p, "Word:", "voice", 16);
-        btn(p, "Create title card", function () { run("Title card", function () { doTitleCard(wd.text); }); });
-    });
-
-    feature("Text", "Glow streak title", function (p) {
-        hint(p, "Uses the selected text layer, or creates the word.");
-        var wd = field(p, "Word:", "testimonials", 16);
-        var method = drop(p, "Method:", ["Light streaks", "CC Light Rays"], 0);
-        var dir = drop(p, "Streaks:", ["Vertical", "Horizontal"], 0);
-        var dg = check(p, "Use Deep Glow if installed", true);
-        var bg = check(p, "Add blue background", true);
-        btn(p, "Create glow title", function () {
-            run("Glow streak title", function () {
-                doGlowStreak(wd.text, { method: method.selection.index === 1 ? "rays" : "streaks", vertical: dir.selection.index === 0, deepGlow: dg.value, bg: bg.value });
-            });
-        });
+        hint(p, "Select text layer(s), put the playhead where it should start, click a preset.");
+        var items = [], i;
+        for (i = 0; i < TEXT_PRESETS.length; i++) {
+            (function (idx) {
+                items.push([TEXT_PRESETS[idx].name, function () { run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); }); },
+                    "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead."]);
+            })(i);
+        }
+        grid(p, items);
     });
 
     // ---------------- UI Kit ----------------

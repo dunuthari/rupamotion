@@ -353,3 +353,46 @@ function runSwipe(arrow, mutate) {
   const shared = runSwipe('←', (a, b) => { const base = fakeRigLayer('Base', 0, 12); a.parent = base; b.parent = base; });
   console.log(`swipe cut with a shared parent: refused, no nulls added ${shared.made.length === 0}`);
 }
+
+// Text presets: .ffx files in a presets folder are embedded by build.js, show up as buttons, and are written back byte for byte
+{
+  const os = require('os'), path = require('path'), { build } = require('../build.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rupa-ffx-'));
+  fs.mkdirSync(path.join(tmp, 'presets'));
+  const bytes = n => Buffer.from(Array.from({ length: n }, (_, i) => (i * 37 + (i >> 3) + 11) & 255));   // every byte value, incl. 0 and 255
+  const samples = { 'Fade-Up.ffx': bytes(3000), 'slide_in.ffx': bytes(1001), 'pop.ffx': bytes(1002), 'tiny.ffx': bytes(1) };
+  Object.keys(samples).forEach(f => fs.writeFileSync(path.join(tmp, 'presets', f), samples[f]));
+  fs.writeFileSync(path.join(tmp, 'presets', 'notes.txt'), 'ignored');
+  const r = build({ presetsDir: path.join(tmp, 'presets'), out: path.join(tmp, 'out.jsx') });
+
+  const applied = [], removed = [];
+  function FakeFile(p) { this.path = p; this.data = ''; this.encoding = ''; }
+  FakeFile.prototype.open = function () { return true; };
+  FakeFile.prototype.write = function (s) { this.data += s; };
+  FakeFile.prototype.close = function () {};
+  FakeFile.prototype.remove = function () { removed.push(this.path); return true; };
+  const g2 = Object.assign({}, g, { File: FakeFile, Folder: { temp: { fsName: '/tmp' } } });
+  const src2 = fs.readFileSync(path.join(tmp, 'out.jsx'), 'utf8');
+  const run2 = new Function(...Object.keys(g2), 'thisObj', src2.replace(/\}\)\(this\);\s*$/, '})(thisObj);'));
+  const root2 = Object.assign(new Panel(), el('panel', 'root2'));
+  run2(...Object.values(g2), root2);
+
+  const btns = walk(root2).filter(n => n.type === 'button' && n.parent && n.parent.isBtnRow && ['Fade Up', 'pop', 'slide in', 'tiny'].indexOf(n.text) >= 0);
+  const names = btns.map(b => b.text).sort().join('|');
+  const layer = { applyPreset(f) { applied.push({ path: f.path, data: f.data, encoding: f.encoding }); } };
+  const comp = new g.CompItem(); comp.selectedLayers = [layer, { applyPreset: layer.applyPreset }]; app.project.activeItem = comp;
+  const exact = {};
+  ['Fade Up', 'pop', 'slide in', 'tiny'].forEach(nm => {
+    applied.length = 0;
+    btns.filter(b => b.text === nm)[0].onClick();
+    const want = samples[{ 'Fade Up': 'Fade-Up.ffx', 'slide in': 'slide_in.ffx', pop: 'pop.ffx', tiny: 'tiny.ffx' }[nm]];
+    const got = Buffer.from(applied[0] ? applied[0].data : '', 'latin1');
+    exact[nm] = applied.length === 2 && Buffer.compare(got, want) === 0 && applied[0].encoding === 'BINARY';
+  });
+  comp.selectedLayers = []; applied.length = 0;
+  btns[0].onClick();            // nothing selected: asks for a layer, applies nothing
+  app.project.activeItem = null;
+  console.log(`text presets: ${r.presets} embedded (non-.ffx ignored: ${r.presets === 4}), buttons ${names === 'Fade Up|pop|slide in|tiny'}, bytes round-trip ${JSON.stringify(exact)}, temp files removed ${removed.length === 4}, nothing applied without a selection ${applied.length === 0}`);
+  const empty = walk(root).filter(n => n.type === 'statictext' && /No text presets yet/.test(n.text)).length;
+  console.log(`text group with no presets: empty-state hint shown ${empty === 1}`);
+}

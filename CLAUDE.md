@@ -20,7 +20,8 @@ UI-kit elements, camera parallax and a live, toggleable bounce.
 | `src/01_core.jsx` | Opens the IIFE. Settings (`app.settings`), style tokens + presets, colors, fonts, `run()` undo wrapper, easing (`CURVES`, `setKeys`), live bounce (`ensureBounce`, `bounceExpr`), property search |
 | `src/02_builders.jsx` | Shape/text/effect/mask/matte/null builders, `makeFrosted`, `makePill`, `cameraPush`, `fxPointOffset` |
 | `src/03_animation.jsx` | Shape morph, Pop, Move in/out, UI list stagger, Hold push-in |
-| `src/04_transitions_text.jsx` | Zoom/swipe cuts, shape wipe; word swap, typing prompt, karaoke, title card, glow title |
+| `src/04_transitions_text.jsx` | Zoom/swipe cuts, shape wipe |
+| `src/06_text_presets.jsx` | Text group: `TEXT_PRESETS` (filled by `build.js` from `presets/text/*.ffx`, base64), `b64decode`, `doTextPreset` (writes a temp .ffx, `applyPreset`) |
 | `src/05_uikit_media.jsx` | Pill button, frosted glass, AI glow button, fake cursor, avatar bubble, waveform, liquid glass; stock grid wall |
 | `src/06_tools.jsx` | Layers group (pre-compose, unwrap composition, smart duplicate, null, adjustment, solid, follow path), Camera group, Shapes group, Quick Actions, Flow (`FLOW_PRESETS`, `doFlowApply`: cubic-bezier → AE temporal ease, optional `flowBounce` overshoot expression) |
 | `src/07_ui.jsx` | Design system (`THEMES`, `DS`), UI helpers, every `feature(...)` panel, Style dialog, main panel; closes the IIFE |
@@ -34,9 +35,8 @@ Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.js
 - **Expressions** written into AE must work in both the Legacy and JavaScript engines: use `add/sub/mul`
   for vector math, never `+`/`*` on arrays.
 - After `addProperty()` on a property group, earlier references into that group can become invalid —
-  re-fetch (see `addVec`, `addTextAnimator`). Add effects **before** grabbing other property references.
-- Effect *point* parameters on **shape and text layers** are measured from the top-left of the comp-sized
-  layer area, not the layer origin → add `fxPointOffset(L)` (half the comp size). Footage/solids need no offset.
+  re-fetch (see `addVec`). Add effects **before** grabbing other property references.
+- Effect *point* parameters on **shape and text layers** live in comp space (see locked gradients below); footage/solids use plain layer pixels.
 - Locked gradients (`addLockedGradient`) feed Ramp points through `thisLayer.toComp()` on shape/text layers, so
   they move, scale and rotate with the element. Don't use a fixed half-comp offset there: it is only right while the
   layer sits at the comp center.
@@ -62,6 +62,10 @@ page `#1C1D20` · surface `#232428` · card `#2B2D31` · hairline `#3C3E43` · t
 hint `#90939A` · primary `#0A6CFF` · tint `#1E3357`. Pill buttons: primary = solid blue (main action),
 secondary = card fill + hairline (grids, rows). Feature chips: `chip` / `chip-on`. Type: title 15 bold,
 section 13/12 bold, body 12, nav 10. Tokens live in `THEMES` at the top of the design-system block.
+
+## Text group
+The old built-in text effects were removed on purpose. Text animations are `.ffx` presets: put them in `presets/text/` and run
+`npm run build`; each becomes a button (file name = label). They are embedded in `dist/RupaMotion.jsx`, which stays the only file to install.
 
 ## Brand/motion style (applied by the tools)
 Google Vids look: primary `#4285F4`, secondary `#8AB4F8`, periwinkle `#C5CAE9`, background `#F5F7FF`,
