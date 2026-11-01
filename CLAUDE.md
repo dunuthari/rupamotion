@@ -26,6 +26,7 @@ UI-kit elements, camera parallax and a live, toggleable bounce.
 | `src/06_tools.jsx` | Layers group (pre-compose, unwrap composition, smart duplicate, null, adjustment, solid, follow path), Camera group, Shapes group, Quick Actions, Flow (`FLOW_PRESETS`, `doFlowApply`: cubic-bezier → AE temporal ease, optional `flowBounce` overshoot expression) |
 | `src/07_ui.jsx` | Design system (`THEMES`, `DS`), UI helpers, every `feature(...)` panel, Style dialog, main panel; closes the IIFE |
 
+The group icons are a vertical rail on the left (`nav` in `buildContent`); chips and the feature card sit to its right.
 Groups shown in the panel: Layers · Quick Actions · Flow · Camera · Shapes · Animation · Transitions · Text · UI Kit · Media · Style.
 Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.jsx`; wrap its action in `run("Label", fn)`.
 

@@ -60,7 +60,7 @@
     padding: 32px 16px 64px;
   }
 
-  .stage { width: 100%; max-width: 392px; }
+  .stage { width: 100%; max-width: 560px; }
   .note { color: var(--hint); font-size: 12px; text-align: center; margin: 14px 0 0; }
 
   /* ===== Panel ===== */
@@ -97,9 +97,11 @@
   .card .card > h3 { margin: 0 0 2px; font-size: 12px; font-weight: 700; }
 
   /* Icon tab bar */
-  .nav { padding: 6px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
+  .body { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .content { display: grid; gap: 10px; min-width: 0; }
+  .nav { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
   .tab {
-    appearance: none; border: 1px solid transparent; background: transparent;
+    appearance: none; border: 1px solid transparent; background: transparent; width: 100%;
     color: var(--hint); font: inherit; font-size: 10.5px;
     border-radius: 14px; padding: 8px 2px 6px; cursor: pointer;
     display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -217,9 +219,13 @@
       <div class="title">Rupa Motion</div>
       <div class="sub">Toolkit</div>
     </header>
-    <nav class="card nav" id="nav" role="tablist" aria-label="Groups"></nav>
-    <div class="chips" id="chips" role="tablist" aria-label="Features" hidden></div>
-    <section class="card" id="view" aria-live="polite"></section>
+    <div class="body">
+      <nav class="card nav" id="nav" role="tablist" aria-label="Groups"></nav>
+      <div class="content">
+        <div class="chips" id="chips" role="tablist" aria-label="Features" hidden></div>
+        <section class="card" id="view" aria-live="polite"></section>
+      </div>
+    </div>
   </main>
   <p class="note">UI preview of the After Effects panel. Buttons show what they'd do; the real actions run inside After Effects.</p>
 </div>

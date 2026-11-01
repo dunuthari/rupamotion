@@ -10439,30 +10439,37 @@
         setFg(ver, DS.muted);
         ver.alignment = ["right", "center"];
 
-        // ---- icon tab bar ----
-        var nav = card(win, "", 0);
+        // ---- layout: icon rail on the left, chips + feature card on the right ----
+        var body = win.add("group");
+        body.orientation = "row";
+        body.alignChildren = ["left", "top"];
+        body.alignment = ["fill", "top"];
+        body.spacing = 10;
+
+        var nav = card(body, "", 0);
+        nav.alignment = ["left", "top"];
+        nav.alignChildren = ["center", "top"];
         nav.margins = [6, 6, 6, 6];
         nav.spacing = 2;
-        var tiles = [], navRow = null;
+        var tiles = [];
         for (i = 0; i < groups.length; i++) {
-            if (i % 5 === 0) {
-                navRow = nav.add("group");
-                navRow.orientation = "row";
-                navRow.alignChildren = ["center", "center"];
-                navRow.alignment = ["center", "top"];
-                navRow.spacing = 2;
-            }
-            tiles.push(navTile(navRow, groups[i], function (gName) { pickGroup(gName, null); }));
+            tiles.push(navTile(nav, groups[i], function (gName) { pickGroup(gName, null); }));
         }
 
+        var main = body.add("group");
+        main.orientation = "column";
+        main.alignChildren = ["fill", "top"];
+        main.alignment = ["fill", "top"];
+        main.spacing = 10;
+
         // ---- feature chips (only for groups with several features) ----
-        var chips = win.add("group");
+        var chips = main.add("group");
         chips.orientation = "column";
         chips.alignChildren = ["fill", "top"];
         chips.spacing = 6;
 
         // ---- feature cards (stacked, one visible) ----
-        var stack = win.add("group");
+        var stack = main.add("group");
         stack.orientation = "stack";
         stack.alignChildren = ["fill", "top"];
         for (i = 0; i < FEATURES.length; i++) {
@@ -10502,7 +10509,7 @@
                 }
                 (function (nm) {
                     var c = styleButton(r.add("button", undefined, nm), nm === featName ? "chip-on" : "chip", 28);
-                    c.preferredSize.width = 104;
+                    c.preferredSize.width = 80;
                     c.baseText = nm;
                     if (CLASSIC && nm === featName) { c.text = "● " + nm; }
                     c.onClick = function () {
