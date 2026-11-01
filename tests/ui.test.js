@@ -317,24 +317,37 @@ function runSwipe(arrow, mutate) {
 {
   const { outL, inL, made, comp } = runSwipe('←');
   const [mv, on, inn] = made, k = mv ? mv.transform.position.keys : [];
-  const eq = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+  const eq = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 1e-6);
+  const D = 1920 * 27 / 100, fr = 0.04, cut = 5;                 // default: 27% of the frame, 15 frames each side
+  // rebuild the curve After Effects stored on the Move keys, then sample the move where it matters
+  const dt = k.length === 2 ? k[1].t - k[0].t : 1;
+  const c = k.length === 2 ? [k[0].out[0].influence / 100, k[0].out[0].speed * (k[0].out[0].influence / 100) * dt / -D, 1 - k[1].in[0].influence / 100, 1 - k[1].in[0].speed * (k[1].in[0].influence / 100) * dt / -D] : [0, 0, 1, 1];
+  const prog = x => { let lo = 0, hi = 1; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2, u = 1 - m; (3*u*u*m*c[0] + 3*u*m*m*c[2] + m*m*m < x) ? lo = m : hi = m; } const m = (lo + hi) / 2, u = 1 - m; return 3*u*u*m*c[1] + 3*u*m*m*c[3] + m*m*m; };
+  const movePos = t => -D * prog(Math.min(1, Math.max(0, (t - k[0].t) / dt)));
+  const outLast = movePos(cut - fr), inFirst = movePos(cut) + D;   // last outgoing frame, first incoming frame (offsets from the centre)
   const checks = {
     'three nulls named Move / Out / In': made.length === 3 && mv.name === 'MK Swipe · Move' && on.name === 'MK Swipe · Out' && inn.name === 'MK Swipe · In',
     'Out and In are linked to Move': on.parent === mv && inn.parent === mv,
     'clips linked to their nulls': outL.parent === on && inL.parent === inn,
-    'In offset one screen to the right': eq(inn.transform.position.value, [1920, 0]) && eq(on.transform.position.value, [0, 0]),
-    'Move keys: one at each end, rest -> one screen left': k.length === 2 && Math.abs(k[0].t - 4.6) < 1e-9 && Math.abs(k[1].t - 5.4) < 1e-9 && eq(k[0].v, [0, 0]) && eq(k[1].v, [-1920, 0]),
-    'easy-ease on both keys': k.length === 2 && Math.abs(k[0].out[0].influence - 70) < 1e-6 && Math.abs(k[1].in[0].influence - 70) < 1e-6,
-    'timing: Out to the cut, In from the cut, Move around it': on.inPoint === 0 && on.outPoint === 5 && inn.inPoint === 5 && inn.outPoint === 12 && Math.abs(mv.inPoint - 4.6) < 1e-9 && Math.abs(mv.outPoint - 5.4) < 1e-9,
+    'In offset: the swipe distance (27% = 518 px), not a full screen': eq(inn.transform.position.value, [D, 0]) && eq(on.transform.position.value, [0, 0]),
+    'Move keys: 16 frames before the cut, 15 after, rest -> -518 px': k.length === 2 && Math.abs(k[0].t - (cut - 16 * fr)) < 1e-9 && Math.abs(k[1].t - (cut + 15 * fr)) < 1e-9 && eq(k[0].v, [0, 0]) && eq(k[1].v, [-D, 0]),
+    'ease (0.9, 0, 0.1, 1) on both keys, as in the hand-made version': eq(c, [0.9, 0, 0.1, 1]),
+    'timing: Out to the cut, In from the cut, Move around it': on.inPoint === 0 && on.outPoint === 5 && inn.inPoint === 5 && inn.outPoint === 12 && Math.abs(mv.inPoint - (cut - 16 * fr)) < 1e-9 && Math.abs(mv.outPoint - (cut + 15 * fr)) < 1e-9,
     'anchor and position of the nulls start at 0,0 (links do not move the clips)': eq(mv.transform.anchorPoint.value, [0, 0]) && eq(on.transform.anchorPoint.value, [0, 0]),
-    'incoming clip: one screen right at the start, back on its natural spot at the end': eq(landing(inL, k[0].v, mv), [1920, 0]) && eq(landing(inL, k[1].v, mv), [0, 0]),
-    'outgoing clip: natural at the start, one screen left at the end': eq(landing(outL, k[0].v, mv), [0, 0]) && eq(landing(outL, k[1].v, mv), [-1920, 0]),
+    'incoming clip: starts 518 px to the right, ends on its natural spot': eq(landing(inL, k[0].v, mv), [D, 0]) && eq(landing(inL, k[1].v, mv), [0, 0]),
+    'outgoing clip: starts natural, ends 518 px to the left': eq(landing(outL, k[0].v, mv), [0, 0]) && eq(landing(outL, k[1].v, mv), [-D, 0]),
+    'the swap is a mirror image: last outgoing frame and first incoming frame are the same distance from the centre': Math.abs(Math.abs(outLast) - Math.abs(inFirst)) < 1e-6 && Math.abs(outLast) < D / 2,
     'motion blur on both clips and a wide shutter': outL.motionBlur && inL.motionBlur && comp.shutterAngle === 300
   };
   const bad = Object.keys(checks).filter(c => !checks[c]);
   console.log(`swipe cut: ${bad.length === 0 ? 'rig OK' : 'WRONG: ' + bad.join('; ')} (${Object.keys(checks).length} checks)`);
+  const mid = [Math.abs(movePos(cut - fr)) / D, (Math.abs(movePos(cut)) / D)];
+  console.log(`swipe cut feel vs your example: moved ${(mid[0] * 100).toFixed(1)}% one frame before the cut, ${(mid[1] * 100).toFixed(1)}% on it (yours: 36.6% / 63.4%)`);
+  console.log(`swipe cut feel: last outgoing frame ${outLast.toFixed(0)} px, first incoming frame ${inFirst.toFixed(0)} px from the centre; both clips stay within +/-${D.toFixed(0)} px of it`);
+  const overlap = runSwipe('←', (a, b) => { a.outPoint = 8; b.inPoint = 3; });
+  console.log(`swipe cut hard cut: outgoing clip trimmed to the cut ${overlap.outL.outPoint === 3}, incoming clip starts at it ${overlap.inL.inPoint === 3}`);
   const down = runSwipe('↓'), dk = down.made[0].transform.position.keys;
-  console.log(`swipe cut down: In offset ${JSON.stringify(down.made[2].transform.position.value)}, Move ends at ${JSON.stringify(dk[1].v)}`);
+  console.log(`swipe cut down: In offset ${JSON.stringify(down.made[2].transform.position.value)} (27% of 1080 = 291.6), Move ends at ${JSON.stringify(dk[1].v)}`);
   const hier = runSwipe('→', (a, b) => { const base = fakeRigLayer('Base', 0, 12); a.parent = base; });
   console.log(`swipe cut with an already-parented clip: root of the chain is linked ${hier.outL.parent.name === 'Base' && hier.made[1] && hier.outL.parent.parent === hier.made[1]}`);
   const shared = runSwipe('←', (a, b) => { const base = fakeRigLayer('Base', 0, 12); a.parent = base; b.parent = base; });

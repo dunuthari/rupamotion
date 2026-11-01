@@ -1059,11 +1059,12 @@
     feature("Transitions", "Swipe cut", function (p) {
         hint(p, "Select the outgoing + incoming clips, or put the playhead on the cut.");
         hint(p, "Adds 3 linked nulls: Out, In and a Move null at the cut.");
-        var fr = field(p, "Frames each side:", "10", 4, "How long the whoosh lasts on each side of the cut.");
+        var fr = field(p, "Frames each side:", "15", 4, "How long the whoosh lasts on each side of the cut.");
+        var dist = field(p, "Distance (%):", "27", 4, "How far the clips slide. 27% is about 520 px on a 1920 frame, so both stay on screen. 100% = a full screen.");
         var blur = field(p, "Blur (shutter °):", "300", 4, "Raises the comp's shutter angle to at least this, for motion blur.");
         var r = btnRow(p);
         function go(dir) {
-            run("Swipe cut", function () { doSwipeCut(dir, { frames: num(fr.text, 10, 1, 60), blur: num(blur.text, 300, 0, 720) }); });
+            run("Swipe cut", function () { doSwipeCut(dir, { frames: Math.round(num(fr.text, 15, 1, 60)), distance: num(dist.text, 27, 1, 300), blur: num(blur.text, 300, 0, 720) }); });
         }
         btn(r, "←", function () { go([-1, 0]); });
         btn(r, "↑", function () { go([0, -1]); });

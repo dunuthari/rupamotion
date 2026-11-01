@@ -69,12 +69,15 @@
     }
 
     // Swipe cut = a small rig of three linked nulls (the same set-up you would build by hand):
-    //   MK Swipe · Move  a short null around the cut; its Position is the only thing animated (easy-ease, one key each end)
+    //   MK Swipe · Move  a short null around the cut; its Position is the only thing animated (0.9 / 0.1 ease, one key each end)
     //   MK Swipe · Out   child of Move, holds the outgoing clip (runs up to the cut)
-    //   MK Swipe · In    child of Move, offset by one screen, holds the incoming clip (runs from the cut)
-    // Move slides one screen, so the old clip leaves while the new one enters, and the hard cut happens mid-whoosh.
+    //   MK Swipe · In    child of Move, offset by the swipe distance, holds the incoming clip (runs from the cut)
+    // Move slides that distance, so the old clip leaves while the new one enters, and the hard cut happens mid-whoosh.
     // Anchor and position of the nulls are both (0,0), so linking a clip does not move it.
-    var SWIPE_CURVE = [0.7, 0, 0.3, 1];
+    // cubic-bezier (0.9, 0, 0.1, 1): the ease the hand-made version's Move keys actually hold (measured from its
+    // Position values: 36.6% of the move done one frame before the cut, 63.4% on the cut frame). Slow, very fast in the
+    // middle where the cut hides, slow again.
+    var SWIPE_CURVE = [0.9, 0, 0.1, 1];
 
     function topParent(L) {
         while (L.parent) { L = L.parent; }
@@ -93,8 +96,12 @@
     function doSwipeCut(dir, o) {
         var comp = activeComp(); if (!comp) { return; }
         var ctx = transitionContext(comp, true); if (!ctx) { return; }
-        var fr = comp.frameDuration, d = o.frames * fr, cut = ctx.cut, outL = ctx.outL, inL = ctx.inL;
-        var dist = (dir[0] !== 0) ? comp.width : comp.height, off = [dir[0] * dist, dir[1] * dist];
+        var fr = comp.frameDuration, cut = ctx.cut, outL = ctx.outL, inL = ctx.inL;
+        // The whoosh is short: the move is a % of the frame (default 27%, about 520 px on 1920), so both clips stay
+        // on screen. The keys sit N+1 frames before the cut and N after, so the middle of the move falls half a frame
+        // before the cut and the last outgoing frame / first incoming frame are mirror images of each other.
+        var t0 = cut - (o.frames + 1) * fr, t1 = cut + o.frames * fr;
+        var dist = ((dir[0] !== 0) ? comp.width : comp.height) * o.distance / 100, off = [dir[0] * dist, dir[1] * dist];
 
         // Link the top of each clip's parent chain, so clips that already have parents keep their hierarchy
         var rootOut = topParent(outL), rootIn = topParent(inL);
@@ -103,7 +110,11 @@
             return;
         }
 
-        var move = swipeNull(comp, "MK Swipe · Move", cut - d, cut + d);
+        // Hard cut: the outgoing clip ends and the incoming clip starts exactly at the cut, so the two never overlap
+        try { if (outL.outPoint > cut) { outL.outPoint = cut; } } catch (e0) {}
+        try { if (inL.inPoint < cut) { inL.inPoint = cut; } } catch (e1) {}
+
+        var move = swipeNull(comp, "MK Swipe · Move", t0, t1);
         var outN = swipeNull(comp, "MK Swipe · Out", outL.inPoint, cut);
         var inN = swipeNull(comp, "MK Swipe · In", cut, inL.outPoint);
         // Link everything first, while all three nulls are still at rest (0,0). Assigning .parent makes AE shift
@@ -115,9 +126,9 @@
         // Only now push In one screen away (the clips ride along with it)
         setXY(inN.transform.position, -off[0], -off[1]);
 
-        // Position is the only animation: rest -> one screen over, easy-ease both ends
-        setKeys(move.transform.position, [[cut - d, vecLike(move.transform.position, 0, 0)], [cut + d, vecLike(move.transform.position, off[0], off[1])]]);
-        easeBetweenKeys(move.transform.position, cut - d, cut + d, SWIPE_CURVE);
+        // Position is the only animation: rest -> the swipe distance, 0.9 / 0.1 ease on both ends
+        setKeys(move.transform.position, [[t0, vecLike(move.transform.position, 0, 0)], [t1, vecLike(move.transform.position, off[0], off[1])]]);
+        easeBetweenKeys(move.transform.position, t0, t1, SWIPE_CURVE);
 
         // Neat stack: each link null sits on its clip, the move null on top
         outN.moveBefore(outL);
