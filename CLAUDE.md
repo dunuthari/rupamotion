@@ -67,7 +67,7 @@ section 13/12 bold, body 12, nav 10. Tokens live in `THEMES` at the top of the d
 The old built-in text effects were removed on purpose. Text animations are `.ffx` presets: put them in `presets/text/` and run
 `npm run build`; each becomes a button (file name = label). They are embedded in `dist/RupaMotion.jsx`, which stays the only file to install.
 Shipped byte for byte, never edit them. Set 1: 1by1, bounce_text, Bouncing_Text_HQ, Bouncy__Color_FadeOut_HQ, character_down.
-Set 2: Snapping_Text_HQ, character_right, Color_FadeOut_HQ, SNAP_TEXT_2, SNAP_TEXT. `npm run build` also rewrites the Text buttons in
+Set 2: Snapping_Text_HQ, character_right, Color_FadeOut_HQ, SNAP_TEXT_2, SNAP_TEXT. Set 3: trix_bounce (a Scale preset, works on any layer), word_down, word_right. `npm run build` also rewrites the Text buttons in
 `preview/index.html` (between the `TEXT_PRESET_BUTTONS` markers), so don't edit that block by hand.
 A test rebuilds every file in `presets/text` from the built script and compares the bytes.
 
