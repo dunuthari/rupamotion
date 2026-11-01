@@ -411,7 +411,7 @@ function runSwipe(arrow, mutate) {
 // The real presets shipped in presets/text: every button writes back exactly the bytes of its .ffx file
 {
   const path = require('path'), dir = path.join(__dirname, '..', 'presets', 'text');
-  const files = fs.readdirSync(dir).filter(f => /\.ffx$/i.test(f)).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  const files = fs.readdirSync(dir).filter(f => /\.ffx$/i.test(f)).sort((a, b) => { const x = a.replace(/\.ffx$/i, '').toLowerCase(), y = b.replace(/\.ffx$/i, '').toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; });
   const label = f => { const n = f.replace(/\.ffx$/i, '').replace(/[-_]+/g, ' ').trim(); return n.charAt(0).toUpperCase() + n.slice(1); };
   const written = [];
   function RealFile(p) { this.path = p; this.data = ''; }
