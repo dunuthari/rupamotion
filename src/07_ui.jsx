@@ -382,6 +382,7 @@
 
     loadStyle();
     var FEATURES = [];
+    var SUBGROUP_CHIPS = { "Text": true };
     function feature(group, name, build) { FEATURES.push({ group: group, name: name, build: build }); }
 
     // ---------------- shared UI bits ----------------
@@ -1091,7 +1092,7 @@
 
     // ---------------- Text ----------------
 
-    feature("Text", "Text presets", function (p) {
+    feature("Text", "Motion", function (p) {
         if (TEXT_PRESETS.length === 0) {
             hint(p, "No text presets yet.");
             hint(p, "Add .ffx files to presets/text and rebuild.");
@@ -1445,7 +1446,8 @@
             while (chips.children.length > 0) { chips.remove(chips.children[0]); }
             var names = [], k;
             for (k = 0; k < FEATURES.length; k++) { if (FEATURES[k].group === groupName) { names.push(FEATURES[k].name); } }
-            var single = names.length <= 1;
+            // groups with named sub-groups (Text > Motion) always show their chip row, even with one sub-group
+            var single = names.length <= 1 && !SUBGROUP_CHIPS[groupName];
             chips.visible = !single;
             chips.maximumSize.height = single ? 0 : 1000;
             if (single) { return; }

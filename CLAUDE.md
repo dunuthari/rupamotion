@@ -65,6 +65,7 @@ secondary = card fill + hairline (grids, rows). Feature chips: `chip` / `chip-on
 section 13/12 bold, body 12, nav 10. Tokens live in `THEMES` at the top of the design-system block.
 
 ## Text group
+The Text group has a sub-group chip row (`SUBGROUP_CHIPS`); the `.ffx` presets live in the **Motion** sub-group. More sub-groups can be added as extra `feature("Text", ...)`.
 The old built-in text effects were removed on purpose. Text animations are `.ffx` presets: put them in `presets/text/` and run
 `npm run build`; each becomes a button (file name = label). They are embedded in `dist/RupaMotion.jsx`, which stays the only file to install.
 Shipped byte for byte, never edit them. Set 1: 1by1, bounce_text, Bouncing_Text_HQ, Bouncy__Color_FadeOut_HQ, character_down.

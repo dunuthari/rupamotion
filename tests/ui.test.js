@@ -434,3 +434,12 @@ function runSwipe(arrow, mutate) {
   console.log(`shipped text presets: ${files.length} files, ${bad.length === 0 ? 'every button writes back its .ffx byte for byte' : 'MISMATCH ' + bad.join(', ')}`);
   console.log(`shipped text preset buttons: ${files.map(label).join(' | ')}`);
 }
+
+// Text > Motion: the Text tab shows its sub-group chip row, with "Motion" selected, and the presets sit under it
+{
+  const textTile = walk(root).filter(n => n.groupName === 'Text')[0];
+  textTile.onClick();
+  const chip = walk(root).filter(n => n.variant === 'chip-on' && n.text === 'Motion')[0];
+  const cards = walk(root).filter(n => n.cardLevel === 0 && n.cardTitle === 'Motion' && n.visible);
+  console.log(`text sub-group: chip "Motion" shown ${!!chip}, card "Motion" visible ${cards.length === 1}`);
+}
