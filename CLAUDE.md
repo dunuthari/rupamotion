@@ -42,6 +42,8 @@ Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.js
   layer sits at the comp center.
 - Flow easing: untie keys (`setTemporalContinuousAtKey`/`AutoBezier` false) before `setTemporalEaseAtKey`, or later curves are
   rejected; read the ease back and retry. Linear is a bezier with handles on the straight line, not the Linear interpolation type.
+- `layer.parent = x` keeps the layer from jumping (AE shifts the child's own position to cancel the parent's offset). So link first,
+  while the parent is at rest, and only then set offsets on the parent (see `doSwipeCut`). Tests' fake layers must do the same.
 - Track mattes: use `setMatte()` (new `setTrackMatte` API on AE 2023+, falls back to `trackMatteType`).
 - Drop Shadow opacity is stored 0–255 (38 ≈ 15%).
 

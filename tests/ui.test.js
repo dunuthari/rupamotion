@@ -288,8 +288,19 @@ function playExpr(expr, keys, curve) {
 
 // Swipe cut: three linked nulls (Move at the cut, Out / In as its children) like the hand-built rig
 function fakeRigLayer(name, inP, outP) {
-  return { name, inPoint: inP, outPoint: outP, parent: null, index: 1, source: {}, motionBlur: false, containingComp: {},
+  // Like After Effects: assigning .parent keeps the layer from jumping, by shifting its own position to cancel the parent's offset
+  const L = { name, inPoint: inP, outPoint: outP, _parent: null, index: 1, source: {}, motionBlur: false, containingComp: {},
     transform: { anchorPoint: fakeAnimProp(2, [0, 0]), position: fakeAnimProp(2, [0, 0]) }, moveBefore() {} };
+  const off = l => { let x = 0, y = 0; for (; l; l = l._parent) { x += l.transform.position.value[0]; y += l.transform.position.value[1]; } return [x, y]; };
+  Object.defineProperty(L, 'parent', { get() { return this._parent; },
+    set(p) { const o = off(this._parent), n = off(p), v = this.transform.position.value; this.transform.position.value = [v[0] + o[0] - n[0], v[1] + o[1] - n[1]]; this._parent = p; } });
+  return L;
+}
+// where a layer actually lands (position offset from its natural spot) with the Move null at a given position
+function landing(L, movePos, move) {
+  let x = 0, y = 0;
+  for (let l = L; l; l = l._parent) { const v = (l === move) ? movePos : l.transform.position.value; x += v[0]; y += v[1]; }
+  return [x, y];
 }
 function runSwipe(arrow, mutate) {
   const mbT = walk(root).filter(n => n.type === 'button' && n.text === 'Motion blur on animated layers' && typeof n.value === 'boolean')[0];
@@ -316,6 +327,8 @@ function runSwipe(arrow, mutate) {
     'easy-ease on both keys': k.length === 2 && Math.abs(k[0].out[0].influence - 70) < 1e-6 && Math.abs(k[1].in[0].influence - 70) < 1e-6,
     'timing: Out to the cut, In from the cut, Move around it': on.inPoint === 0 && on.outPoint === 5 && inn.inPoint === 5 && inn.outPoint === 12 && Math.abs(mv.inPoint - 4.6) < 1e-9 && Math.abs(mv.outPoint - 5.4) < 1e-9,
     'anchor and position of the nulls start at 0,0 (links do not move the clips)': eq(mv.transform.anchorPoint.value, [0, 0]) && eq(on.transform.anchorPoint.value, [0, 0]),
+    'incoming clip: one screen right at the start, back on its natural spot at the end': eq(landing(inL, k[0].v, mv), [1920, 0]) && eq(landing(inL, k[1].v, mv), [0, 0]),
+    'outgoing clip: natural at the start, one screen left at the end': eq(landing(outL, k[0].v, mv), [0, 0]) && eq(landing(outL, k[1].v, mv), [-1920, 0]),
     'motion blur on both clips and a wide shutter': outL.motionBlur && inL.motionBlur && comp.shutterAngle === 300
   };
   const bad = Object.keys(checks).filter(c => !checks[c]);

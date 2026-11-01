@@ -1299,11 +1299,14 @@
         var move = swipeNull(comp, "MK Swipe · Move", cut - d, cut + d);
         var outN = swipeNull(comp, "MK Swipe · Out", outL.inPoint, cut);
         var inN = swipeNull(comp, "MK Swipe · In", cut, inL.outPoint);
+        // Link everything first, while all three nulls are still at rest (0,0). Assigning .parent makes AE shift
+        // the child's own position so it doesn't jump, which would cancel the offset if it were already set.
         outN.parent = move;
         inN.parent = move;
-        setXY(inN.transform.position, -off[0], -off[1]);
         rootOut.parent = outN;
         rootIn.parent = inN;
+        // Only now push In one screen away (the clips ride along with it)
+        setXY(inN.transform.position, -off[0], -off[1]);
 
         // Position is the only animation: rest -> one screen over, easy-ease both ends
         setKeys(move.transform.position, [[cut - d, vecLike(move.transform.position, 0, 0)], [cut + d, vecLike(move.transform.position, off[0], off[1])]]);
