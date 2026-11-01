@@ -1098,14 +1098,14 @@
             return;
         }
         hint(p, "Select text layer(s), put the playhead where it should start, click a preset.");
-        var items = [], i;
-        for (i = 0; i < TEXT_PRESETS.length; i++) {
+        // one full-width button per preset, so long names are never clipped
+        for (var i = 0; i < TEXT_PRESETS.length; i++) {
             (function (idx) {
-                items.push([TEXT_PRESETS[idx].name, function () { run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); }); },
-                    "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead."]);
+                btn(btnRow(p), TEXT_PRESETS[idx].name, function () {
+                    run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); });
+                }, "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead.");
             })(i);
         }
-        grid(p, items);
     });
 
     // ---------------- UI Kit ----------------

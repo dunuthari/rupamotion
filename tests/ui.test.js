@@ -24,12 +24,16 @@ function el(type, text) {
   Object.defineProperty(o,'selection',{get(){return this._sel||null;},set(v){const it=(typeof v==='number')?this.items[v]:v;this._sel=it||null;if(this.onChange)this.onChange();}});
   return o;
 }
+function FakeFile0(p) { this.path = p; this.data = ''; }
+FakeFile0.written = [];
+FakeFile0.prototype.open = function () { return true; }; FakeFile0.prototype.write = function (d) { this.data += d; };
+FakeFile0.prototype.close = function () {}; FakeFile0.prototype.remove = function () { return true; };
 const settings = {}; let scheduled = null;
 const $g = { global: {}, colorPicker: ()=>-1 };
 const app = { settings:{haveSetting:(s,k)=>(s+k) in settings,getSetting:(s,k)=>settings[s+k],saveSetting:(s,k,v)=>{settings[s+k]=v;}},
   project:{activeItem:null}, fonts:null, beginUndoGroup(){}, endUndoGroup(){}, scheduleTask(code){ scheduled = code; } };
 function Panel(){}; let lastWin = null; function Window(){ lastWin = el('window'); return lastWin; }
-const g = { app, Panel, Window, $: $g, alert: ()=>{}, ScriptUI: { newFont:(f,s,z)=>({f,s,z}) },
+const g = { File: FakeFile0, Folder: { temp: { fsName: '/tmp' } }, app, Panel, Window, $: $g, alert: ()=>{}, ScriptUI: { newFont:(f,s,z)=>({f,s,z}) },
   CompItem:function(){}, FootageItem:function(){}, AVLayer:function(){}, ShapeLayer:function(){}, TextLayer:function(){},
   CameraLayer:function(){}, LightLayer:function(){}, Shape:function(){}, KeyframeEase:function(sp,inf){ this.speed=sp; this.influence=inf; }, KeyframeInterpolationType:{LINEAR:'L',BEZIER:'B'},
   PropertyType:{PROPERTY:1}, MarkerValue:function(){}, TrackMatteType:{}, BlendingMode:{}, ParagraphJustification:{}, AutoOrientType:{} };
@@ -377,22 +381,56 @@ function runSwipe(arrow, mutate) {
   const root2 = Object.assign(new Panel(), el('panel', 'root2'));
   run2(...Object.values(g2), root2);
 
-  const btns = walk(root2).filter(n => n.type === 'button' && n.parent && n.parent.isBtnRow && ['Fade Up', 'pop', 'slide in', 'tiny'].indexOf(n.text) >= 0);
+  const btns = walk(root2).filter(n => n.type === 'button' && n.parent && n.parent.isBtnRow && ['Fade Up', 'Pop', 'Slide in', 'Tiny'].indexOf(n.text) >= 0);
   const names = btns.map(b => b.text).sort().join('|');
   const layer = { applyPreset(f) { applied.push({ path: f.path, data: f.data, encoding: f.encoding }); } };
   const comp = new g.CompItem(); comp.selectedLayers = [layer, { applyPreset: layer.applyPreset }]; app.project.activeItem = comp;
   const exact = {};
-  ['Fade Up', 'pop', 'slide in', 'tiny'].forEach(nm => {
+  ['Fade Up', 'Pop', 'Slide in', 'Tiny'].forEach(nm => {
     applied.length = 0;
     btns.filter(b => b.text === nm)[0].onClick();
-    const want = samples[{ 'Fade Up': 'Fade-Up.ffx', 'slide in': 'slide_in.ffx', pop: 'pop.ffx', tiny: 'tiny.ffx' }[nm]];
+    const want = samples[{ 'Fade Up': 'Fade-Up.ffx', 'Slide in': 'slide_in.ffx', Pop: 'pop.ffx', Tiny: 'tiny.ffx' }[nm]];
     const got = Buffer.from(applied[0] ? applied[0].data : '', 'latin1');
     exact[nm] = applied.length === 2 && Buffer.compare(got, want) === 0 && applied[0].encoding === 'BINARY';
   });
   comp.selectedLayers = []; applied.length = 0;
   btns[0].onClick();            // nothing selected: asks for a layer, applies nothing
   app.project.activeItem = null;
-  console.log(`text presets: ${r.presets} embedded (non-.ffx ignored: ${r.presets === 4}), buttons ${names === 'Fade Up|pop|slide in|tiny'}, bytes round-trip ${JSON.stringify(exact)}, temp files removed ${removed.length === 4}, nothing applied without a selection ${applied.length === 0}`);
-  const empty = walk(root).filter(n => n.type === 'statictext' && /No text presets yet/.test(n.text)).length;
+  console.log(`text presets: ${r.presets} embedded (non-.ffx ignored: ${r.presets === 4}), buttons ${names === 'Fade Up|Pop|Slide in|Tiny'}, bytes round-trip ${JSON.stringify(exact)}, temp files removed ${removed.length === 4}, nothing applied without a selection ${applied.length === 0}`);
+  // a build with no .ffx files shows the empty state
+  fs.mkdirSync(path.join(tmp, 'none'));
+  build({ presetsDir: path.join(tmp, 'none'), out: path.join(tmp, 'empty.jsx') });
+  const srcE = fs.readFileSync(path.join(tmp, 'empty.jsx'), 'utf8');
+  const runE = new Function(...Object.keys(g2), 'thisObj', srcE.replace(/\}\)\(this\);\s*$/, '})(thisObj);'));
+  const rootE = Object.assign(new Panel(), el('panel', 'rootE'));
+  runE(...Object.values(g2), rootE);
+  const empty = walk(rootE).filter(n => n.type === 'statictext' && /No text presets yet/.test(n.text)).length;
   console.log(`text group with no presets: empty-state hint shown ${empty === 1}`);
+}
+
+// The real presets shipped in presets/text: every button writes back exactly the bytes of its .ffx file
+{
+  const path = require('path'), dir = path.join(__dirname, '..', 'presets', 'text');
+  const files = fs.readdirSync(dir).filter(f => /\.ffx$/i.test(f)).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  const label = f => { const n = f.replace(/\.ffx$/i, '').replace(/[-_]+/g, ' ').trim(); return n.charAt(0).toUpperCase() + n.slice(1); };
+  const written = [];
+  function RealFile(p) { this.path = p; this.data = ''; }
+  RealFile.prototype.open = function () { return true; }; RealFile.prototype.write = function (d) { this.data += d; };
+  RealFile.prototype.close = function () {}; RealFile.prototype.remove = function () { return true; };
+  const g3 = Object.assign({}, g, { File: RealFile });
+  const run3 = new Function(...Object.keys(g3), 'thisObj', src.replace(/\}\)\(this\);\s*$/, '})(thisObj);'));
+  const root3 = Object.assign(new Panel(), el('panel', 'root3'));
+  run3(...Object.values(g3), root3);
+  const layer = { applyPreset(f) { written.push(f.data); } };
+  const comp = new g.CompItem(); comp.selectedLayers = [layer]; app.project.activeItem = comp;
+  const results = files.map(f => {
+    const b = walk(root3).filter(n => n.type === 'button' && n.text === label(f) && n.parent && n.parent.isBtnRow)[0];
+    written.length = 0;
+    if (b) b.onClick();
+    return { f, ok: !!b && written.length === 1 && Buffer.compare(Buffer.from(written[0], 'latin1'), fs.readFileSync(path.join(dir, f))) === 0 };
+  });
+  app.project.activeItem = null;
+  const bad = results.filter(r => !r.ok).map(r => r.f);
+  console.log(`shipped text presets: ${files.length} files, ${bad.length === 0 ? 'every button writes back its .ffx byte for byte' : 'MISMATCH ' + bad.join(', ')}`);
+  console.log(`shipped text preset buttons: ${files.map(label).join(' | ')}`);
 }

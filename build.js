@@ -5,9 +5,10 @@ const fs = require("fs");
 const path = require("path");
 
 function presetLiteral(dir) {
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ffx$/i.test(f)).sort() : [];
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ffx$/i.test(f)).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())) : [];
   const items = files.map((f) => {
-    const name = f.replace(/\.ffx$/i, "").replace(/[-_]+/g, " ").trim();
+    let name = f.replace(/\.ffx$/i, "").replace(/[-_]+/g, " ").trim();
+    name = name.charAt(0).toUpperCase() + name.slice(1);
     const b64 = fs.readFileSync(path.join(dir, f)).toString("base64");
     const lines = b64.match(/.{1,100}/g) || [""];
     return `{ name: ${JSON.stringify(name)}, data: ${lines.map((l) => JSON.stringify(l)).join(" +\n            ")} }`;

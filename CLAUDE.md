@@ -66,6 +66,8 @@ section 13/12 bold, body 12, nav 10. Tokens live in `THEMES` at the top of the d
 ## Text group
 The old built-in text effects were removed on purpose. Text animations are `.ffx` presets: put them in `presets/text/` and run
 `npm run build`; each becomes a button (file name = label). They are embedded in `dist/RupaMotion.jsx`, which stays the only file to install.
+Set 1 (5 presets, shipped byte for byte, never edit them): 1by1, bounce_text, Bouncing_Text_HQ, Bouncy__Color_FadeOut_HQ, character_down.
+A test rebuilds every file in `presets/text` from the built script and compares the bytes.
 
 ## Brand/motion style (applied by the tools)
 Google Vids look: primary `#4285F4`, secondary `#8AB4F8`, periwinkle `#C5CAE9`, background `#F5F7FF`,
