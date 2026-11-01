@@ -485,7 +485,7 @@ function fakeBuild() {
         docNode.value = doc; docNode.setValue = v => { Object.assign(doc, v); };
         props.children.push(docNode);
         L.nodes['ADBE Text Properties'] = props; L.doc = doc;
-        L.sourceRectAtTime = () => ({ left: 0, top: -doc.fontSize * 0.75, width: doc.text.length * doc.fontSize * 0.5, height: doc.fontSize * 0.75 });
+        L.sourceRectAtTime = () => { const f = doc.fontSize, desc = /[gjpqy]/.test(doc.text) ? 0.25 * f : 0; return { left: 0, top: -f * 0.75, width: doc.text.length * f * 0.5, height: 0.75 * f + desc }; };
         return push(L);
       }
     } });
@@ -577,4 +577,49 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['4 words give 5 slots'] = fresh.items.length === 5 && fresh.items[4].text === 'After "four"';
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`text + icon (positions, file, highlight off): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Text + Icon, round 2: shared baseline, manual icon gap, gray defaults
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
+  const m = buildTextIcon('Hello world beauty', 1, { highlight: false }).made;
+  const words = m.filter(L => L.kind === 'text'), byName = n => words.find(L => L.name === 'MK Text+Icon · ' + n);
+  const anchors = words.map(L => L.transform.anchorPoint.value[1]), posY = words.map(L => L.transform.position.keys[1].v[1]);
+  R['"beauty" has a descender in the fake font'] = byName('beauty').sourceRectAtTime().height > byName('Hello').sourceRectAtTime().height;
+  R['all words share one anchor height (one baseline)'] = anchors.every(a => near(a, anchors[0])) && near(anchors[0], -67.5 / 2);
+  R['all words share one position height at both keys'] = posY.every(y => near(y, 540)) && words.every(L => near(L.transform.position.keys[0].v[1], 540));
+  R['anchor x is the word centre'] = words.every(L => near(L.transform.anchorPoint.value[0], L.sourceRectAtTime().width / 2));
+  // default colours: words and icon use the Style gray (#9AA0A6); the sparkle has no coloured stroke
+  const gray = [154 / 255, 160 / 255, 166 / 255];
+  R['words are gray by default'] = words.every(L => gray.every((c, i) => near(L.doc.fillColor[i], c)));
+  const icon = m.find(L => L.kind === 'shape'), vg = icon.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group');
+  const fill = vg.children.find(c => c.matchName === 'ADBE Vector Graphic - Fill');
+  R['icon is gray by default'] = gray.every((c, i) => near(fill.property('ADBE Vector Fill Color').value[i], c));
+  R['sparkle has no stroke'] = !vg.children.some(c => c.matchName === 'ADBE Vector Graphic - Stroke');
+  // manual icon gap
+  const diff = mm => { const w = mm.filter(L => L.kind === 'text').map(L => L.transform.position.keys[1].v[0]); return w[1] - w[0]; };
+  const slot = 3.03 * 67.5;
+  setField('Icon gap (px):', '0');   const g0 = diff(buildTextIcon('hello world', 1, { highlight: false }).made);
+  setField('Icon gap (px):', '60');  const g60 = diff(buildTextIcon('hello world', 1, { highlight: false }).made);
+  setField('Icon gap (px):', '-50'); const gm50 = diff(buildTextIcon('hello world', 1, { highlight: false }).made);
+  setField('Icon gap (px):', '-600'); const gtight = diff(buildTextIcon('hello world', 1, { highlight: false }).made);
+  setField('Icon gap (px):', '0');
+  R['gap 0 = the natural gap'] = near(g0, 225 + slot);
+  R['gap +60 adds 60 px between the two words'] = near(g60, 225 + slot + 60);
+  R['gap -50 takes 50 px off'] = near(gm50, 225 + slot - 50);
+  R['a very negative gap stops at 0.3x text height (words never collide)'] = near(gtight, 225 + 0.3 * 67.5);
+  // the gap only widens the icon slot: words on the same side of the icon keep their normal spacing
+  const m3 = a => buildTextIcon('one two three', 1, { highlight: false }).made.filter(L => L.kind === 'text').map(L => L.transform.position.keys[1].v[0]);
+  setField('Icon gap (px):', '0');  const a3 = m3(); setField('Icon gap (px):', '80'); const b3 = m3(); setField('Icon gap (px):', '0');
+  R['words after the icon keep their spacing when the gap changes'] = near(b3[2] - b3[1], a3[2] - a3[1]);
+  // custom colours
+  setField('Text color:', '#112233'); setField('Icon color:', '#445566');
+  const c = buildTextIcon('hello world', 1, { highlight: false }).made;
+  const tw = c.find(L => L.kind === 'text'), ic = c.find(L => L.kind === 'shape');
+  const f2 = ic.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(x => x.matchName === 'ADBE Vector Graphic - Fill');
+  R['custom text colour is used'] = near(tw.doc.fillColor[0], 0x11 / 255) && near(tw.doc.fillColor[2], 0x33 / 255);
+  R['custom icon colour is used'] = near(f2.property('ADBE Vector Fill Color').value[0], 0x44 / 255) && near(f2.property('ADBE Vector Fill Color').value[2], 0x66 / 255);
+  setField('Text color:', '#9AA0A6'); setField('Icon color:', '#9AA0A6');
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`text + icon (baseline, gap, gray): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

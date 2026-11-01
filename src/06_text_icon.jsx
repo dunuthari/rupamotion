@@ -19,7 +19,6 @@
     };
     var TI_LAVENDER = [178 / 255, 130 / 255, 215 / 255];    // #B282D7
     var TI_MAGENTA = [193 / 255, 88 / 255, 190 / 255];      // #C158BE
-    var TI_BASE = [0.945, 0.949, 0.957];                    // #F1F2F4, the words at rest
 
     function tiWords(str) {
         var parts = trim(str).split(/\s+/), out = [];
@@ -69,12 +68,11 @@
         return makeShape(v, it, ot, true);
     }
 
-    function tiSparkleLayer(comp, size) {
+    function tiSparkleLayer(comp, size, color) {
         var L = shapeLayer(comp, "MK Text+Icon · Icon");
         var gi = newGroup(L, "Sparkle");
         addPathVec(L, gi, sparkleShape(size / 2));
-        addFill(L, gi, [1, 1, 1], 100);
-        addStroke(L, gi, TI_MAGENTA, 2, 70);
+        addFill(L, gi, color, 100);
         return L;
     }
 
@@ -107,7 +105,8 @@
         setKeys(amt, pairs);
     }
 
-    // o: sentence, iconIndex (0..n), iconFile (File or null), size, iconPct, length, highlight, step
+    // o: sentence, iconIndex (0..n), iconFile (File or null), size, iconPct, gap (extra px around the icon), textColor, iconColor,
+    //    length, highlight, step
     function doTextIcon(o) {
         var comp = activeComp(); if (!comp) { return; }
         var words = tiWords(o.sentence), n = words.length, i;
@@ -121,23 +120,27 @@
         setXY(nul.transform.position, 0, 0);
 
         // words: one text layer each, measured at 100%
-        var layers = [], widths = [], h = 0;
+        var layers = [], widths = [], lefts = [], top = 0;
         for (i = 0; i < n; i++) {
-            var L = makeText(comp, words[i], { size: o.size, color: TI_BASE, font: font, just: "left" });
+            var L = makeText(comp, words[i], { size: o.size, color: o.textColor, font: font, just: "left" });
             L.name = "MK Text+Icon · " + words[i];
             var r = L.sourceRectAtTime(t0, false);
             widths.push(r.width);
-            h = Math.max(h, r.height);
+            lefts.push(r.left);
+            top = Math.min(top, r.top);          // text layers sit on y = 0 (the baseline); top is negative
             layers.push(L);
         }
-        var space = o.size * TI.spaceK, slot1 = TI.slotH * h, slot0 = TI.slotStart * slot1;
+        // Text height = ascender height, the same for every word. Using each word's own box would lift words with
+        // descenders (y, g, p) a few pixels above the rest. One shared anchor keeps every baseline on one line.
+        var h = -top, anchorY = top / 2;
+        var space = o.size * TI.spaceK, slot1 = Math.max(0.3 * h, TI.slotH * h + o.gap), slot0 = TI.slotStart * slot1;
         var endGap = (slot1 + TI.iconH * h) / 2;
         var from = tiLayout(widths, idx, TI.scaleFrom / 100, slot0, space * TI.scaleFrom / 100, cx, (slot0 + TI.iconH * h * TI.scaleFrom / 100) / 2);
         var to = tiLayout(widths, idx, 1, slot1, space, cx, endGap);
 
         for (i = 0; i < n; i++) {
             var W = layers[i];
-            anchorTo(W, "center", t0);
+            setXY(W.transform.anchorPoint, lefts[i] + widths[i] / 2, anchorY);
             W.parent = nul;
             var pp = W.transform.position, sp = W.transform.scale;
             setKeys(pp, [[t0, vecLike(pp, from.centers[i], cy)], [t0 + TI.posDur, vecLike(pp, to.centers[i], cy)]]);
@@ -149,7 +152,7 @@
 
         // icon: placed in its slot at rest size; no animation (the user animates it)
         var iconSize = TI.iconH * h * o.iconPct / 100, icon;
-        icon = o.iconFile ? tiIconFromFile(comp, o.iconFile, iconSize) : tiSparkleLayer(comp, iconSize);
+        icon = o.iconFile ? tiIconFromFile(comp, o.iconFile, iconSize) : tiSparkleLayer(comp, iconSize, o.iconColor);
         icon.parent = nul;
         setXY(icon.transform.position, to.iconX, cy);
 

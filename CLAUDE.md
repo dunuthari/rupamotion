@@ -68,7 +68,7 @@ section 13/12 bold, body 12, nav 10. Tokens live in `THEMES` at the top of the d
 ## Text group
 **Text + Icon**: the user types 2–6 words, picks the icon slot (before / between / after words) and optionally browses for an icon file
 (else a built-in sparkle). Words slide apart and grow (`TI.pos*`/`TI.scl*` curves fitted to the reference), a lavender->magenta highlight sweeps
-word to word, and the icon is deliberately NOT animated (the user does that). Keep the `TI` numbers unless asked. Tests use a fake AE with text
+word to word, and the icon is deliberately NOT animated (the user does that). All words share one baseline (anchor at `top/2` of the ascender box, so descenders like the g in "beauty" don't shift a word). "Icon gap (px)" adds to the final slot (undo and rebuild to change it). Text and icon default to the Style gray (`textGray`); the highlight sweep is OFF by default. Keep the `TI` numbers unless asked. Tests use a fake AE with text
 layers, shape layers and text animators; if you change the layout maths, update the independent arithmetic in `tests/ui.test.js`.
 The Text group has a sub-group chip row (`SUBGROUP_CHIPS`); the `.ffx` presets live in the **Motion** sub-group. More sub-groups can be added as extra `feature("Text", ...)`.
 The old built-in text effects were removed on purpose. Text animations are `.ffx` presets: put them in `presets/text/` and run

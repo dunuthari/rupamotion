@@ -1173,11 +1173,15 @@
         sent.onChange = function () { putS("ti_sentence", sent.text); refresh(); };
         refresh();
 
+        var tcol = colorChooser(p, "Text color:", style.textGray, "ti_text_color");
+        var icol = colorChooser(p, "Icon color:", style.textGray, "ti_icon_color");
         var size = field(p, "Font size:", getS("ti_size", "90"), 4, "Text size in pixels.");
         size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ti_size", size.text); };
         var pct = field(p, "Icon size (%):", "100", 4, "100% = the icon at its natural size for this text. Scale it freely afterwards.");
+        var gap = field(p, "Icon gap (px):", getS("ti_gap", "0"), 5, "Extra space between the two words around the icon. Positive = wider, negative = tighter. 0 = the natural gap. Undo and rebuild to change it.");
+        gap.onChange = function () { gap.text = String(num(gap.text, 0, -600, 1200)); putS("ti_gap", gap.text); };
         var len = field(p, "Length (s):", "4", 4, "How long the layers last from the playhead.");
-        var hi = check(p, "Highlight words", true, "Colour sweep: each word goes white, lavender, magenta, then back to white.");
+        var hi = check(p, "Highlight words", false, "Optional colour sweep: each word goes lavender, then magenta, then back to its normal colour. Off keeps everything gray.");
         var step = field(p, "Highlight (s/word):", "1", 4, "How long each word keeps the highlight.");
         hint(p, "The icon is left still, so you can animate it yourself.");
 
@@ -1185,7 +1189,8 @@
             run("Text + icon", function () {
                 doTextIcon({
                     sentence: sent.text, iconIndex: where.selection ? where.selection.index : 1, iconFile: iconFile,
-                    size: num(size.text, 90, 12, 600), iconPct: num(pct.text, 100, 10, 500), length: num(len.text, 4, 0.5, 120),
+                    size: num(size.text, 90, 12, 600), iconPct: num(pct.text, 100, 10, 500), gap: num(gap.text, 0, -600, 1200), length: num(len.text, 4, 0.5, 120),
+                    textColor: tcol.get(), iconColor: icol.get(),
                     highlight: hi.value, step: num(step.text, 1, 0.3, 10)
                 });
             });

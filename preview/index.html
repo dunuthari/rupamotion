@@ -639,7 +639,7 @@
     });
     return { centers: centers, iconX: iconX };
   }
-  var LAV = [178, 130, 215], MAG = [193, 88, 190], BASE = [241, 242, 244];
+  var LAV = [178, 130, 215], MAG = [193, 88, 190], BASE = [154, 160, 166];
   function mix(a, b, t) { return a.map(function (v, i) { return Math.round(v + (b[i] - v) * t); }); }
 
   function textIconControl() {
@@ -656,7 +656,10 @@
     var pct = el("input", { type: "text", id: "ti" + (++uid), value: "100", style: "width:52px" });
     var len = el("input", { type: "text", id: "ti" + (++uid), value: "4", style: "width:52px" });
     var step = el("input", { type: "text", id: "ti" + (++uid), value: "1", style: "width:52px" });
-    var hl = toggle("Highlight words", true, "Colour sweep: each word goes white, lavender, magenta, then back to white.");
+    var gapIn = el("input", { type: "text", id: "ti" + (++uid), value: "0", style: "width:52px", title: "Extra pixels between the two words around the icon. Negative pulls them closer. Undo and rebuild to change it." });
+    var tcolRow = colorControl("Text color:", "#9AA0A6", true), icolRow = colorControl("Icon color:", "#9AA0A6", true);
+    function colorOf(r) { return r.querySelector("input").value; }
+    var hl = toggle("Highlight words", false, "Optional colour sweep: each word goes lavender, then magenta, then back to its normal colour. Off keeps everything gray.");
     var stage = el("div", { class: "ti-stage", "aria-label": "Replay of the word animation" });
 
     function wordsNow() { return tiWords(sent.value); }
@@ -673,6 +676,8 @@
     }
     sent.addEventListener("input", refresh);
     where.addEventListener("change", function () { updateLine(); draw(1e9); });
+    gapIn.addEventListener("input", function () { draw(1e9); });
+    wrap.addEventListener("change", function () { draw(1e9); });
 
     // the replay: words are spans placed by the same layout maths, the icon stays still
     var spans = [], svg = null, startT = null, raf = 0;
@@ -680,7 +685,7 @@
       stage.innerHTML = ""; spans = [];
       wordsNow().forEach(function (w) { var s = el("span", { class: "w", text: w }); stage.appendChild(s); spans.push(s); });
       svg = el("div", { style: "position:absolute;top:50%;left:0" });
-      svg.innerHTML = '<svg viewBox="-50 -50 100 100" style="position:absolute;left:-50%;top:-50%;width:100%;height:100%;overflow:visible"><path d="M0 -50 C3.5 -22 22 -3.5 50 0 C22 3.5 3.5 22 0 50 C-3.5 22 -22 3.5 -50 0 C-22 -3.5 -3.5 -22 0 -50Z" fill="#fff" stroke="#C158BE" stroke-opacity=".7" stroke-width="2"/></svg>';
+      svg.innerHTML = '<svg viewBox="-50 -50 100 100" style="position:absolute;left:-50%;top:-50%;width:100%;height:100%;overflow:visible"><path d="M0 -50 C3.5 -22 22 -3.5 50 0 C22 3.5 3.5 22 0 50 C-3.5 22 -22 3.5 -50 0 C-22 -3.5 -3.5 -22 0 -50Z" fill="#9AA0A6"/></svg>';
       stage.appendChild(svg);
     }
     function draw(tau) {
@@ -688,7 +693,7 @@
       if (!w.length) return;
       var W = stage.clientWidth || 320, cx = W / 2, fs = 30, h = fs * 0.75, idx = +where.value || 0;
       var widths = spans.map(function (s) { s.style.transform = "none"; return s.getBoundingClientRect().width; });
-      var space = fs * TI.spaceK, slot1 = TI.slotH * h, slot0 = TI.slotStart * slot1, sc = TI.scaleFrom / 100;
+      var space = fs * TI.spaceK, slot1 = Math.max(0.3 * h, TI.slotH * h + (+gapIn.value || 0)), slot0 = TI.slotStart * slot1, sc = TI.scaleFrom / 100;
       var pp = tiProg(TI.pos, tau / TI.posDur), sp = tiProg(TI.scl, tau / TI.sclDur);
       var s = sc + (1 - sc) * sp, gap = slot0 + (slot1 - slot0) * pp;
       var endGap = (gap + TI.iconH * h * (+pct.value || 100) / 100) / 2;
@@ -698,10 +703,12 @@
         var a = 0, t = tau - i * step_, last = i === spans.length - 1;
         if (hl.getAttribute("aria-checked") === "true" && t > 0) { a = Math.min(1, t / 0.1); if (!last && t > step_ - 0.4) a = Math.max(0, (step_ - t) / 0.4); }
         var m = Math.max(0, Math.min(1, (t - 0.1) / 0.5));
-        sp_.style.color = "rgb(" + mix(BASE, mix(LAV, MAG, m), a).join(",") + ")";
+        var hx = colorOf(tcolRow).replace("#", ""), bc = [parseInt(hx.substr(0, 2), 16), parseInt(hx.substr(2, 2), 16), parseInt(hx.substr(4, 2), 16)];
+        sp_.style.color = "rgb(" + mix(bc, mix(LAV, MAG, m), a).join(",") + ")";
       });
       var isz = TI.iconH * h * (+pct.value || 100) / 100;
       svg.style.left = L.iconX + "px"; svg.firstChild.style.width = svg.firstChild.style.height = isz + "px";
+      svg.firstChild.querySelector("path").setAttribute("fill", colorOf(icolRow));
       svg.firstChild.style.left = (-isz / 2) + "px"; svg.firstChild.style.top = (-isz / 2) + "px";
     }
     function play() {
@@ -726,6 +733,8 @@
     wrap.appendChild(row("Icon:", el("div", { class: "ti-file" }, [name, browse, spark, fileIn])));
     wrap.appendChild(row("Font size:", size, size.id));
     wrap.appendChild(row("Icon size (%):", pct, pct.id));
+    wrap.appendChild(row("Icon gap (px):", gapIn, gapIn.id));
+    wrap.appendChild(tcolRow); wrap.appendChild(icolRow);
     wrap.appendChild(row("Length (s):", len, len.id));
     wrap.appendChild(hl);
     wrap.appendChild(row("Highlight (s/word):", step, step.id));
