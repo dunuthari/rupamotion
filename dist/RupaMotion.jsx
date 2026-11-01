@@ -10148,13 +10148,21 @@
             return;
         }
         hint(p, "Select text layer(s), put the playhead where it should start, click a preset.");
-        // one full-width button per preset, so long names are never clipped
+        // two columns; every button gets the same preferred width so the pair splits the row evenly
+        var row2 = null;
         for (var i = 0; i < TEXT_PRESETS.length; i++) {
+            if (i % 2 === 0) { row2 = btnRow(p); }
             (function (idx) {
-                btn(btnRow(p), TEXT_PRESETS[idx].name, function () {
+                var tb = btn(row2, TEXT_PRESETS[idx].name, function () {
                     run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); });
                 }, "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead.");
+                tb.preferredSize.width = 120;
             })(i);
+        }
+        if (TEXT_PRESETS.length % 2 === 1) {
+            // keep the last button the same width as the others
+            var pad = row2.add("group");
+            pad.preferredSize = [120, 32];
         }
     });
 

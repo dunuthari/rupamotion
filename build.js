@@ -44,7 +44,11 @@ function syncPreview(names, file) {
   const html = fs.readFileSync(file, "utf8");
   const re = /\/\*TEXT_PRESET_BUTTONS\*\/[\s\S]*?\/\*END_TEXT_PRESET_BUTTONS\*\//;
   if (!re.test(html)) return false;
-  const rows = names.map((n) => `ROW([[${JSON.stringify(n)}, ${JSON.stringify("Applied the " + n + " preset.")}]], "one")`);
+  const rows = [];   // two buttons per row, like the panel
+  for (let i = 0; i < names.length; i += 2) {
+    const pair = names.slice(i, i + 2).map((n) => `[${JSON.stringify(n)}, ${JSON.stringify("Applied the " + n + " preset.")}]`);
+    rows.push(`ROW([${pair.join(", ")}])`);
+  }
   const next = html.replace(re, () => `/*TEXT_PRESET_BUTTONS*/ ${rows.join(", ")} /*END_TEXT_PRESET_BUTTONS*/`);
   if (next !== html) fs.writeFileSync(file, next);
   return true;
