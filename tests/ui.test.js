@@ -36,7 +36,7 @@ const app = { settings:{haveSetting:(s,k)=>(s+k) in settings,getSetting:(s,k)=>s
 function Panel(){}; let lastWin = null; function Window(){ lastWin = el('window'); return lastWin; }
 const g = { ImportOptions: function (f) { this.file = f; }, ImportAsType: { FOOTAGE: 1 }, File: FakeFile0, Folder: { temp: { fsName: '/tmp' } }, app, Panel, Window, $: $g, alert: ()=>{}, ScriptUI: { newFont:(f,s,z)=>({f,s,z}) },
   CompItem:function(){}, FootageItem:function(){}, AVLayer:function(){}, ShapeLayer:function(){}, TextLayer:function(){},
-  CameraLayer:function(){}, LightLayer:function(){}, Shape:function(){}, KeyframeEase:function(sp,inf){ this.speed=sp; this.influence=inf; }, KeyframeInterpolationType:{LINEAR:'L',BEZIER:'B'},
+  CameraLayer:function(){}, LightLayer:function(){}, Shape:function(){}, KeyframeEase:function(sp,inf){ this.speed=sp; this.influence=inf; }, KeyframeInterpolationType:{LINEAR:'L',BEZIER:'B',HOLD:'H'},
   PropertyType:{PROPERTY:1}, MarkerValue:function(){}, TrackMatteType:{}, BlendingMode:{}, ParagraphJustification:{}, AutoOrientType:{} };
 const run = new Function(...Object.keys(g), 'thisObj', src.replace(/\}\)\(this\);\s*$/, '})(thisObj);'));
 const root = Object.assign(new Panel(), el('panel','root'));
@@ -471,6 +471,7 @@ function baseLayer(kind) {
     transform: { anchorPoint: fakeAnimProp(2, [0, 0]), position: fakeAnimProp(2, [0, 0]), scale: fakeAnimProp(2, [100, 100]), opacity: fakeAnimProp(1, 100), rotation: fakeAnimProp(1, 0) } };
   L.nodes = {};
   L.moveToBeginning = function () { this.onTop = true; };
+  L.remove = function () { this.removed = true; };
   L.setTrackMatte = function (m, type) { this.matte = m; this.matteType = type; };
   L.property = function (x) { return (this.nodes[x] = this.nodes[x] || fakeNode(x)); };
   return L;
@@ -672,4 +673,33 @@ function buildTextIcon(sentence, atIndex, opts) {
   setField('First sentence:', 'Give your users a place'); setField('Second sentence:', 'to give feedback,');
   const bad = Object.keys(R).filter(kk => !R[kk]);
   console.log(`star swipe: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Typewriter: letters pop in one by one with a caret that follows
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
+  const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+  setField('Text:', 'Hi there');
+  ['Caret', 'Keep centred while typing'].forEach(lbl => { const tg = walk(root).filter(n => n.type === 'button' && n.text === lbl && typeof n.value === 'boolean')[0]; if (tg.value !== true) { tg.onClick(); } });
+  walk(root).filter(n => n.type === 'button' && n.text === 'Build typewriter')[0].onClick();
+  app.project.activeItem = null;
+  const live = made.filter(L => !L.removed), txt = live.find(L => L.name === 'MK Typewriter · Text'), caret = live.find(L => L.name === 'MK Typewriter · Caret');
+  R['scratch measuring layer is removed; text + caret remain'] = made.filter(L => L.kind === 'text').length === 2 && made.filter(L => L.removed).length === 1 && !!txt && !!caret;
+  // font 90: every letter is 45 px wide in the fake font; "Hi there" = 8 letters; first letter lands 0.3 s after the playhead (2 s), then 14 letters/s
+  const an = txt.property('ADBE Text Properties').property('ADBE Text Animators').children[0];
+  const start = an.property('ADBE Text Selectors').children[0].property('ADBE Text Index Start');
+  R['animator hides everything (opacity 0), Index units'] = an.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0;
+  R['9 hold keys: Start steps 0..8, first letter 0.3 s after the playhead, then 1/14 s per letter'] = start.keys.length === 9 && start.keys.every((k, i) => k.v === i && k.inT === 'H' && k.outT === 'H') && near(start.keys[0].t, 2) && near(start.keys[1].t, 2.3) && near(start.keys[8].t, 2.3 + 7 / 14);
+  const pk = txt.transform.position.keys;
+  R['line stays centred: position steps by half a letter (22.5 px) per letter'] = pk.length === 9 && near(pk[0].v[0], 960) && near(pk[1].v[0], 960 - 22.5) && near(pk[8].v[0], 960 - 8 * 22.5) && pk.every(k => near(k.v[1], 540));
+  const ck = caret.transform.position.keys, cw = Math.max(2, 90 * 0.045);
+  R['caret sits just after the last letter (centred line: right edge = centre + half the typed width)'] = ck.length === 9 && near(ck[0].v[0], 960 + 90 * 0.06 + cw / 2) && near(ck[8].v[0], 960 + 8 * 22.5 + 90 * 0.06 + cw / 2) && near(ck[3].t, pk[3].t);
+  const ok = caret.transform.opacity.keys;
+  R['caret is on from the start, then blinks twice after the last letter and goes away'] = ok[0].v === 100 && near(ok[0].t, 2) && ok.map(k => k.v).join() === '100,0,100,0,100,0' && near(ok[1].t, 2.3 + 7 / 14 + 0.4) && ok.every(k => k.inT === 'H');
+  R['layers last long enough for the typing and the blinks'] = made.filter(L => !L.removed).every(L => near(L.inPoint, 2) && L.outPoint >= 2 + 0.3 + 0.5 + 1.7);
+  const ofs = L => L.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Rect').property('ADBE Vector Rect Size').value;
+  R['caret is a thin bar about 1.1x the font size tall'] = near(ofs(caret)[0], cw) && near(ofs(caret)[1], 99);
+  R['text is the selected layer'] = txt.selected === true;
+  const bad = Object.keys(R).filter(kk => !R[kk]);
+  console.log(`typewriter: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

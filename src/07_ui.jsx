@@ -1254,6 +1254,29 @@
         }, "Builds both sentences, the wipe, the glow trail and the icon at the playhead. Everything follows one Move null.");
     }, "Text + Icon");
 
+    feature("Text", "Typewriter", function (p) {
+        hint(p, "Letters pop in one by one with a caret that follows the last letter.");
+        var tx = field(p, "Text:", getS("tw_text", "Let's choose a style"), 24, "The line to type out.");
+        tx.onChange = function () { putS("tw_text", tx.text); };
+        var col = colorChooser(p, "Text color:", style.textGray, "tw_color");
+        var size = field(p, "Font size:", getS("tw_size", "90"), 4, "Text size in pixels.");
+        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("tw_size", size.text); };
+        var cps = field(p, "Speed (letters/s):", "14", 4, "How many letters land each second.");
+        var hold = field(p, "First letter after (s):", "0.3", 4, "How long the caret waits alone before the first letter.");
+        var car = check(p, "Caret", true, "A thin caret that follows the last letter, then blinks away.");
+        var blinks = field(p, "Blinks after typing:", "2", 3, "How many times the caret blinks once the last letter has landed.");
+        var cen = check(p, "Keep centred while typing", true, "The line stays centred as it grows. Off: it types from where the finished line starts.");
+        var len = field(p, "Length (s):", "6", 4, "How long the layers last from the playhead (never shorter than the typing itself).");
+        btn(p, "Build typewriter", function () {
+            run("Typewriter", function () {
+                doTypewriter({
+                    text: tx.text, size: num(size.text, 90, 12, 600), color: col.get(), cps: num(cps.text, 14, 1, 120), hold: num(hold.text, 0.3, 0, 20),
+                    caret: car.value, blinks: Math.round(num(blinks.text, 2, 0, 20)), centred: cen.value, length: num(len.text, 6, 0.5, 120)
+                });
+            });
+        }, "Types the line at the playhead: per-letter steps (hold keys) on a text animator, plus a caret that follows.");
+    }, "Motion");
+
     // ---------------- UI Kit ----------------
 
     feature("UI Kit", "Pill button", function (p) {
