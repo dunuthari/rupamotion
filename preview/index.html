@@ -324,7 +324,7 @@
     { group: "Transitions", name: "Shape wipe", ui: [H("Select 2 clips, or put the playhead on the cut."), D("Shape:", ["Circle", "Triangle"]), D("Grow from:", ["Center", "Left", "Right", "Top", "Bottom"]), T("Blue accent shape leads the reveal", true), F("Accent lead (frames):", "3"), B("Add shape wipe", "Added the shape wipe.")] },
     { group: "Text", name: "Motion", ui: [H("Select text layer(s), put the playhead where it should start, click a preset."), /*TEXT_PRESET_BUTTONS*/ ROW([["1by1", "Applied the 1by1 preset."], ["Bounce text", "Applied the Bounce text preset."]]), ROW([["Bouncing Text HQ", "Applied the Bouncing Text HQ preset."], ["Bouncy Color FadeOut HQ", "Applied the Bouncy Color FadeOut HQ preset."]]), ROW([["Character down", "Applied the Character down preset."], ["Character right", "Applied the Character right preset."]]), ROW([["Color FadeOut HQ", "Applied the Color FadeOut HQ preset."], ["Gg MotionTypeLite", "Applied the Gg MotionTypeLite preset."]]), ROW([["SaaS Text Preset 3", "Applied the SaaS Text Preset 3 preset."], ["SaaS Text Preset 4", "Applied the SaaS Text Preset 4 preset."]]), ROW([["SaaS Text Preset 5", "Applied the SaaS Text Preset 5 preset."], ["SNAP TEXT", "Applied the SNAP TEXT preset."]]), ROW([["SNAP TEXT 2", "Applied the SNAP TEXT 2 preset."], ["Snapping Text HQ", "Applied the Snapping Text HQ preset."]]), ROW([["Word down", "Applied the Word down preset."], ["Word right", "Applied the Word right preset."]]) /*END_TEXT_PRESET_BUTTONS*/] },
     { group: "Text", name: "Text + Icon", ui: [["textIcon"]] },
-    { group: "Text", name: "Star Swipe", ui: [["starSwipe"]] },
+    { group: "Text", name: "Star Swipe", parent: "Text + Icon", ui: [["starSwipe"]] },
     { group: "UI Kit", name: "Pill button", ui: [F("Label:", "+ New", { wide: true }), D("Style:", ["Primary", "White glass", "Outline"]), T("Pop in at playhead", true), B("Create pill button", "Created the pill button.")] },
     { group: "UI Kit", name: "Frosted glass", ui: [H("Select shapes; blurs whatever is behind them."), F("Blur radius:", "30"), B("Frost selected shapes", "Frosted the selected shapes.")] },
     { group: "UI Kit", name: "AI glow button", ui: [F("Label:", "Creating…", { wide: true }), B("Create AI glow button", "Created the AI glow button.")] },
@@ -907,22 +907,30 @@
   }
 
   function pick(g, featName) {
-    var list = featuresOf(g);
-    var f = list.filter(function (x) { return x.name === featName; })[0] || list[0];
+    var all = featuresOf(g), list = all.filter(function (x) { return !x.parent; });
+    var f = all.filter(function (x) { return x.name === featName; })[0] || list[0];
+    var top = f.parent || f.name, kids = all.filter(function (x) { return x.parent === top; });
     [].forEach.call(nav.children, function (t) { t.setAttribute("aria-selected", String(t.dataset.group === g)); });
     chips.innerHTML = "";
     chips.hidden = list.length <= 1 && g !== "Text";   // Text always shows its sub-group chips
     if (list.length > 1 || g === "Text") {
       list.forEach(function (x) {
         chips.appendChild(el("button", {
-          class: "chip", type: "button", role: "tab", text: x.name, title: x.name, "aria-selected": String(x === f),
-          onclick: function (ev) {
-            [].forEach.call(chips.children, function (c) { c.setAttribute("aria-selected", "false"); });
-            ev.currentTarget.setAttribute("aria-selected", "true");
-            showFeature(x);
-          }
+          class: "chip", type: "button", role: "tab", text: x.name, title: x.name, "aria-selected": String(x.name === top),
+          onclick: function () { pick(g, x.name); }
         }));
       });
+      // a chip with children opens a second row under it (Text + Icon > Text + Icon | Star Swipe)
+      if (kids.length) {
+        var sub = el("div", { class: "chips", style: "grid-column:1/-1" });
+        [top].concat(kids.map(function (k) { return k.name; })).forEach(function (nm) {
+          sub.appendChild(el("button", {
+            class: "chip", type: "button", role: "tab", text: nm, title: nm, "aria-selected": String(nm === f.name),
+            onclick: function () { pick(g, nm); }
+          }));
+        });
+        chips.appendChild(sub);
+      }
     }
     showFeature(f);
     save("group", g);

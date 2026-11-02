@@ -383,7 +383,8 @@
     loadStyle();
     var FEATURES = [];
     var SUBGROUP_CHIPS = { "Text": true };
-    function feature(group, name, build) { FEATURES.push({ group: group, name: name, build: build }); }
+    // parent (optional): the name of another feature in the same group; this feature then lives under that chip as a second-level chip
+    function feature(group, name, build, parent) { FEATURES.push({ group: group, name: name, build: build, parent: parent || "" }); }
 
     // ---------------- shared UI bits ----------------
 
@@ -1251,7 +1252,7 @@
                 });
             });
         }, "Builds both sentences, the wipe, the glow trail and the icon at the playhead. Everything follows one Move null.");
-    });
+    }, "Text + Icon");
 
     // ---------------- UI Kit ----------------
 
@@ -1580,36 +1581,64 @@
 
         function buildChips(groupName, featName) {
             while (chips.children.length > 0) { chips.remove(chips.children[0]); }
-            var names = [], k;
-            for (k = 0; k < FEATURES.length; k++) { if (FEATURES[k].group === groupName) { names.push(FEATURES[k].name); } }
+            var names = [], kids = {}, k, parentOf = "";
+            for (k = 0; k < FEATURES.length; k++) {
+                if (FEATURES[k].group !== groupName) { continue; }
+                if (FEATURES[k].parent !== "") {
+                    kids[FEATURES[k].parent] = kids[FEATURES[k].parent] || [];
+                    kids[FEATURES[k].parent].push(FEATURES[k].name);
+                    if (FEATURES[k].name === featName) { parentOf = FEATURES[k].parent; }
+                } else { names.push(FEATURES[k].name); }
+            }
+            var activeTop = parentOf !== "" ? parentOf : featName;
             // groups with named sub-groups (Text > Motion) always show their chip row, even with one sub-group
             var single = names.length <= 1 && !SUBGROUP_CHIPS[groupName];
             chips.visible = !single;
             chips.maximumSize.height = single ? 0 : 1000;
             if (single) { return; }
-            var r = null, made = [];
-            for (k = 0; k < names.length; k++) {
-                if (k % 3 === 0) {
-                    r = chips.add("group");
-                    r.orientation = "row";
-                    r.alignChildren = ["fill", "center"];
-                    r.spacing = 6;
+            var subRows = {};
+            function chipRow(list, active, onPick, store) {
+                var rr = null, mine = [], n;
+                for (n = 0; n < list.length; n++) {
+                    if (n % 3 === 0) {
+                        rr = (store || chips).add("group");
+                        rr.orientation = "row";
+                        rr.alignChildren = ["fill", "center"];
+                        rr.spacing = 6;
+                    }
+                    (function (nm) {
+                        var c = styleButton(rr.add("button", undefined, nm), nm === active ? "chip-on" : "chip", 28);
+                        c.preferredSize.width = 80;
+                        c.baseText = nm;
+                        if (CLASSIC && nm === active) { c.text = "● " + nm; }
+                        c.onClick = function () {
+                            for (var q = 0; q < mine.length; q++) {
+                                mine[q].variant = (mine[q] === c) ? "chip-on" : "chip";
+                                if (CLASSIC) { mine[q].text = (mine[q] === c ? "● " : "") + mine[q].baseText; }
+                                else { repaint(mine[q]); }
+                            }
+                            onPick(nm);
+                        };
+                        mine.push(c);
+                    })(list[n]);
                 }
-                (function (nm) {
-                    var c = styleButton(r.add("button", undefined, nm), nm === featName ? "chip-on" : "chip", 28);
-                    c.preferredSize.width = 80;
-                    c.baseText = nm;
-                    if (CLASSIC && nm === featName) { c.text = "● " + nm; }
-                    c.onClick = function () {
-                        for (var q = 0; q < made.length; q++) {
-                            made[q].variant = (made[q] === c) ? "chip-on" : "chip";
-                            if (CLASSIC) { made[q].text = (made[q] === c ? "● " : "") + made[q].baseText; }
-                            else { repaint(made[q]); }
-                        }
-                        showFeature(groupName, nm);
-                    };
-                    made.push(c);
-                })(names[k]);
+                return mine;
+            }
+            // top row: features without a parent; a chip that has children opens a second row under it
+            chipRow(names, activeTop, function (nm) {
+                for (var pn in subRows) { if (subRows.hasOwnProperty(pn)) { subRows[pn].visible = (pn === nm); subRows[pn].maximumSize.height = (pn === nm) ? 1000 : 0; } }
+                showFeature(groupName, nm);
+            });
+            for (var pn2 in kids) {
+                if (!kids.hasOwnProperty(pn2)) { continue; }
+                var holder = chips.add("group");
+                holder.orientation = "column";
+                holder.alignChildren = ["fill", "center"];
+                holder.spacing = 6;
+                chipRow([pn2].concat(kids[pn2]), featName, function (nm) { showFeature(groupName, nm); }, holder);
+                holder.visible = (pn2 === activeTop);
+                holder.maximumSize.height = (pn2 === activeTop) ? 1000 : 0;
+                subRows[pn2] = holder;
             }
         }
 
