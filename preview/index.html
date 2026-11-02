@@ -788,7 +788,7 @@
       });
       var tl = W * 0.3, tOn = trailOn.getAttribute("aria-checked") === "true";
       trail.style.width = tl + "px"; trail.style.height = (h * 1.3) + "px"; trail.style.left = (x - tl - isz * 0.1) + "px"; trail.style.marginTop = (-h * 0.65) + "px";
-      trail.style.background = colorOf(trcRow); trail.style.filter = "blur(" + (h * 0.45) + "px)";
+      trail.style.background = "linear-gradient(90deg, transparent, " + colorOf(trcRow) + ")"; trail.style.filter = "blur(" + (h * 0.3) + "px)";
       trail.style.opacity = tOn ? (p <= 0 || p >= 1 ? 0 : p < 0.45 ? p / 0.45 : (1 - p) / 0.55) : 0;
     }
     function play() {

@@ -1841,7 +1841,7 @@
     // (left of the star) is sentence 2, everything ahead of it is still sentence 1, with a soft edge and a glowing trail
     // that is strongest mid-flight. The star stops just past the end of the wider sentence; sentence 2 stays. Timings and the curve are estimates from
     // the clip (not measured to the frame), so they are plain fields / one constant: tune freely.
-    var SS = { curve: [0.55, 0, 0.3, 1], dur: 0.8, hold: 0.4, trailK: 0.3, softness: 30 };
+    var SS = { curve: [0.55, 0, 0.3, 1], dur: 0.8, hold: 0.4, trailK: 0.3, trailSlices: 16, trailPow: 1.6, softness: 30 };
 
     // o: first, second, size, iconPct, iconFile, textColor, iconColor, trail (bool), trailColor, hold, dur, softness, spin (bool), length
     function doStarSwipe(o) {
@@ -1898,12 +1898,16 @@
 
         var tA = t0 + o.hold, tB = tA + o.dur, trailL = null;
         if (o.trail) {
-            var len = comp.width * SS.trailK;
+            var len = comp.width * SS.trailK, N = SS.trailSlices, sw = len / N, k, op;
             trailL = shapeLayer(comp, "MK Star Swipe · Trail");
-            var gt = newGroup(trailL, "Trail");
-            addRect(trailL, gt, len, h * 1.3, h * 0.65, [-len / 2 - iconSize * 0.1, 0]);
-            addFill(trailL, gt, o.trailColor, 100);
-            fxSet(fxAdd(trailL, "ADBE Gaussian Blur 2"), 1, h * 0.45);
+            // a fading tail: N thin slices whose opacity rises from 0% at the far end to 100% at the star; the blur melts them into one smooth ramp
+            for (k = 0; k < N; k++) {
+                op = Math.pow((k + 0.5) / N, SS.trailPow) * 100;
+                var gt = newGroup(trailL, "Trail " + (k + 1));
+                addRect(trailL, gt, sw + 1, h * 1.3, 0, [-len + (k + 0.5) * sw - iconSize * 0.1, 0]);
+                addFill(trailL, gt, o.trailColor, op);
+            }
+            fxSet(fxAdd(trailL, "ADBE Gaussian Blur 2"), 1, h * 0.3);
             trailL.parent = nul;
             setXY(trailL.transform.position, lx, ly);
             setKeys(trailL.transform.opacity, [[t0, 0], [tA, 0], [tA + o.dur * 0.45, 100], [tB, 0]]);

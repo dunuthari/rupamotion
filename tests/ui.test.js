@@ -655,6 +655,10 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['reveal edges sit on the star centre (left / right half planes)'] = [rA, rB, trail, star].every(L => L.parent === nul && L.transform.position.value[0] === 50 && L.transform.position.value[1] === 50);
   const rectPos = L => L.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Rect').property('ADBE Vector Rect Position').value[0];
   R['left reveal extends left, right reveal extends right'] = rectPos(rA) < 0 && rectPos(rB) > 0 && near(rectPos(rA), -rectPos(rB));
+  const tg = trail.property('ADBE Root Vectors Group').children, fo = g => g.property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Graphic - Fill').property('ADBE Vector Fill Opacity').value;
+  const ops = tg.map(fo), rx = g => g.property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Rect').property('ADBE Vector Rect Position').value[0];
+  R['trail tail is 0% and rises to 100% at the star (16 slices, increasing, tail first)'] = tg.length === 16 && ops.every((v, i) => i === 0 || v > ops[i - 1]) && ops[0] < 2 && ops[15] > 95 && ops[15] <= 100;
+  R['trail slices run from the far tail up to the star centre'] = rx(tg[0]) < rx(tg[15]) && rx(tg[15]) <= 0 && tg.every((g, i) => i === 0 || rx(g) > rx(tg[i - 1]));
   R['trail fades in and out (0 -> 100 -> 0)'] = trail.transform.opacity.keys.length === 4 && trail.transform.opacity.keys[2].v === 100 && trail.transform.opacity.keys[3].v === 0;
   R['star spins half a turn while it sweeps'] = star.transform.rotation.keys.length === 2 && star.transform.rotation.keys[1].v === 180 && near(star.transform.rotation.keys[1].t, 3.2);
   R['layers last 5 s from the playhead'] = made.every(L => near(L.inPoint, 2) && near(L.outPoint, 7));
