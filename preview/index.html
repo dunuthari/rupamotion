@@ -712,11 +712,16 @@
       svg.firstChild.querySelector("path").setAttribute("fill", colorOf(icolRow));
       svg.firstChild.style.left = (-isz / 2) + "px"; svg.firstChild.style.top = (-isz / 2) + "px";
     }
+    // plays on a loop, like a GIF: the animation, a short rest on the finished pose, then again
     function play() {
       cancelAnimationFrame(raf); startT = null;
       (function tick(now) {
-        if (startT === null) startT = now; var tau = (now - startT) / 1000; draw(tau);
-        if (tau < 4) raf = requestAnimationFrame(tick); else draw(1e9);
+        if (!wrap.isConnected) { return; }
+        if (startT === null) startT = now;
+        var tau = (now - startT) / 1000, run = 1.6 + (hl.getAttribute("aria-checked") === "true" ? wordsNow().length * (+step.value || 1) : 0), rest = 1.3;
+        if (tau >= run + rest) { startT = now; tau = 0; }
+        draw(tau < run ? tau : 1e9);
+        raf = requestAnimationFrame(tick);
       })(performance.now());
     }
     var build_ = el("button", { class: "btn primary", type: "button", text: "Build text + icon",
@@ -743,7 +748,7 @@
     wrap.appendChild(stage);
     wrap.appendChild(build_);
     refresh();
-    requestAnimationFrame(function () { draw(1e9); });
+    requestAnimationFrame(play);
     return wrap;
   }
 
@@ -791,11 +796,16 @@
       trail.style.background = "linear-gradient(90deg, transparent, " + colorOf(trcRow) + ")"; trail.style.filter = "blur(" + (h * 0.3) + "px)";
       trail.style.opacity = tOn ? (p <= 0 || p >= 1 ? 0 : p < 0.45 ? p / 0.45 : (1 - p) / 0.55) : 0;
     }
+    // plays on a loop, like a GIF: rest pose, the sweep, a pause on sentence 2, then again
     function play() {
       cancelAnimationFrame(raf); startT = null;
       (function tick(now) {
-        if (startT === null) startT = now; var tau = (now - startT) / 1000; draw(tau);
-        if (tau < (+hold.value || 0) + (+dur.value || 0.8) + 0.4) raf = requestAnimationFrame(tick); else draw(1e9);
+        if (!wrap.isConnected) { return; }
+        if (startT === null) startT = now;
+        var tau = (now - startT) / 1000, run = (+hold.value || 0) + (+dur.value || 0.8), rest = 1.3;
+        if (tau >= run + rest + 0.4) { startT = now; tau = 0; }
+        draw(tau < run ? tau : 1e9);
+        raf = requestAnimationFrame(tick);
       })(performance.now());
     }
     var go = el("button", { class: "btn primary", type: "button", text: "Build star swipe", title: "Builds both sentences, the wipe, the glow trail and the icon at the playhead. Everything follows one Move null.",
@@ -807,9 +817,8 @@
     wrap.appendChild(row("Wait (s):", hold, hold.id)); wrap.appendChild(row("Sweep (s):", dur, dur.id)); wrap.appendChild(row("Edge softness (px):", soft, soft.id));
     wrap.appendChild(spinOn); wrap.appendChild(row("Length (s):", len, len.id));
     wrap.appendChild(stage); wrap.appendChild(go);
-    wrap.addEventListener("input", function () { save("ss_first", a.value); save("ss_second", b.value); draw(0); });
-    wrap.addEventListener("change", function () { draw(0); });
-    requestAnimationFrame(function () { draw(0); });      // rest pose: the star waits in front of sentence 1
+    wrap.addEventListener("input", function () { save("ss_first", a.value); save("ss_second", b.value); });
+    requestAnimationFrame(play);
     return wrap;
   }
 
