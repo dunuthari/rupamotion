@@ -13600,6 +13600,8 @@
     // line leaves through the top of the window and the second line rises into its place from below. The words move one after
     // another, each line on its own (about 0.08 s apart, about 0.2 s each, ease-out). It is one button on the selected text
     // layer(s), no settings. Timings are read off the clip, not frame-measured.
+    // Two ways to give it the two sentences: TWO text layers (select both: the upper one in the stack leaves, the lower one arrives, and
+    // both should sit in the same place), or ONE text layer with the sentences on two lines.
     //
     // Two keyframes: a "Roll" slider effect on the text layer goes 0 -> T seconds; an expression selector on a Position animator
     // turns that into each word's own 0-100% amount. If the expression selector cannot be created the whole block rolls instead.
@@ -13612,12 +13614,14 @@
         try { m = L.property("ADBE Mask Parade"); for (i = m.numProperties; i >= 1; i--) { if (m.property(i).name === "MK Roll Window") { m.property(i).remove(); } } } catch (e2) {}
     }
 
-    function rollOne(comp, L, t0) {
+    // mode: "both" (one layer, two lines), "out" (this layer's text leaves upwards) or "in" (this layer's text arrives from below)
+    function rollOne(comp, L, t0, mode) {
         var sp = textDocProp(L), src = sp.value;
         if (trim(src.text) === "") { return "skipped"; }
         clearRoll(L);
         var lay = layoutText(comp, L, t0);
-        if (lay.lines < 2 || lay.wx.length < 2) { return "needs two lines"; }
+        if (mode === "both" && (lay.lines < 2 || lay.wx.length < 2)) { return "needs two lines"; }
+        if (lay.wx.length < 1) { return "skipped"; }
         var fs = src.fontSize, step = lay.lineStep;
 
         // each word's place within its own line (0, 1, 2 ...), per word and per character (spaces take the word before them)
@@ -13655,7 +13659,8 @@
         an.name = "MK SaaS Roll";
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Position 3D");
         var pos = an.property("ADBE Text Animator Properties").property("ADBE Text Position 3D");
-        pos.setValue([0, -step, 0]);
+        var dir = (mode === "in") ? 1 : -1;                  // arriving text starts one line lower and rises into place
+        pos.setValue([0, dir * step, 0]);
 
         var ok = false;
         if (sl) {
@@ -13672,7 +13677,7 @@
                     amt.expression = "// MK SaaS Text Roll\nvar LW=" + arrExpr(inLine) + ";\nvar LC=" + arrExpr(perChar) + ";\nvar NW=" + inLine.length + ";\n" +
                         "var v=effect(\"Roll\")(\"Slider\");\n" +
                         "var k=(textTotal===NW)?LW[textIndex-1]:LC[textIndex-1];\n" +
-                        "var u=(v-k*" + SR.stagger + ")/" + SR.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\nu*100";
+                        "var u=(v-k*" + SR.stagger + ")/" + SR.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\n" + (mode === "in" ? "(1-u)*100" : "u*100");
                     ok = true;
                 }
             } catch (eS) { ok = false; }
@@ -13681,8 +13686,8 @@
             // fallback: the whole block rolls up together (two keys on the animator's own Position)
             try { var sg = an.property("ADBE Text Selectors"); if (sg.numProperties === 0) { sg.addProperty("ADBE Text Selector"); } } catch (eF) {}
             pos.setValue([0, 0, 0]);
-            pos.setValueAtTime(t0, [0, 0, 0]);
-            pos.setValueAtTime(t0 + T, [0, -step, 0]);
+            pos.setValueAtTime(t0, [0, mode === "in" ? step : 0, 0]);
+            pos.setValueAtTime(t0 + T, [0, mode === "in" ? 0 : -step, 0]);
             try { easeBetweenKeys(pos, t0, t0 + T, [0.2, 0, 0.2, 1]); } catch (eE) {}
         }
         return ok ? "ok" : "fallback";
@@ -13690,16 +13695,24 @@
 
     function doSaasRoll() {
         var comp = activeComp(); if (!comp) { return; }
-        var sel = selLayers(comp, 1, "Select the text layer(s) to roll. Each one needs the two sentences on two lines."); if (!sel) { return; }
-        var t0 = comp.time, done = 0, bad = 0, i, res;
-        for (i = 0; i < sel.length; i++) {
-            if (!isTextLayer(sel[i])) { bad++; continue; }
-            res = rollOne(comp, sel[i], t0);
-            if (res === "ok" || res === "fallback") { done++; } else { bad++; }
+        var sel = selLayers(comp, 1, "Select the two text layers (first sentence above, second sentence below), or one text layer with two lines."); if (!sel) { return; }
+        var t0 = comp.time, i, texts = [];
+        for (i = 0; i < sel.length; i++) { if (isTextLayer(sel[i])) { texts.push(sel[i]); } }
+        if (texts.length === 2) {
+            // the upper layer in the stack is the sentence that leaves, the lower one is the sentence that arrives
+            if (texts[0].index > texts[1].index) { var sw = texts[0]; texts[0] = texts[1]; texts[1] = sw; }
+            var r1 = rollOne(comp, texts[0], t0, "out"), r2 = rollOne(comp, texts[1], t0, "in");
+            for (i = 0; i < sel.length; i++) { try { sel[i].selected = true; } catch (e) {} }
+            if ((r1 !== "ok" && r1 !== "fallback") || (r2 !== "ok" && r2 !== "fallback")) { alert("One of the two text layers has no text. Nothing was rolled.", NAME); }
+            return;
         }
-        for (i = 0; i < sel.length; i++) { try { sel[i].selected = true; } catch (e) {} }
-        if (done === 0) { alert("Type the two sentences on two lines of one text layer (Enter between them), select it, then try again.", NAME); }
-        else if (bad > 0) { alert(bad + " layer(s) were skipped (not text, or not two lines).", NAME); }
+        if (texts.length === 1) {
+            var res = rollOne(comp, texts[0], t0, "both");
+            try { texts[0].selected = true; } catch (e2) {}
+            if (res !== "ok" && res !== "fallback") { alert("This text layer needs the two sentences on two lines. Or select two text layers: the first sentence above, the second below.", NAME); }
+            return;
+        }
+        alert("Select two text layers (first sentence above, second sentence below), or one text layer with two lines.", NAME);
     }
 
     // =====================================================================
@@ -15994,7 +16007,7 @@
             })(i);
         }
         // built-in, no settings: a two-line text rolls up through a one-line window, word by word
-        items.push({ name: "SaaS Text Preset 1", tip: "Put the two sentences on two lines of one text layer and select it. The first line rolls up and out through a one-line window while the second rises into its place, word by word.",
+        items.push({ name: "SaaS Text Preset 1", tip: "Select two text layers (first sentence above, second below, placed in the same spot), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word.",
             go: function () { run("SaaS Text Preset 1", doSaasRoll); } });
         // built-in, no settings: types the selected text layer out letter by letter, with a caret
         items.push({ name: "Typewriter", tip: "Types the selected text layer out letter by letter at the playhead, with a caret that follows.",
