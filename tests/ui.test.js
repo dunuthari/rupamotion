@@ -762,3 +762,44 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`star swipe panel preview: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// Typewriter Block: word by word, a gradient block over the next word, a blue wave behind it
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
+  function run(boxed) {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+    const L0 = comp.layers.addText('Hi there you'); L0.doc.fontSize = 90;
+    if (boxed) { L0.doc.boxText = true; L0.doc.boxTextSize = [500, 300]; }
+    L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, -33.75]);
+    comp.selectedLayers = [L0];
+    const b = walk(root).filter(n => n.type === 'button' && n.text === 'Typewriter Block' && n.parent && n.parent.isBtnRow)[0];
+    b.onClick(); app.project.activeItem = null;
+    return { b, L0, made, block: made.filter(L => !L.removed).find(L => L.name === 'MK Typewriter · Block') };
+  }
+  const { b, L0, made, block } = run(false);
+  R['"Typewriter Block" is a plain button next to "Typewriter"'] = !!b && !walk(root).some(n => n.cardTitle === 'Typewriter Block');
+  R['scratch layer removed; the text and the block remain'] = made.filter(L => L.removed).length === 1 && !!block;
+  const anims = L0.property('ADBE Text Properties').property('ADBE Text Animators').children;
+  const reveal = anims.find(a => a.name === 'MK Typewriter'), wave = anims.find(a => a.name === 'MK Typewriter Wave');
+  const sel = a => a.property('ADBE Text Selectors').children[0], adv = a => sel(a).property('ADBE Text Range Advanced');
+  R['two animators: reveal + wave; both on Words / Index units'] = !!reveal && !!wave && [reveal, wave].every(a => adv(a).property('ADBE Text Range Units').value === 2 && adv(a).property('ADBE Text Range Type2').value === 3);
+  const st = sel(reveal).property('ADBE Text Index Start').keys, dt = 1 / 6;
+  R['reveal: 4 hold keys 0..3, first word after 0.3 s, then 1/6 s per word'] = st.length === 4 && st.every((k, i) => k.v === i && k.inT === 'H') && near(st[0].t, 2) && near(st[1].t, 2.3) && near(st[3].t, 2.3 + 2 * dt);
+  R['reveal hides everything (opacity 0)'] = reveal.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0;
+  const ws = sel(wave).property('ADBE Text Index Start').keys, we = sel(wave).property('ADBE Text Index End').keys;
+  R['wave: window of the last 7 words, Ramp Up, blue fill'] = adv(wave).property('ADBE Text Range Shape').value === 2 && ws.map(k => k.v).join() === '0,0,0,0' && we.map(k => k.v).join() === '0,1,2,3' && Math.abs(wave.property('ADBE Text Animator Properties').property('ADBE Text Fill Color').value[2] - 0.965) < 1e-6;
+  // font 90: 45 px per letter; "Hi " = 135, "Hi there " = 405; words are 90, 225 and 135 px wide
+  const bp = block.transform.position.keys, bs = block.transform.scale.keys;
+  R['block sits on the next word: x = 0, 135, 405 px from the text start (3 keys)'] = bp.length === 3 && near(bp[0].v[0], 960) && near(bp[1].v[0], 960 + 135) && near(bp[2].v[0], 960 + 405) && bp.every(k => near(k.v[1], 540));
+  R['block is as wide as that word (scale 90 / 225 / 135 %)'] = bs.length === 3 && near(bs[0].v[0], 90) && near(bs[1].v[0], 225) && near(bs[2].v[0], 135) && bs.every(k => k.v[1] === 100);
+  const bo = block.transform.opacity.keys;
+  R['block goes away when the last word lands'] = bo.length === 2 && bo[0].v === 100 && bo[1].v === 0 && near(bo[1].t, 2.3 + 2 * dt);
+  const fillOf = i => block.property('ADBE Root Vectors Group').children[i].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Graphic - Fill').property('ADBE Vector Fill Color').value;
+  R['block is a gradient: 10 slices from cyan-blue to periwinkle'] = block.property('ADBE Root Vectors Group').children.length === 10 && fillOf(0)[0] < fillOf(9)[0] && fillOf(0)[2] < fillOf(9)[2] + 1;
+  R['the text keeps its style'] = L0.doc.text === 'Hi there you' && L0.doc.fontSize === 90;
+  // paragraph text: the third word wraps onto the second line (box 500 px wide), so the block drops one line (108 px)
+  const bx = run(true).block.transform.position.keys;
+  R['paragraph text: the block follows the wrap (next line, back to the left edge)'] = bx.length === 3 && near(bx[2].v[0], 960) && near(bx[2].v[1], 540 + 108) && near(bx[1].v[1], 540);
+  const bad = Object.keys(R).filter(kk => !R[kk]);
+  console.log(`typewriter block: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}

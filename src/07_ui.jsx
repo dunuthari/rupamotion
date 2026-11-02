@@ -1106,6 +1106,8 @@
         // built-in, no settings: types the selected text layer out letter by letter, with a caret
         items.push({ name: "Typewriter", tip: "Types the selected text layer out letter by letter at the playhead, with a caret that follows.",
             go: function () { run("Typewriter", doTypewriter); } });
+        items.push({ name: "Typewriter Block", tip: "Types the selected text out word by word: a gradient block sits over the next word and the newest words glow blue, then settle back to the text colour.",
+            go: function () { run("Typewriter Block", doTypewriterBlock); } });
         hint(p, "Select text layer(s), put the playhead where it should start, click an effect.");
         // two columns; every button gets the same preferred width so the pair splits the row evenly
         var row2 = null;
