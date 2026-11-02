@@ -745,3 +745,20 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`text + icon panel preview: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// Star Swipe: the panel shows a picture of the sweep halfway through
+{
+  const R = {};
+  const stage = walk(root).filter(n => n.type === 'group' && typeof n.onDraw === 'function' && n.preferredSize && (n.preferredSize[1] === 92 || n.preferredSize.height === 92)).filter(n => { let p = n.parent; while (p) { if (p.cardTitle === 'Star Swipe') return true; p = p.parent; } return false; })[0];
+  R['the Star Swipe card has a preview stage'] = !!stage;
+  const calls = { str: [], pts: [] }, rec = gfx(), ds = rec.drawString, mv = rec.moveTo, ln = rec.lineTo;
+  rec.drawString = (s, p, x, yy, f) => { ds(s, p, x, yy, f); calls.str.push({ s, x, y: yy }); };
+  rec.moveTo = (x, yy) => { mv(x, yy); calls.pts.push([x, yy]); }; rec.lineTo = (x, yy) => { ln(x, yy); calls.pts.push([x, yy]); };
+  stage.size = [300, 92]; stage.graphics = rec; stage.onDraw();
+  const letters = calls.str.map(c => c.s).join('');
+  R['draws letters of both sentences (second behind the star, first ahead of it)'] = /to|giv|fee/.test(letters) && /pla|ace|use/.test(letters) && calls.str.length > 6;
+  R['star sparkle (28 outline points) is drawn'] = calls.pts.length >= 28;
+  R['everything stays inside the stage'] = calls.pts.every(p => p[0] >= 0 && p[0] <= 300 && p[1] >= 0 && p[1] <= 92) && calls.str.every(c => c.x >= 0 && c.x <= 300);
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`star swipe panel preview: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}

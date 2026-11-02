@@ -15801,6 +15801,53 @@
         g.fillPath(brush(g, [ic[0], ic[1], ic[2], 1]));
     }
 
+    // Static picture of the Star Swipe halfway through the sweep: sentence 2 behind the star, sentence 1 ahead of it, the star on
+    // the wipe edge and a fading glow behind it. Letters are drawn one by one (there is no clipping in ScriptUI), using the same
+    // width estimate as the Text + Icon stage. o: first, second, size, pct, soft, textColor, iconColor, trail (bool), trailColor
+    function drawSsStage(ctrl, o) {
+        var g = ctrl.graphics, w = ctrl.size ? (ctrl.size.width || ctrl.size[0]) : 240, h = ctrl.size ? (ctrl.size.height || ctrl.size[1]) : 96, i, j;
+        rrPath(g, 0.5, 0.5, w - 1, h - 1, 12);
+        g.fillPath(brush(g, [0.055, 0.067, 0.110, 1]));
+        g.strokePath(pen(g, DS.border, 1));
+        var s1 = trim(o.first), s2 = trim(o.second);
+        if (s1 === "" || s2 === "") {
+            var hf = font("REGULAR", 12), hm = textSize(g, "Type both sentences", hf, 12);
+            textAt(g, "Type both sentences", DS.muted, Math.round((w - hm[0]) / 2), Math.round((h - hm[1]) / 2), hf);
+            return;
+        }
+        var fs0 = 26, w1 = approxWidth(s1, fs0), w2 = approxWidth(s2, fs0), iconS = TI.iconH * fs0 * 0.75 * o.pct / 100;
+        var gapX = Math.max(iconS * 0.7, o.soft * fs0 / Math.max(1, o.size) * 1.5), half = Math.max(w1, w2) / 2;
+        var fit = Math.min(1, (w - 24) / Math.max(1, 2 * (half + gapX))), fs = fs0 * fit, f = font("BOLD", fs);
+        var cx = w / 2, cy = h / 2, tc = o.textColor, ic = o.iconColor, tr = o.trailColor;
+        var xs = cx + (-half - gapX + 0.5 * 2 * (half + gapX)) * fit;                 // star at 50% of its sweep
+        var edge = o.soft * fs0 / Math.max(1, o.size) * fit * 0.5;
+        // glow: slices rising from nothing at the tail to full at the star
+        if (o.trail) {
+            var len = w * 0.28, N = 14, sw = len / N, th = fs * 0.75 * 1.3;
+            for (i = 0; i < N; i++) {
+                var al = Math.pow((i + 0.5) / N, 1.6) * 0.9;
+                g.newPath(); g.rectPath(xs - len + i * sw, cy - th / 2, sw + 1, th);
+                g.fillPath(brush(g, [tr[0], tr[1], tr[2], al]));
+            }
+        }
+        // letters: sentence 2 where it is behind the star, sentence 1 where it is still ahead
+        var str = [s1, s2], ws = [w1 * fit, w2 * fit], k, x, cw, mid, ty = Math.round(cy - fs * 0.62);
+        for (k = 1; k >= 0; k--) {
+            x = cx - ws[k] / 2;
+            for (j = 0; j < str[k].length; j++) {
+                cw = approxWidth(str[k].charAt(j), fs0) * fit;
+                mid = x + cw / 2;
+                if ((k === 1 && mid < xs - edge) || (k === 0 && mid > xs + edge)) { textAt(g, str[k].charAt(j), [tc[0], tc[1], tc[2], 1], Math.round(x), ty, f); }
+                x += cw;
+            }
+        }
+        var pts = sparkPoints(iconS * fit / 2, 7);
+        g.newPath();
+        for (i = 0; i < pts.length; i++) { if (i === 0) { g.moveTo(xs + pts[i][0], cy + pts[i][1]); } else { g.lineTo(xs + pts[i][0], cy + pts[i][1]); } }
+        g.closePath();
+        g.fillPath(brush(g, [ic[0], ic[1], ic[2], 1]));
+    }
+
     feature("Text", "Text + Icon", function (p) {
         hint(p, "Type 2–6 words, choose where the icon goes, browse for your icon.");
         var sent = field(p, "Sentence:", getS("ti_sentence", "feature requests"), 24, "Your words. The icon is placed in the gap you choose below.");
@@ -15900,8 +15947,20 @@
         hint(p, "An icon sweeps across sentence 1; sentence 2 appears in its wake.");
         var a = field(p, "First sentence:", getS("ss_first", "Give your users a place"), 24, "Shown at the start; the icon wipes it away.");
         var b = field(p, "Second sentence:", getS("ss_second", "to give feedback,"), 24, "Revealed behind the icon.");
-        a.onChange = function () { putS("ss_first", a.text); };
-        b.onChange = function () { putS("ss_second", b.text); };
+        a.onChange = function () { putS("ss_first", a.text); redraw(stage); };
+        b.onChange = function () { putS("ss_second", b.text); redraw(stage); };
+        a.onChanging = function () { redraw(stage); };
+        b.onChanging = function () { redraw(stage); };
+
+        // picture of the sweep halfway through (second sentence behind the star, first ahead of it)
+        var stage = p.add("group");
+        stage.alignment = ["fill", "top"];
+        stage.preferredSize = [200, 92];
+        stage.onDraw = function () {
+            if (!tcol || !icol || !trc || !size || !pct || !soft || !tr) { return; }
+            drawSsStage(this, { first: a.text, second: b.text, size: num(size.text, 90, 12, 600), pct: num(pct.text, 100, 10, 500), soft: num(soft.text, 30, 0, 300),
+                textColor: tcol.get(), iconColor: icol.get(), trail: tr.value, trailColor: trc.get() });
+        };
 
         var iconFile = null;
         var iconRow = row(p, "Icon:");
@@ -15932,11 +15991,17 @@
         var tr = check(p, "Glow trail", true, "A soft glow that follows the icon and fades out.");
         var trc = colorChooser(p, "Trail color:", "#C158BE", "ss_trail_color");
         var size = field(p, "Font size:", getS("ss_size", "90"), 4, "Text size in pixels.");
-        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ss_size", size.text); };
+        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ss_size", size.text); redraw(stage); };
         var pct = field(p, "Star size (%):", "100", 4, "100% = the icon at its natural size for this text.");
         var hold = field(p, "Wait (s):", "0.4", 4, "How long the icon waits in front of sentence 1 before it moves.");
         var dur = field(p, "Sweep (s):", "0.8", 4, "How long the icon takes to cross the frame.");
         var soft = field(p, "Edge softness (px):", "30", 4, "Softness of the wipe edge.");
+        soft.onChange = function () { redraw(stage); };
+        pct.onChange = function () { redraw(stage); };
+        tcol.onChange = function () { redraw(stage); };
+        icol.onChange = function () { redraw(stage); };
+        trc.onChange = function () { redraw(stage); };
+        tr.onToggle = function () { redraw(stage); };
         var spin = check(p, "Spin the icon", true, "Half a turn while it sweeps.");
         var len = field(p, "Length (s):", "5", 4, "How long the layers last from the playhead.");
 
