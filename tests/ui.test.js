@@ -733,6 +733,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['everything stays inside the stage'] = calls.pts.every(p => p[0] >= 0 && p[0] <= 300 && p[1] >= 0 && p[1] <= 92) && calls.str.every(c => c.x >= 0 && c.x <= 300);
   // a wider gap pushes the words apart, and a long sentence is shrunk to fit
   const gapBefore = rx.x - fx.x;
+  R['words never overlap: the second starts after the first one ends (width of "feature" at 30px is about 110+)'] = gapBefore > 100;
   setField('Icon gap (px):', '200');
   calls.str.length = 0; calls.pts.length = 0; stage.onDraw();
   const gapAfter = calls.str.find(c => c.s === 'requests').x - calls.str.find(c => c.s === 'feature').x;

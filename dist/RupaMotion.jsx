@@ -15724,6 +15724,32 @@
         }
     });
 
+    // Text size for the preview stage. measureString can fail or return nothing useful on some systems, and then the words
+    // pile up on each other, so fall back to a per-character width table (sans-serif bold, in em) that is close enough
+    // for a preview. The result is always a usable [width, height].
+    var EM_NARROW = "iljI.,:;!|'`", EM_MID = "tfrJ()[] -", EM_WIDE = "mwMW@%";
+    function approxWidth(str, fs) {
+        var w = 0, i, c;
+        for (i = 0; i < str.length; i++) {
+            c = str.charAt(i);
+            if (EM_NARROW.indexOf(c) >= 0) { w += 0.30; }
+            else if (EM_MID.indexOf(c) >= 0) { w += 0.38; }
+            else if (EM_WIDE.indexOf(c) >= 0) { w += 0.92; }
+            else if (c >= "A" && c <= "Z") { w += 0.70; }
+            else { w += 0.58; }
+        }
+        return w * fs;
+    }
+    function textSize(g, str, f, fs) {
+        var est = approxWidth(str, fs), w = est, m;
+        try {
+            m = f ? g.measureString(str, f) : g.measureString(str);
+            var mw = (m && m.width !== undefined) ? m.width : (m ? m[0] : 0);
+            if (typeof mw === "number" && mw > 0 && mw > est * 0.6 && mw < est * 1.6) { w = mw; }
+        } catch (e) {}
+        return [w, fs * 1.25];
+    }
+
     // Outline of the built-in sparkle as a polyline (ScriptUI paths have no curves). Same bezier as sparkleShape(R).
     function sparkPoints(R, steps) {
         var o = [0.07 * R, 0.55 * R], inn = [-0.55 * R, -0.07 * R], tips = [[0, -R], [R, 0], [0, R], [-R, 0]], pts = [], k, j, t;
@@ -15750,12 +15776,12 @@
         g.strokePath(pen(g, DS.border, 1));
         var n = o.words.length;
         if (n < 1) {
-            var hf = font("REGULAR", 12), hm = measure(g, "Type a sentence", hf);
+            var hf = font("REGULAR", 12), hm = textSize(g, "Type a sentence", hf, 12);
             textAt(g, "Type a sentence", DS.muted, Math.round((w - hm[0]) / 2), Math.round((h - hm[1]) / 2), hf);
             return;
         }
         var fs0 = 30, f0 = font("BOLD", fs0), th = fs0 * 0.75, widths = [];
-        for (i = 0; i < n; i++) { widths.push(measure(g, o.words[i], f0)[0]); }
+        for (i = 0; i < n; i++) { widths.push(textSize(g, o.words[i], f0, fs0)[0]); }
         var k = fs0 / Math.max(1, o.size);                                   // build pixels -> stage pixels
         var slot = Math.max(0.3 * th, TI.slotH * th + o.gap * k), icon = TI.iconH * th * o.pct / 100, endGap = (slot + icon) / 2;
         var L = tiLayout(widths, o.at, 1, slot, fs0 * TI.spaceK, 0, endGap);
@@ -15765,7 +15791,7 @@
         var fit = Math.min(1, (w - 28) / Math.max(1, hi - lo)), fs = fs0 * fit, f = font("BOLD", fs), mid = (lo + hi) / 2;
         var tc = o.textColor, ic = o.iconColor;
         for (i = 0; i < n; i++) {
-            var m = measure(g, o.words[i], f);
+            var m = textSize(g, o.words[i], f, fs);
             textAt(g, o.words[i], [tc[0], tc[1], tc[2], 1], Math.round(w / 2 + (L.centers[i] - mid) * fit - m[0] / 2), Math.round((h - m[1]) / 2), f);
         }
         var pts = sparkPoints(icon * fit / 2, 7), cx = w / 2 + (L.iconX - mid) * fit, cy = h / 2;
