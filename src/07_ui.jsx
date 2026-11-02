@@ -1635,6 +1635,15 @@
                 holder.orientation = "column";
                 holder.alignChildren = ["fill", "center"];
                 holder.spacing = 6;
+                // a thin divider (empty leaf group, so custom drawing is safe) between the main chips and the sub chips
+                var rule = holder.add("group");
+                rule.alignment = ["fill", "top"];
+                rule.preferredSize = [100, 9];
+                rule.onDraw = function () {
+                    var g = this.graphics, w = this.size ? this.size.width : 100;
+                    rrPath(g, 2, 3, Math.max(4, w - 4), 2, 1);
+                    g.fillPath(brush(g, DS.border));
+                };
                 chipRow([pn2].concat(kids[pn2]), featName, function (nm) { showFeature(groupName, nm); }, holder);
                 holder.visible = (pn2 === activeTop);
                 holder.maximumSize.height = (pn2 === activeTop) ? 1000 : 0;
