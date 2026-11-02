@@ -600,6 +600,7 @@
             sw = r.add("group");
             sw.preferredSize = [24, 20];
         }
+        var api = { onChange: null, get: function () { return hexToRgb(hex.text); } };
         var hex = r.add("edittext", undefined, start);
         hex.characters = 8;
         hex.helpTip = "Hex color, e.g. #4285F4";
@@ -607,6 +608,7 @@
             hex.text = rgbToHex(hexToRgb(hex.text));
             paintSwatch(sw, hex.text);
             if (key) { putS(key, hex.text); }
+            if (api.onChange) { api.onChange(); }
         }
         function choose() {
             var c = chooseColor(colorTitle(label), hexToRgb(hex.text));
@@ -624,7 +626,7 @@
             pick.onClick = choose;
         }
         paintSwatch(sw, start);
-        return { get: function () { return hexToRgb(hex.text); } };
+        return api;
     }
 
     // ---------------- Layers ----------------
@@ -1094,29 +1096,81 @@
     // ---------------- Text ----------------
 
     feature("Text", "Motion", function (p) {
-        if (TEXT_PRESETS.length === 0) {
-            hint(p, "No text presets yet.");
-            hint(p, "Add .ffx files to presets/text and rebuild.");
-            return;
-        }
-        hint(p, "Select text layer(s), put the playhead where it should start, click a preset.");
-        // two columns; every button gets the same preferred width so the pair splits the row evenly
-        var row2 = null;
-        for (var i = 0; i < TEXT_PRESETS.length; i++) {
-            if (i % 2 === 0) { row2 = btnRow(p); }
+        var items = [], i;
+        for (i = 0; i < TEXT_PRESETS.length; i++) {
             (function (idx) {
-                var tb = btn(row2, TEXT_PRESETS[idx].name, function () {
-                    run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); });
-                }, "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead.");
-                tb.preferredSize.width = 120;
+                items.push({ name: TEXT_PRESETS[idx].name, tip: "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead.",
+                    go: function () { run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); }); } });
             })(i);
         }
-        if (TEXT_PRESETS.length % 2 === 1) {
+        // built-in, no settings: types the selected text layer out letter by letter, with a caret
+        items.push({ name: "Typewriter", tip: "Types the selected text layer out letter by letter at the playhead, with a caret that follows.",
+            go: function () { run("Typewriter", doTypewriter); } });
+        hint(p, "Select text layer(s), put the playhead where it should start, click an effect.");
+        // two columns; every button gets the same preferred width so the pair splits the row evenly
+        var row2 = null;
+        for (i = 0; i < items.length; i++) {
+            if (i % 2 === 0) { row2 = btnRow(p); }
+            var tb = btn(row2, items[i].name, items[i].go, items[i].tip);
+            tb.preferredSize.width = 120;
+        }
+        if (items.length % 2 === 1) {
             // keep the last button the same width as the others
             var pad = row2.add("group");
             pad.preferredSize = [120, 32];
         }
     });
+
+    // Outline of the built-in sparkle as a polyline (ScriptUI paths have no curves). Same bezier as sparkleShape(R).
+    function sparkPoints(R, steps) {
+        var o = [0.07 * R, 0.55 * R], inn = [-0.55 * R, -0.07 * R], tips = [[0, -R], [R, 0], [0, R], [-R, 0]], pts = [], k, j, t;
+        function rot(pt, q) { for (var m = 0; m < q; m++) { pt = [-pt[1], pt[0]]; } return pt; }
+        for (k = 0; k < 4; k++) {
+            var a = tips[k], b = tips[(k + 1) % 4], ot = rot(o, k), it = rot(inn, (k + 1) % 4 + 3);
+            var p1 = [a[0] + ot[0], a[1] + ot[1]], p2 = [b[0] + it[0], b[1] + it[1]];
+            for (j = 0; j < steps; j++) {
+                t = j / steps;
+                var u = 1 - t;
+                pts.push([u * u * u * a[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * b[0],
+                          u * u * u * a[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * b[1]]);
+            }
+        }
+        return pts;
+    }
+
+    // Static preview of the finished Text + Icon line: the words, the icon slot and the sparkle, laid out with the same
+    // maths (tiLayout, TI) as the real build. o: words, at (icon slot index), size, gap, pct, textColor, iconColor
+    function drawTiStage(ctrl, o) {
+        var g = ctrl.graphics, w = ctrl.size ? (ctrl.size.width || ctrl.size[0]) : 240, h = ctrl.size ? (ctrl.size.height || ctrl.size[1]) : 96, i;
+        rrPath(g, 0.5, 0.5, w - 1, h - 1, 12);
+        g.fillPath(brush(g, [0.055, 0.067, 0.110, 1]));
+        g.strokePath(pen(g, DS.border, 1));
+        var n = o.words.length;
+        if (n < 1) {
+            var hf = font("REGULAR", 12), hm = measure(g, "Type a sentence", hf);
+            textAt(g, "Type a sentence", DS.muted, Math.round((w - hm[0]) / 2), Math.round((h - hm[1]) / 2), hf);
+            return;
+        }
+        var fs0 = 30, f0 = font("BOLD", fs0), th = fs0 * 0.75, widths = [];
+        for (i = 0; i < n; i++) { widths.push(measure(g, o.words[i], f0)[0]); }
+        var k = fs0 / Math.max(1, o.size);                                   // build pixels -> stage pixels
+        var slot = Math.max(0.3 * th, TI.slotH * th + o.gap * k), icon = TI.iconH * th * o.pct / 100, endGap = (slot + icon) / 2;
+        var L = tiLayout(widths, o.at, 1, slot, fs0 * TI.spaceK, 0, endGap);
+        // extent of the whole line, so it can be scaled to fit
+        var lo = L.iconX - ((o.at === 0 || o.at === n) ? endGap : slot) / 2, hi = L.iconX + ((o.at === 0 || o.at === n) ? endGap : slot) / 2;
+        for (i = 0; i < n; i++) { lo = Math.min(lo, L.centers[i] - widths[i] / 2); hi = Math.max(hi, L.centers[i] + widths[i] / 2); }
+        var fit = Math.min(1, (w - 28) / Math.max(1, hi - lo)), fs = fs0 * fit, f = font("BOLD", fs), mid = (lo + hi) / 2;
+        var tc = o.textColor, ic = o.iconColor;
+        for (i = 0; i < n; i++) {
+            var m = measure(g, o.words[i], f);
+            textAt(g, o.words[i], [tc[0], tc[1], tc[2], 1], Math.round(w / 2 + (L.centers[i] - mid) * fit - m[0] / 2), Math.round((h - m[1]) / 2), f);
+        }
+        var pts = sparkPoints(icon * fit / 2, 7), cx = w / 2 + (L.iconX - mid) * fit, cy = h / 2;
+        g.newPath();
+        for (i = 0; i < pts.length; i++) { if (i === 0) { g.moveTo(cx + pts[i][0], cy + pts[i][1]); } else { g.lineTo(cx + pts[i][0], cy + pts[i][1]); } }
+        g.closePath();
+        g.fillPath(brush(g, [ic[0], ic[1], ic[2], 1]));
+    }
 
     feature("Text", "Text + Icon", function (p) {
         hint(p, "Type 2–6 words, choose where the icon goes, browse for your icon.");
@@ -1124,6 +1178,17 @@
         var where = drop(p, "Icon position:", ["…"], 0, "Where the icon sits in the sentence.");
         var look = hint(p, "");
         look.alignment = ["fill", "top"];
+
+        // live picture of the finished line (words, icon slot, sparkle); it follows every field below
+        var stage = p.add("group");
+        stage.alignment = ["fill", "top"];
+        stage.preferredSize = [200, 92];
+        stage.onDraw = function () {
+            if (!tcol || !icol) { return; }
+            var ws = tiWords(sent.text), at = where.selection ? where.selection.index : 1;
+            drawTiStage(this, { words: ws, at: Math.max(0, Math.min(ws.length, at)), size: num(size.text, 90, 12, 600), gap: num(gap.text, 0, -600, 1200),
+                pct: num(pct.text, 100, 10, 500), textColor: tcol.get(), iconColor: icol.get() });
+        };
 
         // icon file (browse) or the built-in sparkle
         var iconFile = null;
@@ -1161,6 +1226,7 @@
                 if (i < words.length) { out.push(words[i]); }
             }
             look.text = "Preview:  " + out.join(" ");
+            redraw(stage);
         }
         function refresh() {
             var labels = tiSlotLabels(tiWords(sent.text)), keep = where.selection ? where.selection.index : 1, i;
@@ -1177,10 +1243,13 @@
         var tcol = colorChooser(p, "Text color:", style.textGray, "ti_text_color");
         var icol = colorChooser(p, "Icon color:", style.textGray, "ti_icon_color");
         var size = field(p, "Font size:", getS("ti_size", "90"), 4, "Text size in pixels.");
-        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ti_size", size.text); };
+        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ti_size", size.text); redraw(stage); };
         var pct = field(p, "Icon size (%):", "100", 4, "100% = the icon at its natural size for this text. Scale it freely afterwards.");
+        pct.onChange = function () { redraw(stage); };
+        tcol.onChange = function () { redraw(stage); };
+        icol.onChange = function () { redraw(stage); };
         var gap = field(p, "Icon gap (px):", getS("ti_gap", "0"), 5, "Extra space between the two words around the icon. Positive = wider, negative = tighter. 0 = the natural gap. Undo and rebuild to change it.");
-        gap.onChange = function () { gap.text = String(num(gap.text, 0, -600, 1200)); putS("ti_gap", gap.text); };
+        gap.onChange = function () { gap.text = String(num(gap.text, 0, -600, 1200)); putS("ti_gap", gap.text); redraw(stage); };
         var len = field(p, "Length (s):", "4", 4, "How long the layers last from the playhead.");
         var hi = check(p, "Highlight words", false, "Optional colour sweep: each word goes lavender, then magenta, then back to its normal colour. Off keeps everything gray.");
         var step = field(p, "Highlight (s/word):", "1", 4, "How long each word keeps the highlight.");
@@ -1253,29 +1322,6 @@
             });
         }, "Builds both sentences, the wipe, the glow trail and the icon at the playhead. Everything follows one Move null.");
     }, "Text + Icon");
-
-    feature("Text", "Typewriter", function (p) {
-        hint(p, "Letters pop in one by one with a caret that follows the last letter.");
-        var tx = field(p, "Text:", getS("tw_text", "Let's choose a style"), 24, "The line to type out.");
-        tx.onChange = function () { putS("tw_text", tx.text); };
-        var col = colorChooser(p, "Text color:", style.textGray, "tw_color");
-        var size = field(p, "Font size:", getS("tw_size", "90"), 4, "Text size in pixels.");
-        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("tw_size", size.text); };
-        var cps = field(p, "Speed (letters/s):", "14", 4, "How many letters land each second.");
-        var hold = field(p, "First letter after (s):", "0.3", 4, "How long the caret waits alone before the first letter.");
-        var car = check(p, "Caret", true, "A thin caret that follows the last letter, then blinks away.");
-        var blinks = field(p, "Blinks after typing:", "2", 3, "How many times the caret blinks once the last letter has landed.");
-        var cen = check(p, "Keep centred while typing", true, "The line stays centred as it grows. Off: it types from where the finished line starts.");
-        var len = field(p, "Length (s):", "6", 4, "How long the layers last from the playhead (never shorter than the typing itself).");
-        btn(p, "Build typewriter", function () {
-            run("Typewriter", function () {
-                doTypewriter({
-                    text: tx.text, size: num(size.text, 90, 12, 600), color: col.get(), cps: num(cps.text, 14, 1, 120), hold: num(hold.text, 0.3, 0, 20),
-                    caret: car.value, blinks: Math.round(num(blinks.text, 2, 0, 20)), centred: cen.value, length: num(len.text, 6, 0.5, 120)
-                });
-            });
-        }, "Types the line at the playhead: per-letter steps (hold keys) on a text animator, plus a caret that follows.");
-    }, "Motion");
 
     // ---------------- UI Kit ----------------
 

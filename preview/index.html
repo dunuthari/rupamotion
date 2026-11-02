@@ -322,8 +322,7 @@
     { group: "Transitions", name: "Zoom cut", ui: [H("Select 2 clips, or put the playhead on the cut."), F("Frames each side:", "6"), F("Intensity (×):", "3"), F("Blur (shutter °):", "270"), ROW([["Zoom In"], ["Zoom Out"]])] },
     { group: "Transitions", name: "Swipe cut", ui: [H("Select the outgoing + incoming clips, or put the playhead on the cut."), H("Adds 3 linked nulls: Out, In and a Move null at the cut."), F("Frames each side:", "15", { tip: "How long the whoosh lasts on each side of the cut." }), F("Distance (%):", "27", { tip: "How far the clips slide. 27% is about 520 px on a 1920 frame, so both stay on screen. 100% = a full screen." }), F("Blur (shutter °):", "300", { tip: "Raises the comp's shutter angle to at least this, for motion blur." }), ROW([["←", "Swipe left"], ["↑", "Swipe up"], ["↓", "Swipe down"], ["→", "Swipe right"]], "four")] },
     { group: "Transitions", name: "Shape wipe", ui: [H("Select 2 clips, or put the playhead on the cut."), D("Shape:", ["Circle", "Triangle"]), D("Grow from:", ["Center", "Left", "Right", "Top", "Bottom"]), T("Blue accent shape leads the reveal", true), F("Accent lead (frames):", "3"), B("Add shape wipe", "Added the shape wipe.")] },
-    { group: "Text", name: "Motion", ui: [H("Select text layer(s), put the playhead where it should start, click a preset."), /*TEXT_PRESET_BUTTONS*/ ROW([["1by1", "Applied the 1by1 preset."], ["Bounce text", "Applied the Bounce text preset."]]), ROW([["Bouncing Text HQ", "Applied the Bouncing Text HQ preset."], ["Bouncy Color FadeOut HQ", "Applied the Bouncy Color FadeOut HQ preset."]]), ROW([["Character down", "Applied the Character down preset."], ["Character right", "Applied the Character right preset."]]), ROW([["Color FadeOut HQ", "Applied the Color FadeOut HQ preset."], ["Gg MotionTypeLite", "Applied the Gg MotionTypeLite preset."]]), ROW([["SaaS Text Preset 3", "Applied the SaaS Text Preset 3 preset."], ["SaaS Text Preset 4", "Applied the SaaS Text Preset 4 preset."]]), ROW([["SaaS Text Preset 5", "Applied the SaaS Text Preset 5 preset."], ["SNAP TEXT", "Applied the SNAP TEXT preset."]]), ROW([["SNAP TEXT 2", "Applied the SNAP TEXT 2 preset."], ["Snapping Text HQ", "Applied the Snapping Text HQ preset."]]), ROW([["Word down", "Applied the Word down preset."], ["Word right", "Applied the Word right preset."]]) /*END_TEXT_PRESET_BUTTONS*/] },
-    { group: "Text", name: "Typewriter", parent: "Motion", ui: [["typewriter"]] },
+    { group: "Text", name: "Motion", ui: [H("Select text layer(s), put the playhead where it should start, click an effect."), /*TEXT_PRESET_BUTTONS*/ ROW([["1by1", "Applied the 1by1 preset."], ["Bounce text", "Applied the Bounce text preset."]]), ROW([["Bouncing Text HQ", "Applied the Bouncing Text HQ preset."], ["Bouncy Color FadeOut HQ", "Applied the Bouncy Color FadeOut HQ preset."]]), ROW([["Character down", "Applied the Character down preset."], ["Character right", "Applied the Character right preset."]]), ROW([["Color FadeOut HQ", "Applied the Color FadeOut HQ preset."], ["Gg MotionTypeLite", "Applied the Gg MotionTypeLite preset."]]), ROW([["SaaS Text Preset 3", "Applied the SaaS Text Preset 3 preset."], ["SaaS Text Preset 4", "Applied the SaaS Text Preset 4 preset."]]), ROW([["SaaS Text Preset 5", "Applied the SaaS Text Preset 5 preset."], ["SNAP TEXT", "Applied the SNAP TEXT preset."]]), ROW([["SNAP TEXT 2", "Applied the SNAP TEXT 2 preset."], ["Snapping Text HQ", "Applied the Snapping Text HQ preset."]]), ROW([["Word down", "Applied the Word down preset."], ["Word right", "Applied the Word right preset."]]) /*END_TEXT_PRESET_BUTTONS*/, ROW([["Typewriter", "Typed out the selected text layer, with a caret."]])] },
     { group: "Text", name: "Text + Icon", ui: [["textIcon"]] },
     { group: "Text", name: "Star Swipe", parent: "Text + Icon", ui: [["starSwipe"]] },
     { group: "UI Kit", name: "Pill button", ui: [F("Label:", "+ New", { wide: true }), D("Style:", ["Primary", "White glass", "Outline"]), T("Pop in at playhead", true), B("Create pill button", "Created the pill button.")] },
@@ -754,59 +753,6 @@
   }
 
 
-  // ---------- Typewriter: letters pop in one by one, a caret follows the last letter ----------
-  function typewriterControl() {
-    var wrap = el("div", { class: "ti", style: "display:grid;gap:7px" });
-    function inp(v, w) { return el("input", { type: "text", id: "tw" + (++uid), value: v, style: w ? "width:" + w + "px" : "", class: w ? "" : "wide" }); }
-    var tx = inp(load("tw_text", "Let's choose a style")), size = inp("90", 52), cps = inp("14", 52), hold = inp("0.3", 52), blinks = inp("2", 52), len = inp("6", 52);
-    var colRow = colorControl("Text color:", "#9AA0A6", true);
-    var caretOn = toggle("Caret", true, "A thin caret that follows the last letter, then blinks away.");
-    var centred = toggle("Keep centred while typing", true, "The line stays centred as it grows.");
-    var stage = el("div", { class: "ti-stage", style: "height:96px" });
-    var line = el("span", { class: "w" }), caret = el("div", { style: "position:absolute;top:50%;left:0;border-radius:2px" });
-    line.style.left = "0"; line.style.transform = "translateY(-50%)";
-    stage.appendChild(line); stage.appendChild(caret);
-    var raf = 0, startT = null;
-    function on(t) { return t.getAttribute("aria-checked") === "true"; }
-    function draw(tau) {
-      var str = tx.value.trim(), n = str.length, W = stage.clientWidth || 320, fs = 30, dt = 1 / (+cps.value || 14), H = +hold.value || 0, nb = Math.round(+blinks.value || 0);
-      var shown = tau <= 0 ? 0 : Math.min(n, tau < H ? 0 : Math.floor((tau - H) / dt) + 1);
-      line.style.color = colorOf(colRow); caret.style.background = colorOf(colRow);
-      line.textContent = str.substring(0, shown);
-      var wFull = (line.textContent = str, line.getBoundingClientRect().width);
-      line.textContent = str.substring(0, shown);
-      var wNow = line.getBoundingClientRect().width, left = on(centred) ? W / 2 - wNow / 2 : W / 2 - wFull / 2;
-      line.style.left = left + "px";
-      var tEnd = H + (n - 1) * dt, vis = 1;
-      if (tau > tEnd) { var k = (tau - tEnd - 0.4); vis = k < 0 ? 1 : (Math.floor(k / 0.4) % 2 === 0 && k < nb * 0.8 ? 0 : 1); if (tau > tEnd + 0.4 + nb * 0.8) vis = 0; }
-      caret.style.opacity = on(caretOn) && tau < 1e8 ? vis : (on(caretOn) && tau >= 1e8 ? 0 : 0);
-      caret.style.width = Math.max(2, fs * 0.045) + "px"; caret.style.height = (fs * 1.1) + "px"; caret.style.marginTop = (-fs * 0.55) + "px";
-      caret.style.left = (left + wNow + fs * 0.06) + "px";
-    }
-    function colorOf(r) { return r.querySelector("input").value; }
-    function play() {
-      cancelAnimationFrame(raf); startT = null;
-      (function tick(now) {
-        if (!wrap.isConnected) { return; }
-        if (startT === null) startT = now;
-        var tau = (now - startT) / 1000, n = tx.value.trim().length, run = (+hold.value || 0) + n / (+cps.value || 14) + 0.4 + Math.round(+blinks.value || 0) * 0.8 + 0.5;
-        if (tau >= run + 1.2) { startT = now; tau = 0; }
-        draw(tau < run ? tau : 1e9);
-        raf = requestAnimationFrame(tick);
-      })(performance.now());
-    }
-    var go = el("button", { class: "btn primary", type: "button", text: "Build typewriter", title: "Types the line at the playhead: per-letter steps (hold keys) on a text animator, plus a caret that follows.",
-      onclick: function () { play(); toast("Built the typewriter at the playhead."); } });
-    wrap.appendChild(el("p", { class: "hint", text: "Letters pop in one by one with a caret that follows the last letter." }));
-    wrap.appendChild(row("Text:", tx, tx.id)); wrap.appendChild(colRow);
-    wrap.appendChild(row("Font size:", size, size.id)); wrap.appendChild(row("Speed (letters/s):", cps, cps.id)); wrap.appendChild(row("First letter after (s):", hold, hold.id));
-    wrap.appendChild(caretOn); wrap.appendChild(row("Blinks after typing:", blinks, blinks.id)); wrap.appendChild(centred); wrap.appendChild(row("Length (s):", len, len.id));
-    wrap.appendChild(stage); wrap.appendChild(go);
-    wrap.addEventListener("input", function () { save("tw_text", tx.value); });
-    requestAnimationFrame(play);
-    return wrap;
-  }
-
   // ---------- Star Swipe: the icon sweeps across sentence 1, sentence 2 appears in its wake ----------
   function starSwipeControl() {
     var wrap = el("div", { class: "ti", style: "display:grid;gap:7px" });
@@ -944,7 +890,6 @@
     if (t === "bounce") return bounceControl(spec[1]);
     if (t === "flow") return flowControl();
     if (t === "textIcon") return textIconControl();
-    if (t === "typewriter") return typewriterControl();
     if (t === "starSwipe") return starSwipeControl();
     if (t === "theme") return themeControl();
     return null;

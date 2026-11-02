@@ -408,8 +408,8 @@ function runSwipe(arrow, mutate) {
   const runE = new Function(...Object.keys(g2), 'thisObj', srcE.replace(/\}\)\(this\);\s*$/, '})(thisObj);'));
   const rootE = Object.assign(new Panel(), el('panel', 'rootE'));
   runE(...Object.values(g2), rootE);
-  const empty = walk(rootE).filter(n => n.type === 'statictext' && /No text presets yet/.test(n.text)).length;
-  console.log(`text group with no presets: empty-state hint shown ${empty === 1}`);
+  const onlyTw = walk(rootE).filter(n => n.type === 'button' && n.parent && n.parent.isBtnRow && n.text === 'Typewriter').length;
+  console.log(`text group with no presets: the Typewriter button is still there ${onlyTw === 1}`);
 }
 
 // The real presets shipped in presets/text: every button writes back exactly the bytes of its .ffx file
@@ -490,7 +490,7 @@ function fakeBuild() {
       addText(str) {
         const L = baseLayer('text'), doc = { text: str, fontSize: 50, resetCharStyle() {} };
         const props = fakeNode('ADBE Text Properties'), docNode = fakeNode('ADBE Text Document');
-        docNode.value = doc; docNode.setValue = v => { Object.assign(doc, v); };
+        Object.defineProperty(docNode, 'value', { get() { return Object.assign({}, doc); } }); docNode.setValue = v => { Object.assign(doc, v); };
         props.children.push(docNode);
         L.nodes['ADBE Text Properties'] = props; L.doc = doc;
         L.sourceRectAtTime = () => { const f = doc.fontSize, desc = /[gjpqy]/.test(doc.text) ? 0.25 * f : 0; return { left: 0, top: -f * 0.75, width: doc.text.length * f * 0.5, height: 0.75 * f + desc }; };
@@ -675,31 +675,72 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`star swipe: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
-// Typewriter: letters pop in one by one with a caret that follows
+// Typewriter: a button in Text > Motion; types out the selected text layer, no settings
 {
   const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
   const { comp, made } = fakeBuild(); app.project.activeItem = comp;
-  setField('Text:', 'Hi there');
-  ['Caret', 'Keep centred while typing'].forEach(lbl => { const tg = walk(root).filter(n => n.type === 'button' && n.text === lbl && typeof n.value === 'boolean')[0]; if (tg.value !== true) { tg.onClick(); } });
-  walk(root).filter(n => n.type === 'button' && n.text === 'Build typewriter')[0].onClick();
+  const L0 = comp.layers.addText('Hi there'); L0.doc.fontSize = 90;
+  L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, -33.75]);
+  comp.selectedLayers = [L0];
+  const twBtn = walk(root).filter(n => n.type === 'button' && n.text === 'Typewriter' && n.parent && n.parent.isBtnRow)[0];
+  R['"Typewriter" is a plain button in the Motion card (no fields of its own)'] = !!twBtn && !walk(root).some(n => n.cardTitle === 'Typewriter');
+  twBtn.onClick();
   app.project.activeItem = null;
-  const live = made.filter(L => !L.removed), txt = live.find(L => L.name === 'MK Typewriter · Text'), caret = live.find(L => L.name === 'MK Typewriter · Caret');
-  R['scratch measuring layer is removed; text + caret remain'] = made.filter(L => L.kind === 'text').length === 2 && made.filter(L => L.removed).length === 1 && !!txt && !!caret;
+  const live = made.filter(L => !L.removed), caret = live.find(L => L.name === 'MK Typewriter · Caret');
+  R['scratch measuring layer is removed; the layer and the caret remain'] = made.filter(L => L.kind === 'text').length === 2 && made.filter(L => L.removed).length === 1 && !!caret;
+  R['the text keeps its own style (scratch copy did not change it)'] = L0.doc.text === 'Hi there' && L0.doc.fontSize === 90;
   // font 90: every letter is 45 px wide in the fake font; "Hi there" = 8 letters; first letter lands 0.3 s after the playhead (2 s), then 14 letters/s
-  const an = txt.property('ADBE Text Properties').property('ADBE Text Animators').children[0];
+  const an = L0.property('ADBE Text Properties').property('ADBE Text Animators').children[0];
   const start = an.property('ADBE Text Selectors').children[0].property('ADBE Text Index Start');
-  R['animator hides everything (opacity 0), Index units'] = an.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0;
+  R['animator hides everything (opacity 0)'] = an.name === 'MK Typewriter' && an.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0;
   R['9 hold keys: Start steps 0..8, first letter 0.3 s after the playhead, then 1/14 s per letter'] = start.keys.length === 9 && start.keys.every((k, i) => k.v === i && k.inT === 'H' && k.outT === 'H') && near(start.keys[0].t, 2) && near(start.keys[1].t, 2.3) && near(start.keys[8].t, 2.3 + 7 / 14);
-  const pk = txt.transform.position.keys;
-  R['line stays centred: position steps by half a letter (22.5 px) per letter'] = pk.length === 9 && near(pk[0].v[0], 960) && near(pk[1].v[0], 960 - 22.5) && near(pk[8].v[0], 960 - 8 * 22.5) && pk.every(k => near(k.v[1], 540));
-  const ck = caret.transform.position.keys, cw = Math.max(2, 90 * 0.045);
-  R['caret sits just after the last letter (centred line: right edge = centre + half the typed width)'] = ck.length === 9 && near(ck[0].v[0], 960 + 90 * 0.06 + cw / 2) && near(ck[8].v[0], 960 + 8 * 22.5 + 90 * 0.06 + cw / 2) && near(ck[3].t, pk[3].t);
+  const pk = L0.transform.position.keys;
+  R['line stays centred: the layer starts half the line too far right and settles on its own position'] = pk.length === 9 && near(pk[0].v[0], 960 + 180) && near(pk[1].v[0], 960 + (360 - 45) / 2) && near(pk[8].v[0], 960) && pk.every(k => near(k.v[1], 540));
+  const ck = caret.transform.position.keys, cw = Math.max(2, 90 * 0.045), gap = 90 * 0.06;
+  R['caret sits just after the last letter, 22.5 px further right per letter'] = ck.length === 9 && near(ck[0].v[0], 960 + 180 + gap + cw / 2) && near(ck[8].v[0], 960 + 360 + gap + cw / 2) && near(ck[3].t, pk[3].t) && near(ck[1].v[0] - ck[0].v[0], 22.5);
+  R['caret height 1.1x the font size, on the text baseline'] = near(ck[0].v[1], 540 + 33.75 - 90 * 0.3);
   const ok = caret.transform.opacity.keys;
   R['caret is on from the start, then blinks twice after the last letter and goes away'] = ok[0].v === 100 && near(ok[0].t, 2) && ok.map(k => k.v).join() === '100,0,100,0,100,0' && near(ok[1].t, 2.3 + 7 / 14 + 0.4) && ok.every(k => k.inT === 'H');
-  R['layers last long enough for the typing and the blinks'] = made.filter(L => !L.removed).every(L => near(L.inPoint, 2) && L.outPoint >= 2 + 0.3 + 0.5 + 1.7);
-  const ofs = L => L.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Rect').property('ADBE Vector Rect Size').value;
-  R['caret is a thin bar about 1.1x the font size tall'] = near(ofs(caret)[0], cw) && near(ofs(caret)[1], 99);
-  R['text is the selected layer'] = txt.selected === true;
+  const rs = L => L.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Rect').property('ADBE Vector Rect Size').value;
+  R['caret is a thin bar'] = near(rs(caret)[0], cw) && near(rs(caret)[1], 99);
+  // pressing it again replaces the first animator instead of stacking a second one
+  app.project.activeItem = comp; comp.selectedLayers = [L0]; twBtn.onClick(); app.project.activeItem = null;
+  R['a second press replaces the first animator'] = L0.property('ADBE Text Properties').property('ADBE Text Animators').children.filter(c => c.name === 'MK Typewriter').length === 1;
+  // nothing selected: asks for a text layer and builds nothing
+  const n0 = made.length; app.project.activeItem = comp; comp.selectedLayers = []; twBtn.onClick(); app.project.activeItem = null;
+  R['nothing selected: nothing built'] = made.length === n0;
   const bad = Object.keys(R).filter(kk => !R[kk]);
   console.log(`typewriter: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Text + Icon: the panel itself shows a picture of the finished line (not only the browser preview)
+{
+  const R = {};
+  const stage = walk(root).filter(n => n.type === 'group' && typeof n.onDraw === 'function' && n.preferredSize && (n.preferredSize[1] === 92 || n.preferredSize.height === 92))[0];
+  R['the Text + Icon card has a preview stage'] = !!stage;
+  const calls = { str: [], pts: [] };
+  const rec = gfx(); const ds = rec.drawString, mv = rec.moveTo, ln = rec.lineTo;
+  rec.drawString = (s, p, x, yy, f) => { ds(s, p, x, yy, f); calls.str.push({ s, x, y: yy }); };
+  rec.moveTo = (x, yy) => { mv(x, yy); calls.pts.push([x, yy]); }; rec.lineTo = (x, yy) => { ln(x, yy); calls.pts.push([x, yy]); };
+  stage.size = [300, 92]; stage.graphics = rec;
+  setField('Sentence:', 'feature requests');
+  stage.onDraw();
+  const words = calls.str.map(c => c.s);
+  R['draws both words'] = words.indexOf('feature') >= 0 && words.indexOf('requests') >= 0;
+  const sparkle = calls.pts.slice(-28);
+  const sx = sparkle.map(p => p[0]), cxs = (Math.min(...sx) + Math.max(...sx)) / 2, fx = calls.str.find(c => c.s === 'feature'), rx = calls.str.find(c => c.s === 'requests');
+  R['icon sparkle (28 outline points) sits between the two words'] = sparkle.length === 28 && cxs > fx.x && cxs < rx.x;
+  R['everything stays inside the stage'] = calls.pts.every(p => p[0] >= 0 && p[0] <= 300 && p[1] >= 0 && p[1] <= 92) && calls.str.every(c => c.x >= 0 && c.x <= 300);
+  // a wider gap pushes the words apart, and a long sentence is shrunk to fit
+  const gapBefore = rx.x - fx.x;
+  setField('Icon gap (px):', '200');
+  calls.str.length = 0; calls.pts.length = 0; stage.onDraw();
+  const gapAfter = calls.str.find(c => c.s === 'requests').x - calls.str.find(c => c.s === 'feature').x;
+  R['a bigger gap field moves the words apart in the preview'] = gapAfter > gapBefore;
+  setField('Icon gap (px):', '0');
+  setField('Sentence:', 'this is a rather long sentence of many words'); calls.str.length = 0; calls.pts.length = 0; stage.onDraw();
+  R['a long sentence still fits (words drawn, none outside)'] = calls.str.length === 9 && calls.str.every(c => c.x >= 0 && c.x <= 300);
+  setField('Sentence:', 'feature requests');
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`text + icon panel preview: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

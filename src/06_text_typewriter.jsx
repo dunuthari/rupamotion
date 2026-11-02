@@ -2,11 +2,12 @@
     // =====================================================================
     // TEXT GROUP — "Typewriter": letters pop in one by one with a caret that follows the last letter
     // =====================================================================
+    // A one-click button in Text > Motion: applies to the selected text layer(s) with no settings.
     // Read from a reference clip ("Let's choose a style"): the caret shows first, the first letter lands, then the rest
     // arrive at an even pace (roughly 14 letters a second) with a thin caret hugging the last letter. The line stays centred
     // while it grows. When the last letter lands the caret blinks and goes away. Pace, first-letter hold, caret size and blink
-    // are read off the clip (not frame-measured), so they are fields or constants here.
-    var TW = { cps: 14, hold: 0.3, caretW: 0.045, caretH: 1.1, caretGap: 0.06, caretRise: 0.3, blinkOn: 0.4, blinkOff: 0.4 };
+    // are read off the clip (not frame-measured), so they live in one constant.
+    var TW = { cps: 14, hold: 0.3, caretW: 0.045, caretH: 1.1, caretGap: 0.06, caretRise: 0.3, blinkOn: 0.4, blinkOff: 0.4, blinks: 2 };
 
     // Hold keys: the value jumps at each key and stays until the next one (crisp per-letter steps)
     function holdKeys(prop, pairs) {
@@ -18,40 +19,45 @@
         }
     }
 
-    // o: text, size, color, cps, hold, caret (bool), blinks, centred (bool), length
-    function doTypewriter(o) {
-        var comp = activeComp(); if (!comp) { return; }
-        var str = trim(o.text), n = str.length, i;
-        if (n < 1) { alert("Type some text first.", NAME); return; }
-        var t0 = comp.time, cx = comp.width / 2, cy = comp.height / 2, font = pickFont(true);
-        var dt = 1 / o.cps;
+    function isTextLayer(L) {
+        try { return !!L.property("ADBE Text Properties") && L.property("ADBE Text Properties").property("ADBE Text Document") !== null; } catch (e) { return false; }
+    }
 
-        var L = makeText(comp, str, { size: o.size, color: o.color, font: font, just: "left" });
-        L.name = "MK Typewriter · Text";
-        var full = L.sourceRectAtTime(t0, false), top = Math.min(0, full.top), h = -top;
+    // Types out one text layer. Returns the caret layer (or null).
+    function typewriterOne(comp, L, t0) {
+        var sp = textDocProp(L), src = sp.value, str = src.text, n = str.length, i;
+        var dt = 1 / TW.cps;
+        if (n < 1 || /[\r\n\u0003]/.test(str)) { return "skipped"; }
 
-        // width of every prefix, measured on a scratch layer ("|" is appended so trailing spaces still count)
-        var tmp = makeText(comp, "|", { size: o.size, color: o.color, font: font, just: "left" });
-        var tsp = textDocProp(tmp);
+        // a second typewriter on the same layer replaces the first
+        var anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
+        for (i = anims.numProperties; i >= 1; i--) { if (anims.property(i).name === "MK Typewriter") { anims.property(i).remove(); } }
+
+        // width of every prefix, measured on a scratch layer that copies this layer's character style ("|" is appended so
+        // trailing spaces still count, and the bar width is taken off again)
+        var tmp = comp.layers.addText("|"), tsp = textDocProp(tmp);
         function widthOf(s) {
-            var d = tsp.value; d.text = s; tsp.setValue(d);
+            var d = sp.value; d.text = s; d.justification = ParagraphJustification.LEFT_JUSTIFY; tsp.setValue(d);
             var r = tmp.sourceRectAtTime(t0, false);
             return r.left + r.width;
         }
-        var bar = widthOf("|"), edge = [0];
+        var bar = widthOf("|"), edge = [0], W;
         for (i = 1; i <= n; i++) { edge.push(Math.max(0, widthOf(str.substring(0, i) + "|") - bar)); }
+        W = edge[n];
         try { tmp.remove(); } catch (eR) {}
 
-        // text sits left-anchored on the baseline; position steps with every letter so the line stays centred as it grows
-        setXY(L.transform.anchorPoint, 0, top / 2);
-        var leftAt = [];
-        for (i = 0; i <= n; i++) { leftAt.push(o.centred ? cx - edge[i] / 2 : cx - edge[n] / 2); }
+        // where the finished text sits in the comp (position / anchor / scale of the layer as it is now)
+        var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
+        var full = L.sourceRectAtTime(t0, false);
+        var L0 = P[0] + (full.left - A[0]) * s;                   // left edge of the finished line
+        var baseline = P[1] + (0 - A[1]) * s;                     // text sits on y = 0 in layer space
+        var fs = src.fontSize * s;
+        var movable = L.transform.position.numKeys === 0 && !L.parent;
         var times = [];
-        for (i = 0; i <= n; i++) { times.push(i === 0 ? t0 : t0 + o.hold + (i - 1) * dt); }
+        for (i = 0; i <= n; i++) { times.push(i === 0 ? t0 : t0 + TW.hold + (i - 1) * dt); }
         var tEnd = times[n];
 
-        // reveal: an animator hides everything from the Start index onwards; Start steps 0 -> n, one letter per step
-        var anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
+        // reveal: an animator hides everything from the Start index on; Start steps 0 -> n, one letter per key
         anims.addProperty("ADBE Text Animator");
         var an = anims.property(anims.numProperties);
         an.name = "MK Typewriter";
@@ -61,36 +67,46 @@
         var sel = an.property("ADBE Text Selectors").property(1);
         try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Units").setValue(2); } catch (eU) {}     // 2 = Index
         try { sel.property("ADBE Text Index End").setValue(100000); } catch (eE) {}
-        var startProp = sel.property("ADBE Text Index Start"), pairs = [];
+        var pairs = [];
         for (i = 0; i <= n; i++) { pairs.push([times[i], i]); }
-        holdKeys(startProp, pairs);
+        holdKeys(sel.property("ADBE Text Index Start"), pairs);
 
-        var pp = L.transform.position, pk = [];
-        for (i = 0; i <= n; i++) { pk.push([times[i], vecLike(pp, leftAt[i], cy)]); }
-        if (o.centred) { holdKeys(pp, pk); } else { setXY(pp, leftAt[0], cy); }
-
-        var all = [L], caret = null;
-        if (o.caret) {
-            var cw = Math.max(2, o.size * TW.caretW), ch = o.size * TW.caretH, baseline = cy + h / 2;
-            caret = shapeLayer(comp, "MK Typewriter · Caret");
-            var gi = newGroup(caret, "Caret");
-            addRect(caret, gi, cw, ch, cw / 2);
-            addFill(caret, gi, o.color, 100);
-            var cp = caret.transform.position, ck = [], cyy = baseline - o.size * TW.caretRise;
-            for (i = 0; i <= n; i++) { ck.push([times[i], vecLike(cp, leftAt[i] + edge[i] + o.size * TW.caretGap + cw / 2, cyy)]); }
-            holdKeys(cp, ck);
-            // blinks once typing stops, then it goes away
-            var ok = [[t0, 100]], b, tt = tEnd + TW.blinkOn;
-            for (b = 0; b < o.blinks; b++) { ok.push([tt, 0]); tt += TW.blinkOff; ok.push([tt, 100]); tt += TW.blinkOn; }
-            ok.push([Math.max(tt, tEnd + TW.blinkOn), 0]);
-            holdKeys(caret.transform.opacity, ok);
-            all.push(caret);
+        // keep the growing line centred: shift the layer right by half of what is still missing
+        var shift = movable ? 1 : 0;
+        if (movable) {
+            var pp = L.transform.position, pk = [];
+            for (i = 0; i <= n; i++) { pk.push([times[i], vecLike(pp, P[0] + s * (W - edge[i]) / 2, P[1])]); }
+            holdKeys(pp, pk);
         }
 
-        var life = Math.max(o.length, tEnd - t0 + (o.blinks * (TW.blinkOn + TW.blinkOff) + TW.blinkOn) + 0.5);
-        for (i = 0; i < all.length; i++) {
-            try { all[i].inPoint = Math.max(0, t0); all[i].outPoint = Math.min(comp.duration, t0 + life); } catch (e1) {}
-            all[i].selected = false;
+        // caret: a thin bar hugging the last letter; on from the start, blinks after the last letter, then goes away
+        var cw = Math.max(2, fs * TW.caretW), ch = fs * TW.caretH, cyy = baseline - fs * TW.caretRise, color = [0.6, 0.63, 0.65];
+        try { if (src.applyFill) { color = src.fillColor; } } catch (eC) {}
+        var caret = shapeLayer(comp, "MK Typewriter · Caret");
+        var gi = newGroup(caret, "Caret");
+        addRect(caret, gi, cw, ch, cw / 2);
+        addFill(caret, gi, color, 100);
+        var cp = caret.transform.position, ck = [];
+        for (i = 0; i <= n; i++) { ck.push([times[i], vecLike(cp, L0 + s * (shift ? (W + edge[i]) / 2 : edge[i]) + fs * TW.caretGap + cw / 2, cyy)]); }
+        holdKeys(cp, ck);
+        var ok = [[t0, 100]], b, tt = tEnd + TW.blinkOn;
+        for (b = 0; b < TW.blinks; b++) { ok.push([tt, 0]); tt += TW.blinkOff; ok.push([tt, 100]); tt += TW.blinkOn; }
+        ok.push([Math.max(tt, tEnd + TW.blinkOn), 0]);
+        holdKeys(caret.transform.opacity, ok);
+        try { caret.inPoint = Math.max(0, t0); caret.outPoint = Math.max(caret.inPoint + 0.1, Math.min(comp.duration, L.outPoint)); } catch (e1) {}
+        caret.selected = false;
+        return caret;
+    }
+
+    function doTypewriter() {
+        var comp = activeComp(); if (!comp) { return; }
+        var sel = selLayers(comp, 1, "Select the text layer(s) to type out."); if (!sel) { return; }
+        var t0 = comp.time, done = 0, skipped = 0, i;
+        for (i = 0; i < sel.length; i++) {
+            if (!isTextLayer(sel[i])) { skipped++; continue; }
+            if (typewriterOne(comp, sel[i], t0) === "skipped") { skipped++; } else { done++; }
         }
-        L.selected = true;
+        for (i = 0; i < sel.length; i++) { try { sel[i].selected = true; } catch (e) {} }
+        if (done === 0) { alert("Select a single-line text layer. Nothing was typed out.", NAME); }
+        else if (skipped > 0) { alert(skipped + " layer(s) were skipped (not text, or more than one line).", NAME); }
     }

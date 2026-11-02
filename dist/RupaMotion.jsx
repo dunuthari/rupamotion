@@ -13595,11 +13595,12 @@
     // =====================================================================
     // TEXT GROUP — "Typewriter": letters pop in one by one with a caret that follows the last letter
     // =====================================================================
+    // A one-click button in Text > Motion: applies to the selected text layer(s) with no settings.
     // Read from a reference clip ("Let's choose a style"): the caret shows first, the first letter lands, then the rest
     // arrive at an even pace (roughly 14 letters a second) with a thin caret hugging the last letter. The line stays centred
     // while it grows. When the last letter lands the caret blinks and goes away. Pace, first-letter hold, caret size and blink
-    // are read off the clip (not frame-measured), so they are fields or constants here.
-    var TW = { cps: 14, hold: 0.3, caretW: 0.045, caretH: 1.1, caretGap: 0.06, caretRise: 0.3, blinkOn: 0.4, blinkOff: 0.4 };
+    // are read off the clip (not frame-measured), so they live in one constant.
+    var TW = { cps: 14, hold: 0.3, caretW: 0.045, caretH: 1.1, caretGap: 0.06, caretRise: 0.3, blinkOn: 0.4, blinkOff: 0.4, blinks: 2 };
 
     // Hold keys: the value jumps at each key and stays until the next one (crisp per-letter steps)
     function holdKeys(prop, pairs) {
@@ -13611,40 +13612,45 @@
         }
     }
 
-    // o: text, size, color, cps, hold, caret (bool), blinks, centred (bool), length
-    function doTypewriter(o) {
-        var comp = activeComp(); if (!comp) { return; }
-        var str = trim(o.text), n = str.length, i;
-        if (n < 1) { alert("Type some text first.", NAME); return; }
-        var t0 = comp.time, cx = comp.width / 2, cy = comp.height / 2, font = pickFont(true);
-        var dt = 1 / o.cps;
+    function isTextLayer(L) {
+        try { return !!L.property("ADBE Text Properties") && L.property("ADBE Text Properties").property("ADBE Text Document") !== null; } catch (e) { return false; }
+    }
 
-        var L = makeText(comp, str, { size: o.size, color: o.color, font: font, just: "left" });
-        L.name = "MK Typewriter · Text";
-        var full = L.sourceRectAtTime(t0, false), top = Math.min(0, full.top), h = -top;
+    // Types out one text layer. Returns the caret layer (or null).
+    function typewriterOne(comp, L, t0) {
+        var sp = textDocProp(L), src = sp.value, str = src.text, n = str.length, i;
+        var dt = 1 / TW.cps;
+        if (n < 1 || /[\r\n\u0003]/.test(str)) { return "skipped"; }
 
-        // width of every prefix, measured on a scratch layer ("|" is appended so trailing spaces still count)
-        var tmp = makeText(comp, "|", { size: o.size, color: o.color, font: font, just: "left" });
-        var tsp = textDocProp(tmp);
+        // a second typewriter on the same layer replaces the first
+        var anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
+        for (i = anims.numProperties; i >= 1; i--) { if (anims.property(i).name === "MK Typewriter") { anims.property(i).remove(); } }
+
+        // width of every prefix, measured on a scratch layer that copies this layer's character style ("|" is appended so
+        // trailing spaces still count, and the bar width is taken off again)
+        var tmp = comp.layers.addText("|"), tsp = textDocProp(tmp);
         function widthOf(s) {
-            var d = tsp.value; d.text = s; tsp.setValue(d);
+            var d = sp.value; d.text = s; d.justification = ParagraphJustification.LEFT_JUSTIFY; tsp.setValue(d);
             var r = tmp.sourceRectAtTime(t0, false);
             return r.left + r.width;
         }
-        var bar = widthOf("|"), edge = [0];
+        var bar = widthOf("|"), edge = [0], W;
         for (i = 1; i <= n; i++) { edge.push(Math.max(0, widthOf(str.substring(0, i) + "|") - bar)); }
+        W = edge[n];
         try { tmp.remove(); } catch (eR) {}
 
-        // text sits left-anchored on the baseline; position steps with every letter so the line stays centred as it grows
-        setXY(L.transform.anchorPoint, 0, top / 2);
-        var leftAt = [];
-        for (i = 0; i <= n; i++) { leftAt.push(o.centred ? cx - edge[i] / 2 : cx - edge[n] / 2); }
+        // where the finished text sits in the comp (position / anchor / scale of the layer as it is now)
+        var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
+        var full = L.sourceRectAtTime(t0, false);
+        var L0 = P[0] + (full.left - A[0]) * s;                   // left edge of the finished line
+        var baseline = P[1] + (0 - A[1]) * s;                     // text sits on y = 0 in layer space
+        var fs = src.fontSize * s;
+        var movable = L.transform.position.numKeys === 0 && !L.parent;
         var times = [];
-        for (i = 0; i <= n; i++) { times.push(i === 0 ? t0 : t0 + o.hold + (i - 1) * dt); }
+        for (i = 0; i <= n; i++) { times.push(i === 0 ? t0 : t0 + TW.hold + (i - 1) * dt); }
         var tEnd = times[n];
 
-        // reveal: an animator hides everything from the Start index onwards; Start steps 0 -> n, one letter per step
-        var anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
+        // reveal: an animator hides everything from the Start index on; Start steps 0 -> n, one letter per key
         anims.addProperty("ADBE Text Animator");
         var an = anims.property(anims.numProperties);
         an.name = "MK Typewriter";
@@ -13654,38 +13660,48 @@
         var sel = an.property("ADBE Text Selectors").property(1);
         try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Units").setValue(2); } catch (eU) {}     // 2 = Index
         try { sel.property("ADBE Text Index End").setValue(100000); } catch (eE) {}
-        var startProp = sel.property("ADBE Text Index Start"), pairs = [];
+        var pairs = [];
         for (i = 0; i <= n; i++) { pairs.push([times[i], i]); }
-        holdKeys(startProp, pairs);
+        holdKeys(sel.property("ADBE Text Index Start"), pairs);
 
-        var pp = L.transform.position, pk = [];
-        for (i = 0; i <= n; i++) { pk.push([times[i], vecLike(pp, leftAt[i], cy)]); }
-        if (o.centred) { holdKeys(pp, pk); } else { setXY(pp, leftAt[0], cy); }
-
-        var all = [L], caret = null;
-        if (o.caret) {
-            var cw = Math.max(2, o.size * TW.caretW), ch = o.size * TW.caretH, baseline = cy + h / 2;
-            caret = shapeLayer(comp, "MK Typewriter · Caret");
-            var gi = newGroup(caret, "Caret");
-            addRect(caret, gi, cw, ch, cw / 2);
-            addFill(caret, gi, o.color, 100);
-            var cp = caret.transform.position, ck = [], cyy = baseline - o.size * TW.caretRise;
-            for (i = 0; i <= n; i++) { ck.push([times[i], vecLike(cp, leftAt[i] + edge[i] + o.size * TW.caretGap + cw / 2, cyy)]); }
-            holdKeys(cp, ck);
-            // blinks once typing stops, then it goes away
-            var ok = [[t0, 100]], b, tt = tEnd + TW.blinkOn;
-            for (b = 0; b < o.blinks; b++) { ok.push([tt, 0]); tt += TW.blinkOff; ok.push([tt, 100]); tt += TW.blinkOn; }
-            ok.push([Math.max(tt, tEnd + TW.blinkOn), 0]);
-            holdKeys(caret.transform.opacity, ok);
-            all.push(caret);
+        // keep the growing line centred: shift the layer right by half of what is still missing
+        var shift = movable ? 1 : 0;
+        if (movable) {
+            var pp = L.transform.position, pk = [];
+            for (i = 0; i <= n; i++) { pk.push([times[i], vecLike(pp, P[0] + s * (W - edge[i]) / 2, P[1])]); }
+            holdKeys(pp, pk);
         }
 
-        var life = Math.max(o.length, tEnd - t0 + (o.blinks * (TW.blinkOn + TW.blinkOff) + TW.blinkOn) + 0.5);
-        for (i = 0; i < all.length; i++) {
-            try { all[i].inPoint = Math.max(0, t0); all[i].outPoint = Math.min(comp.duration, t0 + life); } catch (e1) {}
-            all[i].selected = false;
+        // caret: a thin bar hugging the last letter; on from the start, blinks after the last letter, then goes away
+        var cw = Math.max(2, fs * TW.caretW), ch = fs * TW.caretH, cyy = baseline - fs * TW.caretRise, color = [0.6, 0.63, 0.65];
+        try { if (src.applyFill) { color = src.fillColor; } } catch (eC) {}
+        var caret = shapeLayer(comp, "MK Typewriter · Caret");
+        var gi = newGroup(caret, "Caret");
+        addRect(caret, gi, cw, ch, cw / 2);
+        addFill(caret, gi, color, 100);
+        var cp = caret.transform.position, ck = [];
+        for (i = 0; i <= n; i++) { ck.push([times[i], vecLike(cp, L0 + s * (shift ? (W + edge[i]) / 2 : edge[i]) + fs * TW.caretGap + cw / 2, cyy)]); }
+        holdKeys(cp, ck);
+        var ok = [[t0, 100]], b, tt = tEnd + TW.blinkOn;
+        for (b = 0; b < TW.blinks; b++) { ok.push([tt, 0]); tt += TW.blinkOff; ok.push([tt, 100]); tt += TW.blinkOn; }
+        ok.push([Math.max(tt, tEnd + TW.blinkOn), 0]);
+        holdKeys(caret.transform.opacity, ok);
+        try { caret.inPoint = Math.max(0, t0); caret.outPoint = Math.max(caret.inPoint + 0.1, Math.min(comp.duration, L.outPoint)); } catch (e1) {}
+        caret.selected = false;
+        return caret;
+    }
+
+    function doTypewriter() {
+        var comp = activeComp(); if (!comp) { return; }
+        var sel = selLayers(comp, 1, "Select the text layer(s) to type out."); if (!sel) { return; }
+        var t0 = comp.time, done = 0, skipped = 0, i;
+        for (i = 0; i < sel.length; i++) {
+            if (!isTextLayer(sel[i])) { skipped++; continue; }
+            if (typewriterOne(comp, sel[i], t0) === "skipped") { skipped++; } else { done++; }
         }
-        L.selected = true;
+        for (i = 0; i < sel.length; i++) { try { sel[i].selected = true; } catch (e) {} }
+        if (done === 0) { alert("Select a single-line text layer. Nothing was typed out.", NAME); }
+        else if (skipped > 0) { alert(skipped + " layer(s) were skipped (not text, or more than one line).", NAME); }
     }
 
     // =====================================================================
@@ -15187,6 +15203,7 @@
             sw = r.add("group");
             sw.preferredSize = [24, 20];
         }
+        var api = { onChange: null, get: function () { return hexToRgb(hex.text); } };
         var hex = r.add("edittext", undefined, start);
         hex.characters = 8;
         hex.helpTip = "Hex color, e.g. #4285F4";
@@ -15194,6 +15211,7 @@
             hex.text = rgbToHex(hexToRgb(hex.text));
             paintSwatch(sw, hex.text);
             if (key) { putS(key, hex.text); }
+            if (api.onChange) { api.onChange(); }
         }
         function choose() {
             var c = chooseColor(colorTitle(label), hexToRgb(hex.text));
@@ -15211,7 +15229,7 @@
             pick.onClick = choose;
         }
         paintSwatch(sw, start);
-        return { get: function () { return hexToRgb(hex.text); } };
+        return api;
     }
 
     // ---------------- Layers ----------------
@@ -15681,29 +15699,81 @@
     // ---------------- Text ----------------
 
     feature("Text", "Motion", function (p) {
-        if (TEXT_PRESETS.length === 0) {
-            hint(p, "No text presets yet.");
-            hint(p, "Add .ffx files to presets/text and rebuild.");
-            return;
-        }
-        hint(p, "Select text layer(s), put the playhead where it should start, click a preset.");
-        // two columns; every button gets the same preferred width so the pair splits the row evenly
-        var row2 = null;
-        for (var i = 0; i < TEXT_PRESETS.length; i++) {
-            if (i % 2 === 0) { row2 = btnRow(p); }
+        var items = [], i;
+        for (i = 0; i < TEXT_PRESETS.length; i++) {
             (function (idx) {
-                var tb = btn(row2, TEXT_PRESETS[idx].name, function () {
-                    run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); });
-                }, "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead.");
-                tb.preferredSize.width = 120;
+                items.push({ name: TEXT_PRESETS[idx].name, tip: "Applies the \"" + TEXT_PRESETS[idx].name + "\" animation preset to the selected layers, starting at the playhead.",
+                    go: function () { run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); }); } });
             })(i);
         }
-        if (TEXT_PRESETS.length % 2 === 1) {
+        // built-in, no settings: types the selected text layer out letter by letter, with a caret
+        items.push({ name: "Typewriter", tip: "Types the selected text layer out letter by letter at the playhead, with a caret that follows.",
+            go: function () { run("Typewriter", doTypewriter); } });
+        hint(p, "Select text layer(s), put the playhead where it should start, click an effect.");
+        // two columns; every button gets the same preferred width so the pair splits the row evenly
+        var row2 = null;
+        for (i = 0; i < items.length; i++) {
+            if (i % 2 === 0) { row2 = btnRow(p); }
+            var tb = btn(row2, items[i].name, items[i].go, items[i].tip);
+            tb.preferredSize.width = 120;
+        }
+        if (items.length % 2 === 1) {
             // keep the last button the same width as the others
             var pad = row2.add("group");
             pad.preferredSize = [120, 32];
         }
     });
+
+    // Outline of the built-in sparkle as a polyline (ScriptUI paths have no curves). Same bezier as sparkleShape(R).
+    function sparkPoints(R, steps) {
+        var o = [0.07 * R, 0.55 * R], inn = [-0.55 * R, -0.07 * R], tips = [[0, -R], [R, 0], [0, R], [-R, 0]], pts = [], k, j, t;
+        function rot(pt, q) { for (var m = 0; m < q; m++) { pt = [-pt[1], pt[0]]; } return pt; }
+        for (k = 0; k < 4; k++) {
+            var a = tips[k], b = tips[(k + 1) % 4], ot = rot(o, k), it = rot(inn, (k + 1) % 4 + 3);
+            var p1 = [a[0] + ot[0], a[1] + ot[1]], p2 = [b[0] + it[0], b[1] + it[1]];
+            for (j = 0; j < steps; j++) {
+                t = j / steps;
+                var u = 1 - t;
+                pts.push([u * u * u * a[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * b[0],
+                          u * u * u * a[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * b[1]]);
+            }
+        }
+        return pts;
+    }
+
+    // Static preview of the finished Text + Icon line: the words, the icon slot and the sparkle, laid out with the same
+    // maths (tiLayout, TI) as the real build. o: words, at (icon slot index), size, gap, pct, textColor, iconColor
+    function drawTiStage(ctrl, o) {
+        var g = ctrl.graphics, w = ctrl.size ? (ctrl.size.width || ctrl.size[0]) : 240, h = ctrl.size ? (ctrl.size.height || ctrl.size[1]) : 96, i;
+        rrPath(g, 0.5, 0.5, w - 1, h - 1, 12);
+        g.fillPath(brush(g, [0.055, 0.067, 0.110, 1]));
+        g.strokePath(pen(g, DS.border, 1));
+        var n = o.words.length;
+        if (n < 1) {
+            var hf = font("REGULAR", 12), hm = measure(g, "Type a sentence", hf);
+            textAt(g, "Type a sentence", DS.muted, Math.round((w - hm[0]) / 2), Math.round((h - hm[1]) / 2), hf);
+            return;
+        }
+        var fs0 = 30, f0 = font("BOLD", fs0), th = fs0 * 0.75, widths = [];
+        for (i = 0; i < n; i++) { widths.push(measure(g, o.words[i], f0)[0]); }
+        var k = fs0 / Math.max(1, o.size);                                   // build pixels -> stage pixels
+        var slot = Math.max(0.3 * th, TI.slotH * th + o.gap * k), icon = TI.iconH * th * o.pct / 100, endGap = (slot + icon) / 2;
+        var L = tiLayout(widths, o.at, 1, slot, fs0 * TI.spaceK, 0, endGap);
+        // extent of the whole line, so it can be scaled to fit
+        var lo = L.iconX - ((o.at === 0 || o.at === n) ? endGap : slot) / 2, hi = L.iconX + ((o.at === 0 || o.at === n) ? endGap : slot) / 2;
+        for (i = 0; i < n; i++) { lo = Math.min(lo, L.centers[i] - widths[i] / 2); hi = Math.max(hi, L.centers[i] + widths[i] / 2); }
+        var fit = Math.min(1, (w - 28) / Math.max(1, hi - lo)), fs = fs0 * fit, f = font("BOLD", fs), mid = (lo + hi) / 2;
+        var tc = o.textColor, ic = o.iconColor;
+        for (i = 0; i < n; i++) {
+            var m = measure(g, o.words[i], f);
+            textAt(g, o.words[i], [tc[0], tc[1], tc[2], 1], Math.round(w / 2 + (L.centers[i] - mid) * fit - m[0] / 2), Math.round((h - m[1]) / 2), f);
+        }
+        var pts = sparkPoints(icon * fit / 2, 7), cx = w / 2 + (L.iconX - mid) * fit, cy = h / 2;
+        g.newPath();
+        for (i = 0; i < pts.length; i++) { if (i === 0) { g.moveTo(cx + pts[i][0], cy + pts[i][1]); } else { g.lineTo(cx + pts[i][0], cy + pts[i][1]); } }
+        g.closePath();
+        g.fillPath(brush(g, [ic[0], ic[1], ic[2], 1]));
+    }
 
     feature("Text", "Text + Icon", function (p) {
         hint(p, "Type 2–6 words, choose where the icon goes, browse for your icon.");
@@ -15711,6 +15781,17 @@
         var where = drop(p, "Icon position:", ["…"], 0, "Where the icon sits in the sentence.");
         var look = hint(p, "");
         look.alignment = ["fill", "top"];
+
+        // live picture of the finished line (words, icon slot, sparkle); it follows every field below
+        var stage = p.add("group");
+        stage.alignment = ["fill", "top"];
+        stage.preferredSize = [200, 92];
+        stage.onDraw = function () {
+            if (!tcol || !icol) { return; }
+            var ws = tiWords(sent.text), at = where.selection ? where.selection.index : 1;
+            drawTiStage(this, { words: ws, at: Math.max(0, Math.min(ws.length, at)), size: num(size.text, 90, 12, 600), gap: num(gap.text, 0, -600, 1200),
+                pct: num(pct.text, 100, 10, 500), textColor: tcol.get(), iconColor: icol.get() });
+        };
 
         // icon file (browse) or the built-in sparkle
         var iconFile = null;
@@ -15748,6 +15829,7 @@
                 if (i < words.length) { out.push(words[i]); }
             }
             look.text = "Preview:  " + out.join(" ");
+            redraw(stage);
         }
         function refresh() {
             var labels = tiSlotLabels(tiWords(sent.text)), keep = where.selection ? where.selection.index : 1, i;
@@ -15764,10 +15846,13 @@
         var tcol = colorChooser(p, "Text color:", style.textGray, "ti_text_color");
         var icol = colorChooser(p, "Icon color:", style.textGray, "ti_icon_color");
         var size = field(p, "Font size:", getS("ti_size", "90"), 4, "Text size in pixels.");
-        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ti_size", size.text); };
+        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ti_size", size.text); redraw(stage); };
         var pct = field(p, "Icon size (%):", "100", 4, "100% = the icon at its natural size for this text. Scale it freely afterwards.");
+        pct.onChange = function () { redraw(stage); };
+        tcol.onChange = function () { redraw(stage); };
+        icol.onChange = function () { redraw(stage); };
         var gap = field(p, "Icon gap (px):", getS("ti_gap", "0"), 5, "Extra space between the two words around the icon. Positive = wider, negative = tighter. 0 = the natural gap. Undo and rebuild to change it.");
-        gap.onChange = function () { gap.text = String(num(gap.text, 0, -600, 1200)); putS("ti_gap", gap.text); };
+        gap.onChange = function () { gap.text = String(num(gap.text, 0, -600, 1200)); putS("ti_gap", gap.text); redraw(stage); };
         var len = field(p, "Length (s):", "4", 4, "How long the layers last from the playhead.");
         var hi = check(p, "Highlight words", false, "Optional colour sweep: each word goes lavender, then magenta, then back to its normal colour. Off keeps everything gray.");
         var step = field(p, "Highlight (s/word):", "1", 4, "How long each word keeps the highlight.");
@@ -15840,29 +15925,6 @@
             });
         }, "Builds both sentences, the wipe, the glow trail and the icon at the playhead. Everything follows one Move null.");
     }, "Text + Icon");
-
-    feature("Text", "Typewriter", function (p) {
-        hint(p, "Letters pop in one by one with a caret that follows the last letter.");
-        var tx = field(p, "Text:", getS("tw_text", "Let's choose a style"), 24, "The line to type out.");
-        tx.onChange = function () { putS("tw_text", tx.text); };
-        var col = colorChooser(p, "Text color:", style.textGray, "tw_color");
-        var size = field(p, "Font size:", getS("tw_size", "90"), 4, "Text size in pixels.");
-        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("tw_size", size.text); };
-        var cps = field(p, "Speed (letters/s):", "14", 4, "How many letters land each second.");
-        var hold = field(p, "First letter after (s):", "0.3", 4, "How long the caret waits alone before the first letter.");
-        var car = check(p, "Caret", true, "A thin caret that follows the last letter, then blinks away.");
-        var blinks = field(p, "Blinks after typing:", "2", 3, "How many times the caret blinks once the last letter has landed.");
-        var cen = check(p, "Keep centred while typing", true, "The line stays centred as it grows. Off: it types from where the finished line starts.");
-        var len = field(p, "Length (s):", "6", 4, "How long the layers last from the playhead (never shorter than the typing itself).");
-        btn(p, "Build typewriter", function () {
-            run("Typewriter", function () {
-                doTypewriter({
-                    text: tx.text, size: num(size.text, 90, 12, 600), color: col.get(), cps: num(cps.text, 14, 1, 120), hold: num(hold.text, 0.3, 0, 20),
-                    caret: car.value, blinks: Math.round(num(blinks.text, 2, 0, 20)), centred: cen.value, length: num(len.text, 6, 0.5, 120)
-                });
-            });
-        }, "Types the line at the playhead: per-letter steps (hold keys) on a text animator, plus a caret that follows.");
-    }, "Motion");
 
     // ---------------- UI Kit ----------------
 
