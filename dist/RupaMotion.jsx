@@ -13628,22 +13628,23 @@
     // Lines come from explicit line breaks and, for paragraph (box) text, from a greedy word wrap against the box width.
     // Everything is measured on a scratch point-text layer that copies the layer's character style ("|" is appended so trailing
     // spaces count, then its width is taken off again).
-    // Returns { n, cx[0..n] (caret x after letter i), cl[0..n] (its line), words: wx[], ww[], wl[], lineStep, lines: count, lineW[], off[] }
+    // Returns { n, cx[0..n] (caret x after letter i, layer space), cl[0..n] (its line), words: wx[], ww[], wl[], lineStep, lines: count, lineW[], off[], baseY (first baseline, layer space) }
     function layoutText(comp, L, t0) {
         var sp = textDocProp(L), src = sp.value, str = src.text, n = str.length, i, j, k;
         var tmp = comp.layers.addText("|"), tsp = textDocProp(tmp);
         var d0 = tsp.value; copyStyle(src, d0); try { d0.justification = ParagraphJustification.LEFT_JUSTIFY; } catch (eJ) {} tsp.setValue(d0);
-        function widthOf(t) {
+        function rectOf(t) {
             var d = tsp.value; d.text = t; tsp.setValue(d);
-            var r = tmp.sourceRectAtTime(t0, false);
-            return r.left + r.width;
+            return tmp.sourceRectAtTime(t0, false);
         }
-        var bar = widthOf("|"), boxW = 1e9, fsRaw = src.fontSize, lineStep = fsRaw * 1.2, just = 0;
-        try { if (src.boxText) { boxW = src.boxTextSize[0]; } } catch (eB) {}
+        function widthOf(t) { var r = rectOf(t); return r.left + r.width; }
+        var bar = widthOf("|"), boxW = 1e9, boxX = 0, fsRaw = src.fontSize, lineStep = fsRaw * 1.2, just = 0, isBox = false;
+        // Paragraph (box) text is not drawn from the layer origin: the box sits at boxTextPos (its top-left) in layer space
+        try { if (src.boxText) { isBox = true; boxW = src.boxTextSize[0]; boxX = src.boxTextPos[0] || 0; } } catch (eB) {}
         try { if (!src.autoLeading && src.leading) { lineStep = src.leading; } } catch (eL) {}
-        try {                                   // centre / right justified point text: the origin sits at the line centre / end
+        try {                                   // centre / right justified text: lines are placed inside the box, or around the origin for point text
             var J = src.justification;
-            if (!src.boxText && J !== undefined) {
+            if (J !== undefined) {
                 if (J === ParagraphJustification.CENTER_JUSTIFY) { just = 1; }
                 else if (J === ParagraphJustification.RIGHT_JUSTIFY) { just = 2; }
             }
@@ -13668,8 +13669,15 @@
             for (j = 1; j <= lines[i].text.length; j++) { prev = Math.max(prev, widthOf(lines[i].text.substring(0, j) + "|") - bar); e.push(prev); }
             edges.push(e);
             lineW.push(e[e.length - 1]);
-            off.push(just === 1 ? -e[e.length - 1] / 2 : (just === 2 ? -e[e.length - 1] : 0));
+            if (isBox) { off.push(boxX + (just === 1 ? (boxW - e[e.length - 1]) / 2 : (just === 2 ? boxW - e[e.length - 1] : 0))); }
+            else { off.push(just === 1 ? -e[e.length - 1] / 2 : (just === 2 ? -e[e.length - 1] : 0)); }
         }
+        // first baseline in layer space: the top of the whole text minus the top of the same first line on a point-text
+        // scratch layer (whose baseline is y = 0). That is 0 for point text and the box offset + ascent for paragraph text.
+        var first = lines.length ? lines[0].text : "H";
+        if (trim(first) === "") { first = "H"; }
+        var baseY = 0;
+        try { baseY = L.sourceRectAtTime(t0, false).top - rectOf(first).top; } catch (eY) {}
         try { tmp.remove(); } catch (eR) {}
 
         // 3) per letter / per word
@@ -13685,7 +13693,7 @@
             if (lines[i].br && i + 1 < lines.length) { cx.push(off[i + 1]); cl.push(i + 1); }     // the break itself is a letter: the caret moves to the next line
         }
         while (cx.length < n + 1) { cx.push(cx[cx.length - 1]); cl.push(cl[cl.length - 1]); }
-        return { n: n, cx: cx, cl: cl, wx: wx, ww: ww, wl: wl, lineStep: lineStep, lines: lines.length, lineW: lineW, off: off, src: src };
+        return { n: n, cx: cx, cl: cl, wx: wx, ww: ww, wl: wl, lineStep: lineStep, lines: lines.length, lineW: lineW, off: off, baseY: baseY, isBox: isBox, src: src };
     }
 
     // A second press replaces the first typewriter animators on the layer
@@ -13723,9 +13731,9 @@
         var lay = layoutText(comp, L, t0);
 
         var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
-        var ox = P[0] - A[0] * s, baseline = P[1] - A[1] * s, fs = src.fontSize * s;
+        var ox = P[0] - A[0] * s, baseline = P[1] + (lay.baseY - A[1]) * s, fs = src.fontSize * s;
         var single = lay.lines === 1;
-        var movable = single && L.transform.position.numKeys === 0 && !L.parent;      // only a single line is kept centred while it grows
+        var movable = single && !lay.isBox && L.transform.position.numKeys === 0 && !L.parent;      // only a single line of point text is kept centred while it grows
         var W = lay.lineW[0], off0 = lay.off[0];
         var times = [];
         for (i = 0; i <= n; i++) { times.push(i === 0 ? t0 : t0 + TW.hold + (i - 1) * dt); }
@@ -13781,7 +13789,7 @@
         if (n < 1) { return "skipped"; }
 
         var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
-        var ox = P[0] - A[0] * s, baseline = P[1] - A[1] * s, fs = src.fontSize * s;
+        var ox = P[0] - A[0] * s, baseline = P[1] + (lay.baseY - A[1]) * s, fs = src.fontSize * s;
         var dt = 1 / TB.wps, times = [];
         for (i = 0; i <= n; i++) { times.push(i === 0 ? t0 : t0 + TB.hold + (i - 1) * dt); }
 

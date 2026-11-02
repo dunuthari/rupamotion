@@ -493,7 +493,7 @@ function fakeBuild() {
         Object.defineProperty(docNode, 'value', { get() { return Object.assign({}, doc); } }); docNode.setValue = v => { Object.assign(doc, v); };
         props.children.push(docNode);
         L.nodes['ADBE Text Properties'] = props; L.doc = doc;
-        L.sourceRectAtTime = () => { const f = doc.fontSize, desc = /[gjpqy]/.test(doc.text) ? 0.25 * f : 0; return { left: 0, top: -f * 0.75, width: doc.text.length * f * 0.5, height: 0.75 * f + desc }; };
+        L.sourceRectAtTime = () => { const f = doc.fontSize, desc = /[gjpqy]/.test(doc.text) ? 0.25 * f : 0, bp = doc.boxTextPos || [0, 0]; return { left: bp[0], top: bp[1] - f * 0.75, width: doc.text.length * f * 0.5, height: 0.75 * f + desc }; };
         return push(L);
       }
     } });
@@ -837,4 +837,34 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['empty text: nothing built'] = !e.layer('MK Typewriter · Caret');
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`typewriters on multi-line text: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Paragraph text is not drawn from the layer origin: the box sits at boxTextPos, and the effects must start THERE
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
+  function press(label, text, props) {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+    const L0 = comp.layers.addText(text); L0.doc.fontSize = 90; Object.assign(L0.doc, props || {});
+    // like a real paragraph layer: anchor at the origin, position at the comp centre, the box far up-left of both
+    L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, 0]);
+    comp.selectedLayers = [L0];
+    walk(root).filter(n => n.type === 'button' && n.text === label && n.parent && n.parent.isBtnRow)[0].onClick();
+    app.project.activeItem = null;
+    return { L0, layer: n => made.filter(L => !L.removed).find(L => L.name === n) };
+  }
+  const box = { boxText: true, boxTextSize: [900, 300], boxTextPos: [-732, -384] };
+  const cw = Math.max(2, 90 * 0.045), gap = 90 * 0.06;
+  const a = press('Typewriter', 'Hi there you', box), ck = a.layer('MK Typewriter · Caret').transform.position.keys;
+  // box top is y = -384 (layer space); the first baseline is there (fake font: the glyph top sits on the box top)
+  R['caret starts at the box (top-left of the text), not at the layer position'] = near(ck[0].v[0], 960 - 732 + gap + cw / 2) && near(ck[0].v[1], 540 - 384 - 90 * 0.3);
+  R['caret follows the letters from there'] = near(ck[2].v[0], 960 - 732 + 90 + gap + cw / 2) && near(ck[2].v[1], ck[0].v[1]);
+  const b = press('Typewriter Block', 'Hi there you', box), bp = b.layer('MK Typewriter · Block').transform.position.keys;
+  R['block starts on the first word of the box'] = near(bp[0].v[0], 960 - 732) && near(bp[1].v[0], 960 - 732 + 135) && near(bp[0].v[1], 540 - 384 - 90 * 0.375);
+  // centred paragraph: lines sit in the middle of the box (box 900 wide, "Hi there you" = 540 px wide)
+  g.ParagraphJustification.CENTER_JUSTIFY = 'C';
+  const c = press('Typewriter Block', 'Hi there you', Object.assign({ justification: 'C' }, box));
+  delete g.ParagraphJustification.CENTER_JUSTIFY;
+  R['centred paragraph: the first word starts (900 - 540) / 2 = 180 px into the box'] = near(c.layer('MK Typewriter · Block').transform.position.keys[0].v[0], 960 - 732 + 180);
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`typewriters on paragraph boxes: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
