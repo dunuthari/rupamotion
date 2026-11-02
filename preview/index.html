@@ -771,8 +771,8 @@
       var H = +hold.value || 0, D = Math.max(0.2, +dur.value || 0.8), sf = +soft.value || 0;
       s1.textContent = a.value; s2.textContent = b.value;
       var col = colorOf(tcolRow); s1.style.color = col; s2.style.color = col;
-      var w1 = s1.getBoundingClientRect().width;
-      var x0 = W / 2 - w1 / 2 - isz * 0.75, x1 = W + isz * 1.5 + sf, p = Math.max(0, Math.min(1, (tau - H) / D)), e = ease(p), x = x0 + (x1 - x0) * e;
+      var w1 = s1.getBoundingClientRect().width, w2 = s2.getBoundingClientRect().width, half = Math.max(w1, w2) / 2, gx = Math.max(isz * 0.7, sf * 1.5);
+      var x0 = W / 2 - half - gx, x1 = W / 2 + half + gx, p = Math.max(0, Math.min(1, (tau - H) / D)), e = ease(p), x = x0 + (x1 - x0) * e;
       star.style.left = x + "px"; star.firstChild.style.width = star.firstChild.style.height = isz + "px";
       star.firstChild.style.left = (-isz / 2) + "px"; star.firstChild.style.top = (-isz / 2) + "px";
       star.firstChild.querySelector("path").setAttribute("fill", colorOf(icolRow));

@@ -1839,7 +1839,7 @@
     // =====================================================================
     // Read from a reference clip: the star sits in front of sentence 1, then accelerates to the right. Everything behind it
     // (left of the star) is sentence 2, everything ahead of it is still sentence 1, with a soft edge and a glowing trail
-    // that is strongest mid-flight. The star leaves the frame; sentence 2 stays. Timings and the curve are estimates from
+    // that is strongest mid-flight. The star stops just past the end of the wider sentence; sentence 2 stays. Timings and the curve are estimates from
     // the clip (not measured to the frame), so they are plain fields / one constant: tune freely.
     var SS = { curve: [0.55, 0, 0.3, 1], dur: 0.8, hold: 0.4, trailK: 0.3, softness: 30 };
 
@@ -1863,8 +1863,13 @@
             setXY(texts[i].transform.position, cx, cy);
         }
         var iconSize = TI.iconH * h * o.iconPct / 100;
-        var x0 = cx - rects[0].width / 2 - iconSize * 0.75;                       // the star waits just in front of sentence 1
-        var x1 = comp.width + iconSize * 1.5 + o.softness * 2;                    // and leaves the frame on the right
+        // The star starts just before and stops just after whichever sentence is wider (it stays in the frame, it does not exit).
+        // The gap is the star's half width plus a small margin, and never less than the wipe softness, so sentence 2 is fully
+        // hidden at the start and sentence 1 is fully gone at the end.
+        var half = Math.max(rects[0].width, rects[1].width) / 2;
+        var gapX = Math.max(iconSize * 0.7, o.softness * 1.5);
+        var x0 = cx - half - gapX;
+        var x1 = cx + half + gapX;
 
         // the mover: its centre is the star's centre, so the wipe edge, the trail and the star all travel with it
         var nul = comp.layers.addNull();

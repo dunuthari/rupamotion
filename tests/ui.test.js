@@ -646,9 +646,9 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['2 sentences, reveal mattes, trail, star and one Move null'] = texts.length === 2 && !!rA && !!rB && !!trail && !!star && !!nul && shapes.length === 4 && nul.name === 'MK Star Swipe · Move';
   R['Move null is on top, centred on the star (anchor 50,50)'] = nul.onTop === true && nul.transform.anchorPoint.value[0] === 50 && nul.transform.anchorPoint.value[1] === 50;
   // independent arithmetic: font 90 -> text height 67.5, "Give your users a place" is 23 chars * 45 = 1035 wide, star 1.85 x 67.5
-  const w1 = 23 * 45, icon = 1.85 * 67.5, x0 = 960 - w1 / 2 - icon * 0.75, x1 = 1920 + icon * 1.5 + 30 * 2;
+  const w1 = 23 * 45, icon = 1.85 * 67.5, gapX = Math.max(icon * 0.7, 30 * 1.5), x0 = 960 - w1 / 2 - gapX, x1 = 960 + w1 / 2 + gapX;
   const k = nul.transform.position.keys;
-  R['star waits 0.4 s, then sweeps 0.8 s from just before sentence 1 to past the right edge'] = k.length === 2 && near(k[0].t, 2.4) && near(k[1].t, 3.2) && near(k[0].v[0], x0) && near(k[1].v[0], x1) && near(k[0].v[1], 540) && near(k[1].v[1], 540);
+  R['star waits 0.4 s, then sweeps 0.8 s from just before the wider sentence to just after it (stays in frame)'] = k.length === 2 && near(k[0].t, 2.4) && near(k[1].t, 3.2) && near(k[0].v[0], x0) && near(k[1].v[0], x1) && near(k[0].v[1], 540) && near(k[1].v[1], 540);
   R['the sweep is eased'] = k[0].out[0].influence > 40 && k[1].in[0].influence > 25;
   R['sentences are centred on one shared baseline'] = [s1, s2].every(L => near(L.transform.position.value[0], 960) && near(L.transform.position.value[1], 540) && near(L.transform.anchorPoint.value[1], -33.75));
   R['sentence 2 is matted by the left-of-star reveal, sentence 1 by the right-of-star one'] = s2.matte === rA && s1.matte === rB && rA.enabled === false && rB.enabled === false;
@@ -659,6 +659,13 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['star spins half a turn while it sweeps'] = star.transform.rotation.keys.length === 2 && star.transform.rotation.keys[1].v === 180 && near(star.transform.rotation.keys[1].t, 3.2);
   R['layers last 5 s from the playhead'] = made.every(L => near(L.inPoint, 2) && near(L.outPoint, 7));
   R['star is selected (ready to restyle)'] = star.selected === true;
+  R['the star stays inside the frame at the end'] = k[1].v[0] + icon / 2 < 1920;
+  // a wider second sentence sets the start and end instead
+  setField('First sentence:', 'Hi there'); setField('Second sentence:', 'a much longer second sentence');
+  const m2 = (() => { const f = fakeBuild(); app.project.activeItem = f.comp; walk(root).filter(n => n.type === 'button' && n.text === 'Build star swipe')[0].onClick(); app.project.activeItem = null; return f.made; })();
+  const k2 = m2.find(L => L.kind === 'null').transform.position.keys, w2 = 29 * 45;
+  R['second sentence wider: the star starts and ends around the second sentence'] = near(k2[0].v[0], 960 - w2 / 2 - gapX) && near(k2[1].v[0], 960 + w2 / 2 + gapX);
+  setField('First sentence:', 'Give your users a place'); setField('Second sentence:', 'to give feedback,');
   const bad = Object.keys(R).filter(kk => !R[kk]);
   console.log(`star swipe: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
