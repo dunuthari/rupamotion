@@ -1104,7 +1104,7 @@
             })(i);
         }
         // built-in, no settings: a two-line text rolls up through a one-line window, word by word
-        items.push({ name: "SaaS Text Preset 1", tip: "Select two text layers (first sentence above, second below, placed in the same spot), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word.",
+        items.push({ name: "SaaS Text Preset 1", tip: "Select two text layers placed in the same spot (the lower layer is visible first and rolls out, the upper layer rolls in), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word.",
             go: function () { run("SaaS Text Preset 1", doSaasRoll); } });
         // built-in, no settings: types the selected text layer out letter by letter, with a caret
         items.push({ name: "Typewriter", tip: "Types the selected text layer out letter by letter at the playhead, with a caret that follows.",

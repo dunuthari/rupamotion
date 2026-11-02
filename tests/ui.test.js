@@ -811,7 +811,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   function ev(expr, val, idx, tot) { const prop = { valueOf() { return val; } }; const effect = () => () => prop; const textIndex = idx, textTotal = tot; return eval(expr); }   // eslint-disable-line no-eval
   const { comp, made } = fakeBuild(); app.project.activeItem = comp;
   const mk = (txt, idx) => { const L = comp.layers.addText(txt); L.index = idx; L.doc.fontSize = 90; L.transform.position.setValue([960, 540]); L.transform.anchorPoint.setValue([0, -33.75]); return L; };
-  const up = mk('Hi there', 1), low = mk('you now', 2);
+  const up = mk('you now', 1), low = mk('Hi there', 2);       // the LOWER layer is the first sentence (visible first), the UPPER one arrives
   comp.selectedLayers = [low, up];                 // selection order must not matter: the layer index decides
   walk(root).filter(n => n.type === 'button' && n.text === 'SaaS Text Preset 1' && n.parent && n.parent.isBtnRow)[0].onClick();
   app.project.activeItem = null;
@@ -819,10 +819,10 @@ function buildTextIcon(sentence, atIndex, opts) {
   const pos = L => roll(L).property('ADBE Text Animator Properties').property('ADBE Text Position 3D').value;
   const amt = L => roll(L).property('ADBE Text Selectors').children[0].property('ADBE Text Expressible Amount').expression;
   R['both layers get the animator, a Roll slider with two keys, and the one-line window'] = [up, low].every(L => !!roll(L) && L.property('ADBE Effect Parade').children.find(c => c.name === 'Roll').children[0].keys.length === 2 && L.property('ADBE Mask Parade').children.length === 1);
-  R['the upper layer moves UP by one line (-108), the lower one starts one line LOWER (+108)'] = pos(up)[1] === -108 && pos(low)[1] === 108;
+  R['the LOWER layer moves UP and out (-108); the UPPER layer starts one line lower (+108) and rises in'] = pos(low)[1] === -108 && pos(up)[1] === 108;
   const A = (L, v, i) => ev(amt(L), v, i, 2);
-  R['the upper layer\'s words leave (0 -> 100%), the lower layer\'s words arrive (100 -> 0%)'] = A(up, 0, 1) === 0 && near(A(up, 0.28, 1), 100) && A(low, 0, 1) === 100 && near(A(low, 0.28, 1), 0);
-  R['words of each layer stagger 0.08 s apart; both layers start together at the playhead'] = A(up, 0.1, 1) > A(up, 0.1, 2) && A(low, 0.1, 1) < A(low, 0.1, 2) && near(A(up, 0.1, 1), 87.5) && near(A(low, 0.1, 1), 12.5);
+  R['the lower layer\'s words leave (0 -> 100%), the upper layer\'s words arrive (100 -> 0%)'] = A(low, 0, 1) === 0 && near(A(low, 0.28, 1), 100) && A(up, 0, 1) === 100 && near(A(up, 0.28, 1), 0);
+  R['words of each layer stagger 0.08 s apart; both layers start together at the playhead'] = A(low, 0.1, 1) > A(low, 0.1, 2) && A(up, 0.1, 1) < A(up, 0.1, 2) && near(A(low, 0.1, 1), 87.5) && near(A(up, 0.1, 1), 12.5);
   const keysOf = L => L.property('ADBE Effect Parade').children.find(c => c.name === 'Roll').children[0].keys;
   R['both sliders start at the playhead (2 s)'] = near(keysOf(up)[0].t, 2) && near(keysOf(low)[0].t, 2) && near(keysOf(up)[1].t, 2.28);
   // one layer with one line, selected alone: asks for two layers / two lines and builds nothing

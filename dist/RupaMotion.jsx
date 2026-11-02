@@ -13600,7 +13600,7 @@
     // line leaves through the top of the window and the second line rises into its place from below. The words move one after
     // another, each line on its own (about 0.08 s apart, about 0.2 s each, ease-out). It is one button on the selected text
     // layer(s), no settings. Timings are read off the clip, not frame-measured.
-    // Two ways to give it the two sentences: TWO text layers (select both: the upper one in the stack leaves, the lower one arrives, and
+    // Two ways to give it the two sentences: TWO text layers (select both: the lower one in the stack is visible first and leaves, the upper one arrives, and
     // both should sit in the same place), or ONE text layer with the sentences on two lines.
     //
     // Two keyframes: a "Roll" slider effect on the text layer goes 0 -> T seconds; an expression selector on a Position animator
@@ -13695,13 +13695,13 @@
 
     function doSaasRoll() {
         var comp = activeComp(); if (!comp) { return; }
-        var sel = selLayers(comp, 1, "Select the two text layers (first sentence above, second sentence below), or one text layer with two lines."); if (!sel) { return; }
+        var sel = selLayers(comp, 1, "Select the two text layers (first sentence BELOW, second sentence ABOVE), or one text layer with two lines."); if (!sel) { return; }
         var t0 = comp.time, i, texts = [];
         for (i = 0; i < sel.length; i++) { if (isTextLayer(sel[i])) { texts.push(sel[i]); } }
         if (texts.length === 2) {
-            // the upper layer in the stack is the sentence that leaves, the lower one is the sentence that arrives
+            // the LOWER layer in the stack is the sentence that is visible first and leaves; the UPPER layer is the one that arrives
             if (texts[0].index > texts[1].index) { var sw = texts[0]; texts[0] = texts[1]; texts[1] = sw; }
-            var r1 = rollOne(comp, texts[0], t0, "out"), r2 = rollOne(comp, texts[1], t0, "in");
+            var r1 = rollOne(comp, texts[0], t0, "in"), r2 = rollOne(comp, texts[1], t0, "out");
             for (i = 0; i < sel.length; i++) { try { sel[i].selected = true; } catch (e) {} }
             if ((r1 !== "ok" && r1 !== "fallback") || (r2 !== "ok" && r2 !== "fallback")) { alert("One of the two text layers has no text. Nothing was rolled.", NAME); }
             return;
@@ -13709,10 +13709,10 @@
         if (texts.length === 1) {
             var res = rollOne(comp, texts[0], t0, "both");
             try { texts[0].selected = true; } catch (e2) {}
-            if (res !== "ok" && res !== "fallback") { alert("This text layer needs the two sentences on two lines. Or select two text layers: the first sentence above, the second below.", NAME); }
+            if (res !== "ok" && res !== "fallback") { alert("This text layer needs the two sentences on two lines. Or select two text layers: the first sentence below, the second above.", NAME); }
             return;
         }
-        alert("Select two text layers (first sentence above, second sentence below), or one text layer with two lines.", NAME);
+        alert("Select two text layers (first sentence below, second sentence above), or one text layer with two lines.", NAME);
     }
 
     // =====================================================================
@@ -16007,7 +16007,7 @@
             })(i);
         }
         // built-in, no settings: a two-line text rolls up through a one-line window, word by word
-        items.push({ name: "SaaS Text Preset 1", tip: "Select two text layers (first sentence above, second below, placed in the same spot), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word.",
+        items.push({ name: "SaaS Text Preset 1", tip: "Select two text layers placed in the same spot (the lower layer is visible first and rolls out, the upper layer rolls in), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word.",
             go: function () { run("SaaS Text Preset 1", doSaasRoll); } });
         // built-in, no settings: types the selected text layer out letter by letter, with a caret
         items.push({ name: "Typewriter", tip: "Types the selected text layer out letter by letter at the playhead, with a caret that follows.",
