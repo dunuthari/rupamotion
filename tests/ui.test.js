@@ -457,12 +457,13 @@ function fakeNode(matchName, dims, base) {
   n.matchName = matchName; n.children = []; n._name = matchName;
   Object.defineProperty(n, 'name', { get() { return this._name; }, set(v) { this._name = v; } });
   Object.defineProperty(n, 'numProperties', { get() { return this.children.length; } });
-  n.addProperty = function (mn) { const c = fakeNode(mn); this.children.push(c); return c; };
+  n.remove = function () { const p = this._parent; if (p) { const i = p.children.indexOf(this); if (i >= 0) p.children.splice(i, 1); } };
+  n.addProperty = function (mn) { const c = fakeNode(mn); c._parent = this; this.children.push(c); return c; };
   n.canAddProperty = () => true;
   n.property = function (x) {
-    if (typeof x === 'number') { while (this.children.length < x) this.children.push(fakeNode('param' + (this.children.length + 1))); return this.children[x - 1]; }
+    if (typeof x === 'number') { while (this.children.length < x) { const nc = fakeNode('param' + (this.children.length + 1)); nc._parent = this; this.children.push(nc); } return this.children[x - 1]; }
     let c = this.children.find(k => k.matchName === x || k._name === x);
-    if (!c) { c = fakeNode(x); this.children.push(c); }
+    if (!c) { c = fakeNode(x); c._parent = this; this.children.push(c); }
     return c;
   };
   return n;
@@ -483,7 +484,9 @@ function fakeBuild() {
   const made = [];
   const comp = new g.CompItem();
   const push = L => { made.push(L); return L; };
-  Object.assign(comp, { time: 2, width: 1920, height: 1080, duration: 20, frameDuration: 0.04, selectedLayers: [], numLayers: 0, shutterAngle: 180,
+  Object.defineProperty(comp, 'numLayers', { get() { return made.filter(L => !L.removed).length; }, configurable: true });
+  Object.assign(comp, { time: 2, width: 1920, height: 1080, duration: 20, frameDuration: 0.04, selectedLayers: [], shutterAngle: 180,
+    layer(i) { return made.filter(L => !L.removed)[i - 1]; },
     layers: {
       addNull() { return push(baseLayer('null')); },
       addShape() { return push(baseLayer('shape')); },
@@ -831,4 +834,33 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['a single one-line layer is refused'] = !solo.property('ADBE Text Properties').property('ADBE Text Animators').children.some(x => x.name === 'MK SaaS Roll');
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`saas text preset 1 (two layers): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Quick Actions > Color Fade: cards appear washed in a colour (wipe + tint), then the colour drains; several come in one after another
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
+  const { comp } = fakeBuild(); app.project.activeItem = comp; comp.time = 2;
+  const mk = (y, idx) => { const L = baseLayer('shape'); L.index = idx; L.transform.position.setValue([960, y]); return L; };
+  const low = mk(300, 1), top = mk(100, 2), mid = mk(200, 3);                 // layer order differs from the on-screen order
+  comp.selectedLayers = [low, top, mid];
+  const qa = walk(root).filter(n => n.type === 'button' && n.text === 'Color Fade' && n.visible !== undefined)[0];
+  R['"Color Fade" is a button in the Quick Actions grid'] = !!qa;
+  qa.onClick(); app.project.activeItem = null;
+  const fxOf = (L, name) => L.property('ADBE Effect Parade').children.find(c => c.name === name);
+  const tint = L => fxOf(L, 'MK Color Fade Tint'), wipe = L => fxOf(L, 'MK Color Fade Wipe');
+  R['every layer gets a Tint and a Linear Wipe'] = [low, top, mid].every(L => !!tint(L) && !!wipe(L));
+  const inOrder = [top, mid, low];                                          // top to bottom on screen
+  R['cards start 1.0 s apart, top to bottom on screen'] = inOrder.every((L, i) => near(L.transform.opacity.keys[0].t, 2 + i));
+  const L1 = top, k = L1.transform.opacity.keys;
+  R['opacity 0 -> 100 over 0.1 s'] = k.length === 2 && k[0].v === 0 && k[1].v === 100 && near(k[1].t - k[0].t, 0.1);
+  const wk = wipe(L1).children[0].keys;
+  R['wipe: completion 100 -> 0 over 0.3 s, feathered'] = wk.length === 2 && wk[0].v === 100 && wk[1].v === 0 && near(wk[1].t - wk[0].t, 0.3) && wipe(L1).children[2].value === 40;
+  const tk = tint(L1).children[2].keys;
+  R['tint: held at 100% for 0.3 s, then drains to 0 by 0.7 s'] = tk.length === 3 && tk.map(x => x.v).join() === '100,100,0' && near(tk[1].t - tk[0].t, 0.3) && near(tk[2].t - tk[0].t, 0.7);
+  R['the tint colours are a purple-blue (dark for black, bright for white)'] = tint(L1).children[0].value[2] > 0.5 && tint(L1).children[1].value[2] > 0.9 && tint(L1).children[0].value[0] < tint(L1).children[1].value[0];
+  // pressing again replaces the effects instead of stacking them
+  app.project.activeItem = comp; comp.selectedLayers = [top]; qa.onClick(); app.project.activeItem = null;
+  R['a second press replaces them'] = top.property('ADBE Effect Parade').children.filter(c => c.name.indexOf('MK Color Fade') === 0).length === 2;
+  const bad = Object.keys(R).filter(kk => !R[kk]);
+  console.log(`color fade: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

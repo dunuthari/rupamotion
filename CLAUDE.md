@@ -22,6 +22,7 @@ UI-kit elements, camera parallax and a live, toggleable bounce.
 | `src/03_animation.jsx` | Shape morph, Pop, Move in/out, UI list stagger, Hold push-in |
 | `src/04_transitions_text.jsx` | Zoom/swipe cuts, shape wipe |
 | `src/06_text_icon.jsx` | Text > Text + Icon: `doTextIcon` (one text layer per word + icon slot + identity Move null), `tiLayout`, `tiHighlight`, `sparkleShape`; every number in `TI` was measured from a reference clip. Text > Star Swipe: `doStarSwipe`, constants in `SS` |
+| `src/06_quick_color_fade.jsx` | Quick Actions > Color Fade button: `doColorFade`, constants in `CF` |
 | `src/06_text_roll.jsx` | Text > Motion > SaaS Text Preset 1 button: `doSaasRoll`, constants in `SR` |
 | `src/06_text_typewriter.jsx` | Text > Motion > Typewriter button: `doTypewriter`, constants in `TW`, `holdKeys` |
 | `src/06_text_presets.jsx` | Text group: `TEXT_PRESETS` (filled by `build.js` from `presets/text/*.ffx`, base64), `b64decode`, `doTextPreset` (writes a temp .ffx, `applyPreset`) |
@@ -85,6 +86,8 @@ Shipped byte for byte, never edit them. Set 1: 1by1, bounce_text, Bouncing_Text_
 Set 2: Snapping_Text_HQ, character_right, Color_FadeOut_HQ, SNAP_TEXT_2, SNAP_TEXT. Set 3: word_down, word_right. Set 4: SaaS_Text_Preset_3, SaaS_Text_Preset_4, SaaS_Text_Preset_5, gg_MotionTypeLite. (trix_bounce, gg_MotionType, SaaS_Text_Preset_1 and _2 were removed on request.) `npm run build` also rewrites the Text buttons in
 `preview/index.html` (between the `TEXT_PRESET_BUTTONS` markers), so don't edit that block by hand.
 A test rebuilds every file in `presets/text` from the built script and compares the bytes.
+
+**Color Fade** (Quick Actions grid, `doColorFade`, no settings): read from a clip of agent cards that appear washed in a purple-blue and then lose the colour. Per selected layer: opacity 0 -> 100 over 0.1 s, `Linear Wipe` (`MK Color Fade Wipe`, completion 100 -> 0 over 0.3 s, feather 40, angle `CF.angle` = 90, which should reveal left to right — flip to 270 if it runs the other way; unverified in AE) and `Tint` (`MK Color Fade Tint`, black -> indigo, white -> purple-blue, Amount 100 held 0.3 s then 0 by 0.7 s). Several selected layers start `CF.stagger` = 1.0 s apart (as in the clip), ordered top to bottom ON SCREEN (position y, then layer index). A second press replaces the effects. Timings read off a clip, not frame-measured.
 
 ## Brand/motion style (applied by the tools)
 Google Vids look: primary `#4285F4`, secondary `#8AB4F8`, periwinkle `#C5CAE9`, background `#F5F7FF`,
