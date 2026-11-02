@@ -836,12 +836,12 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`saas text preset 1 (two layers): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
-// The eight showreel styles in Text > Motion: Hero Zoom, Hero Blur, Letter Blur, Two-Line Stack, Marker Morph, Word Highlight, Blur Out, Delete Out
+// The seven showreel styles in Text > Motion: Hero Zoom, Hero Blur, Letter Blur, Two-Line Stack, Word Highlight, Blur Out, Delete Out
 {
   const near = (a, b) => Math.abs(a - b) < 0.011, R = {};
   function ev(expr, val, idx, tot, value) { const prop = { valueOf() { return val; } }; const effect = () => () => prop; const textIndex = idx, textTotal = tot; return eval(expr); }   // eslint-disable-line no-eval
-  const names = ['Hero Zoom', 'Hero Blur', 'Letter Blur', 'Two-Line Stack', 'Marker Morph', 'Word Highlight', 'Blur Out', 'Delete Out'];
-  R['all eight are plain buttons in the Motion card (no cards, no fields)'] = names.every(n => walk(root).filter(b => b.type === 'button' && b.text === n && b.parent && b.parent.isBtnRow).length === 1) && !names.some(n => walk(root).some(c => c.cardTitle === n));
+  const names = ['Hero Zoom', 'Hero Blur', 'Letter Blur', 'Two-Line Stack', 'Word Highlight', 'Blur Out', 'Delete Out'];
+  R['all seven are plain buttons in the Motion card (no cards, no fields), and Marker Morph is gone'] = names.every(n => walk(root).filter(b => b.type === 'button' && b.text === n && b.parent && b.parent.isBtnRow).length === 1) && !names.some(n => walk(root).some(c => c.cardTitle === n)) && walk(root).filter(b => b.type === 'button' && b.text === 'Marker Morph').length === 0;
   function press(label, mkLayer) {
     const { comp, made } = fakeBuild(); app.project.activeItem = comp;
     const L = mkLayer(comp, made); comp.selectedLayers = [L];
@@ -888,15 +888,6 @@ function buildTextIcon(sentence, atIndex, opts) {
   const one = press('Two-Line Stack', text('just one line')).L;
   R['Two-Line Stack: a single line is refused'] = !anim(one, 'MK Stack');
 
-  // Marker Morph
-  const mm = press('Marker Morph', text('Chaos creates friction')), M = mm.made.find(L => L.name === 'MK Marker · T');
-  R['Marker Morph: room is made (the space before the last word becomes two spaces) and a marker layer appears'] = mm.L.doc.text === 'Chaos creates  friction' && !!M;
-  const pk = M.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Group').property('ADBE Vector Shape').keys;
-  R['Marker Morph: five shapes at 0.15 s steps (square, diamond, dash, dot, small square), all with four vertices'] = pk.length === 5 && near(pk[4].t - pk[0].t, 0.6) && pk.every(k => k.v.vertices.length === 4) && pk[0].v.vertices[0][0] === pk[0].v.vertices[3][0] && pk[1].v.vertices[0][0] === 0 && pk[2].v.vertices[0][1] > pk[0].v.vertices[0][1] && pk[3].v.inTangents[0][0] !== 0;
-  // "Chaos"=225 wide, "creates" starts at 270 (315 wide), "friction" starts at 675 after two spaces: centre of the gap = (585 + 675) / 2 = 630 from the text origin
-  R['Marker Morph: sits in the middle of the gap between the last two words, a bit above the baseline'] = near(M.transform.position.value[0], 960 + 630) && near(M.transform.position.value[1], 540 + 33.75 - 90 * 0.33) && M.transform.scale.keys[0].v[0] === 0 && M.transform.scale.keys[1].v[0] === 100;
-  const mm1 = press('Marker Morph', text('single'));
-  R['Marker Morph: one word is refused'] = !mm1.made.some(L => L.name.indexOf('MK Marker') === 0);
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`showreel styles: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

@@ -1112,7 +1112,6 @@
             ["Hero Blur", doHeroBlur, "The layer blurs in and settles in place (any layer)."],
             ["Letter Blur", doLetterBlur, "Text fades in letter by letter with a little blur."],
             ["Two-Line Stack", doTwoLineStack, "A text layer with two lines: the first line sits, then the words of the second come in below and the block re-centres."],
-            ["Marker Morph", doMarkerMorph, "A small marker between the last two words changes shape: square, diamond, dash, dot, square. Room is made between the words if needed."],
             ["Word Highlight", doWordHighlight, "The current word turns teal and the highlight moves word to word."],
             ["Blur Out", doBlurOut, "The layer blurs out and shrinks a little (any layer)."],
             ["Delete Out", doDeleteOut, "The letters disappear from the right, with blur."]

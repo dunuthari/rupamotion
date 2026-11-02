@@ -13716,13 +13716,12 @@
     }
 
     // =====================================================================
-    // TEXT > MOTION — eight one-click styles read from a SaaS text showreel (select the layer, click the button, no settings)
+    // TEXT > MOTION — seven one-click styles read from a SaaS text showreel (select the layer, click the button, no settings)
     // =====================================================================
     //   Hero Zoom      a giant, blurred word pulls back and sharpens (any layer)
     //   Hero Blur      the word blurs in and settles in place (any layer)
     //   Letter Blur    letters fade in one after another with a little blur (text)
     //   Two-Line Stack the first line sits, then the words of the second line come in below and the block re-centres (text, two lines)
-    //   Marker Morph   a small marker between the last two words changes shape: square, diamond, dash, dot, square (text)
     //   Word Highlight the current word turns teal, the highlight moves word to word (text)
     //   Blur Out       the layer blurs out and shrinks a little (any layer)
     //   Delete Out     the letters disappear from the right, with blur (text)
@@ -13734,7 +13733,6 @@
         blurIn: { from: 0.94, dur: 0.9, blur: 36, fade: 0.5, curve: [0.2, 0.7, 0.2, 1] },
         letter: { stagger: 0.035, dur: 0.28, blur: 16, drop: 10 },
         stack: { delay: 0.5, stagger: 0.08, dur: 0.3, glide: 0.5, blur: 12, drop: 14 },
-        marker: { step: 0.15, size: 0.13, gap: 0.85, rise: 0.33 },
         highlight: { step: 0.4, ramp: 0.12 },
         blurOut: { dur: 0.55, blur: 30, to: 0.92, hold: 0.1 },
         del: { stagger: 0.03, dur: 0.2, blur: 14 } };
@@ -13962,62 +13960,6 @@
             } catch (eP) {}
         }
         if (bad > 0) { alert(bad + " layer(s) skipped (they need two lines, or the per-word selector could not be created).", NAME); }
-    }
-
-    // ---- Marker Morph --------------------------------------------------------------------------------
-    function tsMarkerShapes(r) {
-        var z = [[0, 0], [0, 0], [0, 0], [0, 0]], k = 0.5523, d = r * 1.41, w = r * 1.25, h = r * 0.2;
-        return [
-            makeShape([[-r, -r], [r, -r], [r, r], [-r, r]], z, z, true),                                                   // square
-            makeShape([[0, -d], [d, 0], [0, d], [-d, 0]], z, z, true),                                                     // diamond
-            makeShape([[-w, -h], [w, -h], [w, h], [-w, h]], z, z, true),                                                   // dash
-            makeShape([[0, -r], [r, 0], [0, r], [-r, 0]], [[-k * r, 0], [0, -k * r], [k * r, 0], [0, k * r]], [[k * r, 0], [0, k * r], [-k * r, 0], [0, -k * r]], true),   // dot
-            makeShape([[-r * 0.6, -r * 0.6], [r * 0.6, -r * 0.6], [r * 0.6, r * 0.6], [-r * 0.6, r * 0.6]], z, z, true)   // small square (rests here)
-        ];
-    }
-
-    function markerOne(comp, L, t) {
-        var sp = textDocProp(L), src = sp.value, lay = layoutText(comp, L, t), n = lay.wx.length, tries = 0, m;
-        if (n < 2) { return false; }
-        var fsRaw = src.fontSize;
-        // make room between the last two words: replace the space run before the last word with enough spaces
-        while (lay.wl[n - 1] === lay.wl[n - 2] && (lay.wx[n - 1] - (lay.wx[n - 2] + lay.ww[n - 2])) < fsRaw * TS.marker.gap && tries < 8) {
-            var d = sp.value;
-            m = /^([\s\S]*\S)(\s+)(\S+\s*)$/.exec(d.text);
-            if (!m) { break; }
-            d.text = m[1] + m[2] + " " + m[3];
-            sp.setValue(d);
-            lay = layoutText(comp, L, t);
-            n = lay.wx.length;
-            tries++;
-        }
-        if (lay.wl[n - 1] !== lay.wl[n - 2]) { return false; }
-        var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value, fs = fsRaw * s;
-        var cx = P[0] - A[0] * s + s * ((lay.wx[n - 2] + lay.ww[n - 2]) + lay.wx[n - 1]) / 2;
-        var cy = P[1] + (lay.baseY - A[1]) * s + s * lay.wl[n - 1] * lay.lineStep - fs * TS.marker.rise;
-        var color = [1, 1, 1];
-        try { if (src.applyFill) { color = src.fillColor; } } catch (eC) {}
-        var r = fs * TS.marker.size, shapes = tsMarkerShapes(r), i;
-        // an earlier marker for this layer is replaced
-        for (i = comp.numLayers; i >= 1; i--) { try { if (comp.layer(i).name === "MK Marker · " + L.name) { comp.layer(i).remove(); } } catch (e1) {} }
-        var M = shapeLayer(comp, "MK Marker · " + L.name), gi = newGroup(M, "Marker");
-        addPathVec(M, gi, shapes[0]);
-        addFill(M, gi, color, 100);
-        setXY(M.transform.position, cx, cy);
-        var pathProp = grp(M, gi).property("ADBE Vectors Group").property("ADBE Vector Shape - Group").property("ADBE Vector Shape");
-        for (i = 0; i < shapes.length; i++) { pathProp.setValueAtTime(t + i * TS.marker.step, shapes[i]); }
-        tsSmooth(M.transform.scale, [[t, [0, 0]], [t + TS.marker.step, [100, 100]]], [0.2, 0.9, 0.3, 1]);
-        try { M.inPoint = Math.max(0, t); M.outPoint = Math.max(M.inPoint + 0.1, Math.min(comp.duration, L.outPoint)); } catch (e2) {}
-        M.selected = false;
-        return true;
-    }
-
-    function doMarkerMorph() {
-        var comp = activeComp(); if (!comp) { return; }
-        var list = tsTextLayers(comp, "Select the text layer(s) for the marker."); if (!list) { return; }
-        var bad = 0;
-        for (var i = 0; i < list.length; i++) { if (!markerOne(comp, list[i], comp.time)) { bad++; } }
-        if (bad > 0) { alert(bad + " layer(s) skipped: the marker needs a line with at least two words.", NAME); }
     }
 
     // =====================================================================
@@ -16320,7 +16262,6 @@
             ["Hero Blur", doHeroBlur, "The layer blurs in and settles in place (any layer)."],
             ["Letter Blur", doLetterBlur, "Text fades in letter by letter with a little blur."],
             ["Two-Line Stack", doTwoLineStack, "A text layer with two lines: the first line sits, then the words of the second come in below and the block re-centres."],
-            ["Marker Morph", doMarkerMorph, "A small marker between the last two words changes shape: square, diamond, dash, dot, square. Room is made between the words if needed."],
             ["Word Highlight", doWordHighlight, "The current word turns teal and the highlight moves word to word."],
             ["Blur Out", doBlurOut, "The layer blurs out and shrinks a little (any layer)."],
             ["Delete Out", doDeleteOut, "The letters disappear from the right, with blur."]
