@@ -850,13 +850,13 @@ function buildTextIcon(sentence, atIndex, opts) {
   const tint = L => fxOf(L, 'MK Color Fade Tint'), wipe = L => fxOf(L, 'MK Color Fade Wipe');
   R['every layer gets a Tint and a Linear Wipe'] = [low, top, mid].every(L => !!tint(L) && !!wipe(L));
   const inOrder = [top, mid, low];                                          // top to bottom on screen
-  R['cards start 1.0 s apart, top to bottom on screen'] = inOrder.every((L, i) => near(L.transform.opacity.keys[0].t, 2 + i));
+  R['cards start 0.8 s apart, top to bottom on screen'] = inOrder.every((L, i) => near(L.transform.opacity.keys[0].t, 2 + 0.8 * i));
   const L1 = top, k = L1.transform.opacity.keys;
-  R['opacity 0 -> 100 over 0.1 s'] = k.length === 2 && k[0].v === 0 && k[1].v === 100 && near(k[1].t - k[0].t, 0.1);
+  R['opacity 0 -> 100 over 0.25 s, gently eased'] = k.length === 2 && k[0].v === 0 && k[1].v === 100 && near(k[1].t - k[0].t, 0.25) && k[0].out[0].influence > 15 && k[0].out[0].influence < 50;
   const wk = wipe(L1).children[0].keys;
-  R['wipe: completion 100 -> 0 over 0.3 s, feathered'] = wk.length === 2 && wk[0].v === 100 && wk[1].v === 0 && near(wk[1].t - wk[0].t, 0.3) && wipe(L1).children[2].value === 40;
+  R['wipe: completion 100 -> 0 over 0.45 s, soft edge'] = wk.length === 2 && wk[0].v === 100 && wk[1].v === 0 && near(wk[1].t - wk[0].t, 0.45) && wipe(L1).children[2].value >= 40;
   const tk = tint(L1).children[2].keys;
-  R['tint: held at 100% for 0.3 s, then drains to 0 by 0.7 s'] = tk.length === 3 && tk.map(x => x.v).join() === '100,100,0' && near(tk[1].t - tk[0].t, 0.3) && near(tk[2].t - tk[0].t, 0.7);
+  R['tint: held at 100% for 0.5 s, then drains to 0 by 1.0 s, eased'] = tk.length === 3 && tk.map(x => x.v).join() === '100,100,0' && near(tk[1].t - tk[0].t, 0.5) && near(tk[2].t - tk[0].t, 1.0) && tk[1].out[0].influence > 15;
   R['the tint colours are a purple-blue (dark for black, bright for white)'] = tint(L1).children[0].value[2] > 0.5 && tint(L1).children[1].value[2] > 0.9 && tint(L1).children[0].value[0] < tint(L1).children[1].value[0];
   // pressing again replaces the effects instead of stacking them
   app.project.activeItem = comp; comp.selectedLayers = [top]; qa.onClick(); app.project.activeItem = null;
