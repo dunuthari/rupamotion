@@ -370,11 +370,12 @@ function runSwipe(arrow, mutate) {
   fs.writeFileSync(path.join(tmp, 'presets', 'notes.txt'), 'ignored');
   const r = build({ presetsDir: path.join(tmp, 'presets'), out: path.join(tmp, 'out.jsx') });
 
-  const applied = [], removed = [];
+  const applied = [], removed = [], written = [];
   function FakeFile(p) { this.path = p; this.data = ''; this.encoding = ''; }
   FakeFile.prototype.open = function () { return true; };
   FakeFile.prototype.write = function (s) { this.data += s; };
-  FakeFile.prototype.close = function () {};
+  FakeFile.prototype.close = function () { written.push(this.path); };
+  Object.defineProperty(FakeFile.prototype, 'exists', { get() { return written.indexOf(this.path) >= 0; } });
   FakeFile.prototype.remove = function () { removed.push(this.path); return true; };
   const g2 = Object.assign({}, g, { File: FakeFile, Folder: { temp: { fsName: '/tmp' } } });
   const src2 = fs.readFileSync(path.join(tmp, 'out.jsx'), 'utf8');
@@ -394,10 +395,12 @@ function runSwipe(arrow, mutate) {
     const got = Buffer.from(applied[0] ? applied[0].data : '', 'latin1');
     exact[nm] = applied.length === 2 && Buffer.compare(got, want) === 0 && applied[0].encoding === 'BINARY';
   });
+  comp.selectedLayers = [layer]; applied.length = 0; const w1 = written.length; btns.filter(b => b.text === 'Pop')[0].onClick();
+  const reuse = written.length === w1 && applied.length === 1;       // second click: file already decoded, only applied
   comp.selectedLayers = []; applied.length = 0;
   btns[0].onClick();            // nothing selected: asks for a layer, applies nothing
   app.project.activeItem = null;
-  console.log(`text presets: ${r.presets} embedded (non-.ffx ignored: ${r.presets === 4}), buttons ${names === 'Fade Up|Pop|Slide in|Tiny'}, bytes round-trip ${JSON.stringify(exact)}, temp files removed ${removed.length === 4}, nothing applied without a selection ${applied.length === 0}`);
+  console.log(`text presets: ${r.presets} embedded (non-.ffx ignored: ${r.presets === 4}), buttons ${names === 'Fade Up|Pop|Slide in|Tiny'}, bytes round-trip ${JSON.stringify(exact)}, decoded once and reused on later clicks ${reuse && written.length === 4}, nothing applied without a selection ${applied.length === 0}`);
   // a build with no .ffx files shows the empty state
   fs.mkdirSync(path.join(tmp, 'none'));
   build({ presetsDir: path.join(tmp, 'none'), out: path.join(tmp, 'empty.jsx') });
