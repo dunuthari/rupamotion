@@ -803,3 +803,38 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(kk => !R[kk]);
   console.log(`typewriter block: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// Both typewriters on multi-line text: explicit line breaks and wrapped paragraph (box) text
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
+  function press(label, text, boxed) {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+    const L0 = comp.layers.addText(text); L0.doc.fontSize = 90;
+    if (boxed) { L0.doc.boxText = true; L0.doc.boxTextSize = [500, 300]; }
+    L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, -33.75]);
+    comp.selectedLayers = [L0];
+    walk(root).filter(n => n.type === 'button' && n.text === label && n.parent && n.parent.isBtnRow)[0].onClick();
+    app.project.activeItem = null;
+    return { L0, made, layer: n => made.filter(L => !L.removed).find(L => L.name === n) };
+  }
+  const cw = Math.max(2, 90 * 0.045), gap = 90 * 0.06, y0 = 540 + 33.75 - 90 * 0.3;
+  // Typewriter, explicit line breaks: "Hi" / "there" (8 letters, the break is one of them)
+  const a = press('Typewriter', 'Hi\rthere', false), ak = a.layer('MK Typewriter · Caret').transform.position.keys;
+  R['caret: 9 steps (the line break is a letter), no centring shift on multi-line text'] = ak.length === 9 && a.L0.transform.position.numKeys === 0;
+  R['caret: after "Hi" it is at x = 90 on line 1; the break moves it to the start of line 2 (+108 px)'] = near(ak[2].v[0], 960 + 90 + gap + cw / 2) && near(ak[2].v[1], y0) && near(ak[3].v[0], 960 + gap + cw / 2) && near(ak[3].v[1], y0 + 108);
+  R['caret: "there" runs along the second line'] = near(ak[8].v[0], 960 + 225 + gap + cw / 2) && near(ak[8].v[1], y0 + 108) && near(ak[5].v[0] - ak[4].v[0], 45);
+  // Typewriter, wrapped paragraph text (box 500 px): "Hi there " then "you"
+  const b = press('Typewriter', 'Hi there you', true), bk = b.layer('MK Typewriter · Caret').transform.position.keys;
+  R['caret on wrapped text: the word that does not fit starts line 2 at the left edge'] = bk.length === 13 && near(bk[9].v[0], 960 + 405 + gap + cw / 2) && near(bk[9].v[1], y0) && near(bk[10].v[0], 960 + 45 + gap + cw / 2) && near(bk[10].v[1], y0 + 108) && near(bk[12].v[0], 960 + 135 + gap + cw / 2);
+  R['wrapped paragraph is not shifted to stay centred'] = b.L0.transform.position.numKeys === 0;
+  // Typewriter Block with explicit line breaks: Hi | there you
+  const c = press('Typewriter Block', 'Hi\rthere you', false), cp = c.layer('MK Typewriter · Block').transform.position.keys, cs = c.layer('MK Typewriter · Block').transform.scale.keys;
+  R['block: words on each line (x restarts at the left edge, y drops 108 px)'] = cp.length === 3 && near(cp[0].v[0], 960) && near(cp[1].v[0], 960) && near(cp[1].v[1], 540 + 108) && near(cp[2].v[0], 960 + 270) && near(cp[2].v[1], 540 + 108) && near(cs[1].v[0], 225) && near(cs[2].v[0], 135);
+  const st = c.L0.property('ADBE Text Properties').property('ADBE Text Animators').children[0].property('ADBE Text Selectors').children[0].property('ADBE Text Index Start').keys;
+  R['block: 3 words -> 4 reveal keys even though the text has a line break'] = st.length === 4;
+  // an empty layer is refused instead of building nothing silently
+  const e = press('Typewriter', '   ', false);
+  R['empty text: nothing built'] = !e.layer('MK Typewriter · Caret');
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`typewriters on multi-line text: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
