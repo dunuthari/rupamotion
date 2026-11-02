@@ -835,3 +835,68 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`saas text preset 1 (two layers): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// The eight showreel styles in Text > Motion: Hero Zoom, Hero Blur, Letter Blur, Two-Line Stack, Marker Morph, Word Highlight, Blur Out, Delete Out
+{
+  const near = (a, b) => Math.abs(a - b) < 0.011, R = {};
+  function ev(expr, val, idx, tot, value) { const prop = { valueOf() { return val; } }; const effect = () => () => prop; const textIndex = idx, textTotal = tot; return eval(expr); }   // eslint-disable-line no-eval
+  const names = ['Hero Zoom', 'Hero Blur', 'Letter Blur', 'Two-Line Stack', 'Marker Morph', 'Word Highlight', 'Blur Out', 'Delete Out'];
+  R['all eight are plain buttons in the Motion card (no cards, no fields)'] = names.every(n => walk(root).filter(b => b.type === 'button' && b.text === n && b.parent && b.parent.isBtnRow).length === 1) && !names.some(n => walk(root).some(c => c.cardTitle === n));
+  function press(label, mkLayer) {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+    const L = mkLayer(comp, made); comp.selectedLayers = [L];
+    walk(root).filter(b => b.type === 'button' && b.text === label && b.parent && b.parent.isBtnRow)[0].onClick();
+    app.project.activeItem = null;
+    return { L, made };
+  }
+  const shape = (comp, made) => { const L = baseLayer('shape'); L.name = 'Card'; made.push(L); return L; };
+  const text = (str, props) => (comp) => { const L = comp.layers.addText(str); L.name = 'T'; L.doc.fontSize = 90; Object.assign(L.doc, props || {}); L.transform.position.setValue([960, 540]); L.transform.anchorPoint.setValue([0, -33.75]); return L; };
+  const fx = (L, n) => L.property('ADBE Effect Parade').children.find(c => c.name === n);
+  const anim = (L, n) => L.property('ADBE Text Properties').property('ADBE Text Animators').children.find(c => c.name === n);
+  const amt = a => a.property('ADBE Text Selectors').children[0].property('ADBE Text Expressible Amount').expression;
+  const pv = (a, m) => a.property('ADBE Text Animator Properties').property(m).value;
+
+  // Hero Zoom / Hero Blur / Blur Out: whole layer
+  const hz = press('Hero Zoom', shape).L, sk = hz.transform.scale.keys, bk = fx(hz, 'MK Hero Blur').children[0].keys, ok = hz.transform.opacity.keys;
+  R['Hero Zoom: scale 320% -> 100% over 1.0 s, blur 80 -> 0, fade in 0.35 s'] = sk.length === 2 && sk[0].v[0] === 320 && sk[1].v[0] === 100 && near(sk[1].t - sk[0].t, 1.0) && bk.length === 2 && bk[0].v === 80 && bk[1].v === 0 && ok.length === 2 && ok[0].v === 0 && ok[1].v === 100 && near(ok[1].t - ok[0].t, 0.35);
+  const hb = press('Hero Blur', shape).L;
+  R['Hero Blur: scale 94% -> 100%, blur 36 -> 0, fade in 0.5 s'] = hb.transform.scale.keys[0].v[0] === 94 && hb.transform.scale.keys[1].v[0] === 100 && fx(hb, 'MK Hero Blur').children[0].keys[0].v === 36 && near(hb.transform.opacity.keys[1].t - hb.transform.opacity.keys[0].t, 0.5);
+  const bo = press('Blur Out', shape).L, ob = bo.transform.opacity.keys;
+  R['Blur Out: scale 100% -> 92%, blur 0 -> 30, opacity 100 -> 100 -> 0 over 0.55 s'] = bo.transform.scale.keys[1].v[0] === 92 && fx(bo, 'MK Blur Out').children[0].keys[1].v === 30 && ob.map(k => k.v).join() === '100,100,0' && near(ob[2].t - ob[0].t, 0.55);
+  R['pressing Hero Blur again replaces the blur effect (one left)'] = (() => { const { comp, made } = fakeBuild(); app.project.activeItem = comp; const L = shape(comp, made); comp.selectedLayers = [L]; const b = walk(root).filter(x => x.type === 'button' && x.text === 'Hero Blur' && x.parent && x.parent.isBtnRow)[0]; b.onClick(); b.onClick(); app.project.activeItem = null; return L.property('ADBE Effect Parade').children.filter(c => c.name === 'MK Hero Blur').length === 1; })();
+
+  // Letter Blur
+  const lb = press('Letter Blur', text('Hi there')).L, lsk = fx(lb, 'MK Reveal').children[0].keys, la = anim(lb, 'MK Letter Blur');
+  R['Letter Blur: two keys 0 -> 0.525 s (7 x 0.035 + 0.28), opacity 0 + blur 16 + drop 10 on an expression selector'] = lsk.length === 2 && lsk[0].v === 0 && near(lsk[1].v, 0.525) && pv(la, 'ADBE Text Opacity') === 0 && pv(la, 'ADBE Text Blur')[0] === 16 && pv(la, 'ADBE Text Position 3D')[1] === 10 && la.property('ADBE Text Selectors').children[0].matchName === 'ADBE Text Expressible Selector';
+  const L1 = (v, i) => ev(amt(la), v, i, 8);
+  R['Letter Blur: each letter starts 0.035 s after the one before and eases out (hidden 100 -> 0)'] = L1(0, 1) === 100 && near(L1(0.525, 8), 0) && L1(0.1, 1) < L1(0.1, 2) && L1(0.1, 2) < L1(0.1, 3);
+
+  // Delete Out: from the right
+  const dl = press('Delete Out', text('Hi there')).L, da = anim(dl, 'MK Delete Out'), D1 = (v, i) => ev(amt(da), v, i, 8);
+  R['Delete Out: the last letter starts first (0.03 s apart), the first letter last; blur 14'] = near(fx(dl, 'MK Delete').children[0].keys[1].v, 0.41) && D1(0.1, 8) > 0 && D1(0.1, 1) === 0 && D1(0.1, 8) > D1(0.1, 7) && near(D1(0.41, 1), 100) && pv(da, 'ADBE Text Blur')[0] === 14;
+
+  // Word Highlight
+  const wh = press('Word Highlight', text('Hi there you')).L, wa = anim(wh, 'MK Word Highlight'), W1 = (v, i) => ev(amt(wa), v, i, 3);
+  R['Word Highlight: teal fill; word 1 is teal while the highlight sits on it, then it moves on to word 2 (0.4 s per word)'] = pv(wa, 'ADBE Text Fill Color')[1] > 0.9 && W1(0.2, 1) === 100 && W1(0.2, 2) === 0 && W1(0.5, 1) < 30 && W1(0.5, 2) > 70 && W1(0.9, 3) > 70;
+  R['Word Highlight: works when Based On stays on characters (letter 4 is the first letter of word 2)'] = near(ev(amt(wa), 0.5, 4, 12), W1(0.5, 2)) && near(ev(amt(wa), 0.5, 1, 12), W1(0.5, 1));
+
+  // Two-Line Stack
+  const ts = press('Two-Line Stack', text('Hi there\ryou now')).L, sa = anim(ts, 'MK Stack'), S1 = (v, i) => ev(amt(sa), v, i, 4);
+  R['Two-Line Stack: words of line 1 are never hidden; words of line 2 appear after 0.5 s, 0.08 s apart'] = S1(0, 1) === 0 && S1(0, 2) === 0 && S1(0.4, 3) === 100 && S1(0.98, 3) < 5 && S1(0.7, 3) < S1(0.7, 4) && fx(ts, 'MK Stack').children[0].keys.length === 2;
+  const pe = (v) => ev(ts.transform.position.expression, v, 0, 0, [960, 540]);
+  R['Two-Line Stack: line 1 starts centred (block 54 px lower) and the block glides up to its own place'] = near(pe(0)[1], 594) && pe(0.98)[1] < 540.1 && pe(0.75)[1] > 540 && pe(0.75)[1] < 594;
+  const one = press('Two-Line Stack', text('just one line')).L;
+  R['Two-Line Stack: a single line is refused'] = !anim(one, 'MK Stack');
+
+  // Marker Morph
+  const mm = press('Marker Morph', text('Chaos creates friction')), M = mm.made.find(L => L.name === 'MK Marker · T');
+  R['Marker Morph: room is made (the space before the last word becomes two spaces) and a marker layer appears'] = mm.L.doc.text === 'Chaos creates  friction' && !!M;
+  const pk = M.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Group').property('ADBE Vector Shape').keys;
+  R['Marker Morph: five shapes at 0.15 s steps (square, diamond, dash, dot, small square), all with four vertices'] = pk.length === 5 && near(pk[4].t - pk[0].t, 0.6) && pk.every(k => k.v.vertices.length === 4) && pk[0].v.vertices[0][0] === pk[0].v.vertices[3][0] && pk[1].v.vertices[0][0] === 0 && pk[2].v.vertices[0][1] > pk[0].v.vertices[0][1] && pk[3].v.inTangents[0][0] !== 0;
+  // "Chaos"=225 wide, "creates" starts at 270 (315 wide), "friction" starts at 675 after two spaces: centre of the gap = (585 + 675) / 2 = 630 from the text origin
+  R['Marker Morph: sits in the middle of the gap between the last two words, a bit above the baseline'] = near(M.transform.position.value[0], 960 + 630) && near(M.transform.position.value[1], 540 + 33.75 - 90 * 0.33) && M.transform.scale.keys[0].v[0] === 0 && M.transform.scale.keys[1].v[0] === 100;
+  const mm1 = press('Marker Morph', text('single'));
+  R['Marker Morph: one word is refused'] = !mm1.made.some(L => L.name.indexOf('MK Marker') === 0);
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`showreel styles: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}

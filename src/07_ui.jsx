@@ -1106,6 +1106,22 @@
         // built-in, no settings: a two-line text rolls up through a one-line window, word by word
         items.push({ name: "SaaS Text Preset 1", tip: "Select two text layers placed in the same spot (the lower layer is visible first and rolls out, the upper layer rolls in), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word.",
             go: function () { run("SaaS Text Preset 1", doSaasRoll); } });
+        // built-in, no settings: styles read from a SaaS text showreel (select the layer, click the button)
+        var styles = [
+            ["Hero Zoom", doHeroZoom, "A giant, blurred layer pulls back and sharpens into place (any layer)."],
+            ["Hero Blur", doHeroBlur, "The layer blurs in and settles in place (any layer)."],
+            ["Letter Blur", doLetterBlur, "Text fades in letter by letter with a little blur."],
+            ["Two-Line Stack", doTwoLineStack, "A text layer with two lines: the first line sits, then the words of the second come in below and the block re-centres."],
+            ["Marker Morph", doMarkerMorph, "A small marker between the last two words changes shape: square, diamond, dash, dot, square. Room is made between the words if needed."],
+            ["Word Highlight", doWordHighlight, "The current word turns teal and the highlight moves word to word."],
+            ["Blur Out", doBlurOut, "The layer blurs out and shrinks a little (any layer)."],
+            ["Delete Out", doDeleteOut, "The letters disappear from the right, with blur."]
+        ];
+        (function () {
+            for (var si = 0; si < styles.length; si++) {
+                (function (st) { items.push({ name: st[0], tip: st[2], go: function () { run(st[0], st[1]); } }); })(styles[si]);
+            }
+        })();
         // built-in, no settings: types the selected text layer out letter by letter, with a caret
         items.push({ name: "Typewriter", tip: "Types the selected text layer out letter by letter at the playhead, with a caret that follows.",
             go: function () { run("Typewriter", doTypewriter); } });
