@@ -758,3 +758,49 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`typewriters (two keyframes): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// SaaS Text Preset 1: a two-line text rolls up through a one-line window, word by word, on a two-key slider
+{
+  const near = (a, b) => Math.abs(a - b) < 0.011, R = {};
+  function ev(expr, val, idx, tot) { const prop = { valueOf() { return val; } }; const effect = () => () => prop; const textIndex = idx, textTotal = tot; return eval(expr); }   // eslint-disable-line no-eval
+  function press(text, props) {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+    const L0 = comp.layers.addText(text); L0.doc.fontSize = 90; Object.assign(L0.doc, props || {});
+    L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, -33.75]);
+    comp.selectedLayers = [L0];
+    const b = walk(root).filter(n => n.type === 'button' && n.text === 'SaaS Text Preset 1' && n.parent && n.parent.isBtnRow)[0];
+    b.onClick(); app.project.activeItem = null;
+    return { b, L0, made };
+  }
+  const a = press('Hi there\ryou now');
+  const L0 = a.L0, anims = L0.property('ADBE Text Properties').property('ADBE Text Animators').children;
+  const an = anims.find(x => x.name === 'MK SaaS Roll');
+  R['"SaaS Text Preset 1" is a plain button in the Motion card'] = !!a.b && !walk(root).some(n => n.cardTitle === 'SaaS Text Preset 1');
+  const e = L0.property('ADBE Effect Parade').children.find(c => c.name === 'Roll'), sk = e && e.children[0].keys;
+  R['exactly TWO keyframes: a "Roll" slider 0 -> 0.28 s (stagger 0.08 + 0.2 per word), linear'] = !!sk && sk.length === 2 && sk[0].v === 0 && near(sk[1].v, 0.28) && near(sk[0].t, 2) && near(sk[1].t, 2.28) && sk.every(k => k.inT === 'L');
+  const pos = an.property('ADBE Text Animator Properties').property('ADBE Text Position 3D');
+  R['animator moves everything up by one line (1.2 x 90 = 108 px)'] = !!an && pos.value[1] === -108 && pos.value[0] === 0;
+  const sel = an.property('ADBE Text Selectors').children[0], amt = sel.property('ADBE Text Expressible Amount');
+  R['an Expression Selector (not a Range Selector) drives it'] = sel.matchName === 'ADBE Text Expressible Selector' && an.property('ADBE Text Selectors').children.length === 1 && typeof amt.expression === 'string' && amt.expression.indexOf('Roll') >= 0;
+  // words: Hi(line 1, 0) there(line 1, 1) you(line 2, 0) now(line 2, 1): each line staggers on its own, so Hi and you move together
+  const A = (v, i) => ev(amt.expression, v, i, 4);
+  R['at the start nothing has moved; at the end every word has'] = [1, 2, 3, 4].every(i => A(0, i) === 0) && [1, 2, 3, 4].every(i => near(A(0.28, i), 100));
+  R['each line staggers on its own: the first word of BOTH lines moves first, together'] = near(A(0.1, 1), A(0.1, 3)) && near(A(0.1, 2), A(0.1, 4)) && A(0.1, 1) > A(0.1, 2) && near(A(0.1, 1), 87.5) && A(0.05, 2) === 0;
+  R['ease-out: most of the move happens early'] = A(0.05, 1) > 25 * 1.5 && A(0.2, 1) === 100;
+  // character-based fallback: with 16 characters the same words get the same amounts
+  const AC = (v, c) => ev(amt.expression, v, c, 16);
+  R['if "Based On" stays on characters: every letter takes its word\'s timing (spaces and the break take the word before)'] = near(AC(0.1, 1), A(0.1, 1)) && near(AC(0.1, 2), A(0.1, 1)) && near(AC(0.1, 4), A(0.1, 2)) && near(AC(0.1, 9), A(0.1, 2)) && near(AC(0.1, 10), A(0.1, 3)) && near(AC(0.1, 16), A(0.1, 4));
+  const mk = L0.property('ADBE Mask Parade').children[0], shp = mk.property('ADBE Mask Shape').value;
+  R['a one-line window (mask) clips it: from 0.95 em above the first baseline to 0.3 em below'] = !!mk && mk.name === 'MK Roll Window' && near(shp.vertices[0][1], 0 - 0.95 * 90) && near(shp.vertices[2][1], 0 + 0.30 * 90) && shp.vertices[0][0] < -1000 && shp.vertices[1][0] > 1000 && shp.closed === true;
+  // pressing again replaces everything; one line only is refused
+  const b2 = (() => { const { comp, made } = fakeBuild(); app.project.activeItem = comp; const L = comp.layers.addText('Hi there\ryou now'); L.doc.fontSize = 90; comp.selectedLayers = [L];
+    const b = walk(root).filter(n => n.type === 'button' && n.text === 'SaaS Text Preset 1' && n.parent && n.parent.isBtnRow)[0]; b.onClick(); b.onClick(); app.project.activeItem = null; return L; })();
+  R['a second press replaces the first (one animator, one slider, one window)'] = b2.property('ADBE Text Properties').property('ADBE Text Animators').children.filter(x => x.name === 'MK SaaS Roll').length === 1 && b2.property('ADBE Effect Parade').children.filter(x => x.name === 'Roll').length === 1 && b2.property('ADBE Mask Parade').children.filter(x => x.name === 'MK Roll Window').length === 1;
+  const one = press('Just one line');
+  R['a single line is refused (nothing added)'] = one.L0.property('ADBE Text Properties').property('ADBE Text Animators').children.filter(x => x.name === 'MK SaaS Roll').length === 0;
+  // wrapped paragraph text counts as two lines too
+  const w = press('Hi there you', { boxText: true, boxTextSize: [500, 300] }), wan = w.L0.property('ADBE Text Properties').property('ADBE Text Animators').children.find(x => x.name === 'MK SaaS Roll');
+  R['paragraph text that wraps onto a second line works too'] = !!wan;
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`saas text preset 1: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
