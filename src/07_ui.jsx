@@ -701,7 +701,6 @@
             ["Slide Down", slide([0, 1], "Slide Down"), "Slides in, travelling down"],
             ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: 0 }); })],
             ["Blur Fade", anim("Blur Fade", function () { doBlurFade(0, qb); })],
-            ["Color Fade", function () { run("Color Fade", doColorFade); }, "Fades the selected layers in washed in a solid colour (revealed left to right), then the colour drains away, also left to right. A tinted copy of each layer is made for the colour. Several layers come in one after another, top to bottom."],
             ["Reverse Keys", function () { run("Reverse Keys", doReverseKeys); }, "Reverses selected keyframed properties (or all on the selected layers)"],
             ["Lock Gradient", function () { run("Lock Gradient", function () { doLockGradient(gdir.selection.index); }); }, "Gradient that stays locked to the layer: it moves, scales and rotates with it"]
         ]);

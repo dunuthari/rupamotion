@@ -22,7 +22,6 @@ UI-kit elements, camera parallax and a live, toggleable bounce.
 | `src/03_animation.jsx` | Shape morph, Pop, Move in/out, UI list stagger, Hold push-in |
 | `src/04_transitions_text.jsx` | Zoom/swipe cuts, shape wipe |
 | `src/06_text_icon.jsx` | Text > Text + Icon: `doTextIcon` (one text layer per word + icon slot + identity Move null), `tiLayout`, `tiHighlight`, `sparkleShape`; every number in `TI` was measured from a reference clip. Text > Star Swipe: `doStarSwipe`, constants in `SS` |
-| `src/06_quick_color_fade.jsx` | Quick Actions > Color Fade button: `doColorFade`, constants in `CF` |
 | `src/06_text_roll.jsx` | Text > Motion > SaaS Text Preset 1 button: `doSaasRoll`, constants in `SR` |
 | `src/06_text_typewriter.jsx` | Text > Motion > Typewriter button: `doTypewriter`, constants in `TW`, `holdKeys` |
 | `src/06_text_presets.jsx` | Text group: `TEXT_PRESETS` (filled by `build.js` from `presets/text/*.ffx`, base64), `b64decode`, `doTextPreset` (writes a temp .ffx, `applyPreset`) |
@@ -87,7 +86,7 @@ Set 2: Snapping_Text_HQ, character_right, Color_FadeOut_HQ, SNAP_TEXT_2, SNAP_TE
 `preview/index.html` (between the `TEXT_PRESET_BUTTONS` markers), so don't edit that block by hand.
 A test rebuilds every file in `presets/text` from the built script and compares the bytes.
 
-**Color Fade** (Quick Actions grid, `doColorFade`, no settings): read from a clip of agent cards that appear washed in a purple-blue and then lose the colour, measured at 10 frames a second (about 1.0 s per card). The reveal AND the colour drain both run LEFT TO RIGHT. Because Tint has no spatial control, each selected layer is DUPLICATED (the copy, named `<name> · Color Fade tint`, sits above it): the original gets a fade-in and a reveal `Linear Wipe` (`MK Color Fade Wipe`, completion 100 -> 0 over 0.45 s); the copy gets the same fade-in and reveal, a `Tint` at 100% (`MK Color Fade Tint`, black -> indigo, white -> purple-blue) and a second Linear Wipe (`MK Color Fade Drain`, completion 0 -> 100 from 0.5 s to 1.0 s) that wipes the colour away and uncovers the untouched original. Feather = half the layer width (`layerWidth`). Angles: reveal `CF.angle` = 270, drain `CF.angleOut` = 90 — always 180 degrees apart (the drain hides in the reverse order of the reveal). Which Linear Wipe angle runs left to right could not be verified without AE (the first version used 90 and the user reported the wrong direction, so it was flipped); swap the two constants if a direction is wrong. Every move uses a gentle cubic-bezier (`CF.ease*`, `smoothKeys` + `easeBetweenKeys`), NOT the Style curve. Several selected layers start `CF.stagger` = 0.8 s apart (1.0, 0.6, 0.8 s in the clip), ordered top to bottom ON SCREEN. A second press removes the old copy and effects first. Timings read off a clip, not frame-measured.
+(The Color Fade quick action was built and then removed on request; it is not in the panel.)
 
 ## Brand/motion style (applied by the tools)
 Google Vids look: primary `#4285F4`, secondary `#8AB4F8`, periwinkle `#C5CAE9`, background `#F5F7FF`,
