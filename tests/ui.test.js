@@ -468,9 +468,10 @@ function fakeNode(matchName, dims, base) {
 }
 function baseLayer(kind) {
   const L = { kind, name: '', inPoint: 0, outPoint: 100, selected: false, parent: null,
-    transform: { anchorPoint: fakeAnimProp(2, [0, 0]), position: fakeAnimProp(2, [0, 0]), scale: fakeAnimProp(2, [100, 100]), opacity: fakeAnimProp(1, 100) } };
+    transform: { anchorPoint: fakeAnimProp(2, [0, 0]), position: fakeAnimProp(2, [0, 0]), scale: fakeAnimProp(2, [100, 100]), opacity: fakeAnimProp(1, 100), rotation: fakeAnimProp(1, 0) } };
   L.nodes = {};
   L.moveToBeginning = function () { this.onTop = true; };
+  L.setTrackMatte = function (m, type) { this.matte = m; this.matteType = type; };
   L.property = function (x) { return (this.nodes[x] = this.nodes[x] || fakeNode(x)); };
   return L;
 }
@@ -628,4 +629,36 @@ function buildTextIcon(sentence, atIndex, opts) {
   setField('Text color:', '#9AA0A6'); setField('Icon color:', '#9AA0A6');
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`text + icon (baseline, gap, gray): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Star Swipe: an icon sweeps across sentence 1; sentence 2 appears in its wake
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
+  const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+  // earlier smoke clicks may have flipped the toggles: set them to their documented defaults first
+  ['Glow trail', 'Spin the icon'].forEach(lbl => { const tg = walk(root).filter(n => n.type === 'button' && n.text === lbl && typeof n.value === 'boolean')[0]; if (tg.value !== true) { tg.onClick(); } });
+  walk(root).filter(n => n.type === 'button' && n.text === 'Build star swipe')[0].onClick();
+  app.project.activeItem = null;
+  const texts = made.filter(L => L.kind === 'text'), shapes = made.filter(L => L.kind === 'shape'), nul = made.find(L => L.kind === 'null');
+  const byName = n => made.find(L => L.name === n);
+  const s1 = byName('MK Star Swipe · Sentence 1'), s2 = byName('MK Star Swipe · Sentence 2'), star = byName('MK Star Swipe · Star');
+  const rA = byName('MK Star Swipe · Reveal 2'), rB = byName('MK Star Swipe · Reveal 1'), trail = byName('MK Star Swipe · Trail');
+  R['2 sentences, reveal mattes, trail, star and one Move null'] = texts.length === 2 && !!rA && !!rB && !!trail && !!star && !!nul && shapes.length === 4 && nul.name === 'MK Star Swipe · Move';
+  R['Move null is on top, centred on the star (anchor 50,50)'] = nul.onTop === true && nul.transform.anchorPoint.value[0] === 50 && nul.transform.anchorPoint.value[1] === 50;
+  // independent arithmetic: font 90 -> text height 67.5, "Give your users a place" is 23 chars * 45 = 1035 wide, star 1.85 x 67.5
+  const w1 = 23 * 45, icon = 1.85 * 67.5, x0 = 960 - w1 / 2 - icon * 0.75, x1 = 1920 + icon * 1.5 + 30 * 2;
+  const k = nul.transform.position.keys;
+  R['star waits 0.4 s, then sweeps 0.8 s from just before sentence 1 to past the right edge'] = k.length === 2 && near(k[0].t, 2.4) && near(k[1].t, 3.2) && near(k[0].v[0], x0) && near(k[1].v[0], x1) && near(k[0].v[1], 540) && near(k[1].v[1], 540);
+  R['the sweep is eased'] = k[0].out[0].influence > 40 && k[1].in[0].influence > 25;
+  R['sentences are centred on one shared baseline'] = [s1, s2].every(L => near(L.transform.position.value[0], 960) && near(L.transform.position.value[1], 540) && near(L.transform.anchorPoint.value[1], -33.75));
+  R['sentence 2 is matted by the left-of-star reveal, sentence 1 by the right-of-star one'] = s2.matte === rA && s1.matte === rB && rA.enabled === false && rB.enabled === false;
+  R['reveal edges sit on the star centre (left / right half planes)'] = [rA, rB, trail, star].every(L => L.parent === nul && L.transform.position.value[0] === 50 && L.transform.position.value[1] === 50);
+  const rectPos = L => L.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Rect').property('ADBE Vector Rect Position').value[0];
+  R['left reveal extends left, right reveal extends right'] = rectPos(rA) < 0 && rectPos(rB) > 0 && near(rectPos(rA), -rectPos(rB));
+  R['trail fades in and out (0 -> 100 -> 0)'] = trail.transform.opacity.keys.length === 4 && trail.transform.opacity.keys[2].v === 100 && trail.transform.opacity.keys[3].v === 0;
+  R['star spins half a turn while it sweeps'] = star.transform.rotation.keys.length === 2 && star.transform.rotation.keys[1].v === 180 && near(star.transform.rotation.keys[1].t, 3.2);
+  R['layers last 5 s from the playhead'] = made.every(L => near(L.inPoint, 2) && near(L.outPoint, 7));
+  R['star is selected (ready to restyle)'] = star.selected === true;
+  const bad = Object.keys(R).filter(kk => !R[kk]);
+  console.log(`star swipe: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

@@ -1197,6 +1197,62 @@
         }, "Builds the words (sliding apart and growing), the icon slot and the highlight at the playhead.");
     });
 
+    feature("Text", "Star Swipe", function (p) {
+        hint(p, "An icon sweeps across sentence 1; sentence 2 appears in its wake.");
+        var a = field(p, "First sentence:", getS("ss_first", "Give your users a place"), 24, "Shown at the start; the icon wipes it away.");
+        var b = field(p, "Second sentence:", getS("ss_second", "to give feedback,"), 24, "Revealed behind the icon.");
+        a.onChange = function () { putS("ss_first", a.text); };
+        b.onChange = function () { putS("ss_second", b.text); };
+
+        var iconFile = null;
+        var iconRow = row(p, "Icon:");
+        var iconName = iconRow.add("statictext", undefined, "Built-in sparkle");
+        iconName.preferredSize.width = 112;
+        setFg(iconName, DS.label);
+        var browseB = styleButton(iconRow.add("button", undefined, "Choose…"), "secondary", 26);
+        browseB.preferredSize.width = 74;
+        browseB.helpTip = "Choose your own icon: PNG, SVG, AI, PSD or JPG.";
+        var sparkB = styleButton(iconRow.add("button", undefined, "Star"), "secondary", 26);
+        sparkB.preferredSize.width = 66;
+        sparkB.helpTip = "Go back to the built-in star.";
+        browseB.onClick = function () {
+            var f = null;
+            try {
+                var flt = (function () {
+                    try { if ($.os.indexOf("Windows") >= 0) { return "Images:*.png;*.svg;*.ai;*.psd;*.jpg;*.jpeg;*.gif;*.tif;*.tiff,All files:*.*"; } } catch (e) {}
+                    return function (ff) { return (ff instanceof Folder) || /\.(png|svg|ai|psd|jpe?g|gif|tiff?|eps)$/i.test(ff.name); };
+                })();
+                f = File.openDialog("Choose an icon (PNG, SVG, AI, PSD, JPG)", flt);
+            } catch (e2) {}
+            if (f) { iconFile = f; iconName.text = f.name; }
+        };
+        sparkB.onClick = function () { iconFile = null; iconName.text = "Built-in sparkle"; };
+
+        var tcol = colorChooser(p, "Sentence color:", style.textGray, "ss_text_color");
+        var icol = colorChooser(p, "Star color:", style.textGray, "ss_icon_color");
+        var tr = check(p, "Glow trail", true, "A soft glow that follows the icon and fades out.");
+        var trc = colorChooser(p, "Trail color:", "#C158BE", "ss_trail_color");
+        var size = field(p, "Font size:", getS("ss_size", "90"), 4, "Text size in pixels.");
+        size.onChange = function () { size.text = String(num(size.text, 90, 12, 600)); putS("ss_size", size.text); };
+        var pct = field(p, "Star size (%):", "100", 4, "100% = the icon at its natural size for this text.");
+        var hold = field(p, "Wait (s):", "0.4", 4, "How long the icon waits in front of sentence 1 before it moves.");
+        var dur = field(p, "Sweep (s):", "0.8", 4, "How long the icon takes to cross the frame.");
+        var soft = field(p, "Edge softness (px):", "30", 4, "Softness of the wipe edge.");
+        var spin = check(p, "Spin the icon", true, "Half a turn while it sweeps.");
+        var len = field(p, "Length (s):", "5", 4, "How long the layers last from the playhead.");
+
+        btn(p, "Build star swipe", function () {
+            run("Star swipe", function () {
+                doStarSwipe({
+                    first: a.text, second: b.text, iconFile: iconFile, size: num(size.text, 90, 12, 600), iconPct: num(pct.text, 100, 10, 500),
+                    textColor: tcol.get(), iconColor: icol.get(), trail: tr.value, trailColor: trc.get(),
+                    hold: num(hold.text, 0.4, 0, 20), dur: num(dur.text, 0.8, 0.2, 10), softness: num(soft.text, 30, 0, 300),
+                    spin: spin.value, length: num(len.text, 5, 0.5, 120)
+                });
+            });
+        }, "Builds both sentences, the wipe, the glow trail and the icon at the playhead. Everything follows one Move null.");
+    });
+
     // ---------------- UI Kit ----------------
 
     feature("UI Kit", "Pill button", function (p) {

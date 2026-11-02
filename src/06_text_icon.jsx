@@ -169,3 +169,98 @@
         icon.selected = true;
         try { nul.moveToBeginning(); } catch (eT) {}      // the Move null sits on top of the stack
     }
+
+    // =====================================================================
+    // TEXT GROUP — "Star Swipe": an icon sweeps across sentence 1; sentence 2 appears in its wake
+    // =====================================================================
+    // Read from a reference clip: the star sits in front of sentence 1, then accelerates to the right. Everything behind it
+    // (left of the star) is sentence 2, everything ahead of it is still sentence 1, with a soft edge and a glowing trail
+    // that is strongest mid-flight. The star leaves the frame; sentence 2 stays. Timings and the curve are estimates from
+    // the clip (not measured to the frame), so they are plain fields / one constant: tune freely.
+    var SS = { curve: [0.55, 0, 0.3, 1], dur: 0.8, hold: 0.4, trailK: 0.3, softness: 30 };
+
+    // o: first, second, size, iconPct, iconFile, textColor, iconColor, trail (bool), trailColor, hold, dur, softness, spin (bool), length
+    function doStarSwipe(o) {
+        var comp = activeComp(); if (!comp) { return; }
+        var s1 = trim(o.first), s2 = trim(o.second);
+        if (s1 === "" || s2 === "") { alert("Type both sentences.", NAME); return; }
+        var t0 = comp.time, cx = comp.width / 2, cy = comp.height / 2, font = pickFont(true), i;
+
+        var texts = [], strs = [s1, s2], rects = [], top = 0;
+        for (i = 0; i < 2; i++) {
+            var T = makeText(comp, strs[i], { size: o.size, color: o.textColor, font: font, just: "left" });
+            T.name = "MK Star Swipe · Sentence " + (i + 1);
+            var r = T.sourceRectAtTime(t0, false);
+            rects.push(r); top = Math.min(top, r.top); texts.push(T);
+        }
+        var h = -top, anchorY = top / 2;                      // one shared baseline for both sentences
+        for (i = 0; i < 2; i++) {
+            setXY(texts[i].transform.anchorPoint, rects[i].left + rects[i].width / 2, anchorY);
+            setXY(texts[i].transform.position, cx, cy);
+        }
+        var iconSize = TI.iconH * h * o.iconPct / 100;
+        var x0 = cx - rects[0].width / 2 - iconSize * 0.75;                       // the star waits just in front of sentence 1
+        var x1 = comp.width + iconSize * 1.5 + o.softness * 2;                    // and leaves the frame on the right
+
+        // the mover: its centre is the star's centre, so the wipe edge, the trail and the star all travel with it
+        var nul = comp.layers.addNull();
+        nul.name = "MK Star Swipe · Move";
+        var nw = 100, nh = 100;
+        try { nw = nul.source.width; nh = nul.source.height; } catch (eN) {}
+        setXY(nul.transform.anchorPoint, nw / 2, nh / 2);
+        setXY(nul.transform.position, x0, cy);
+        var lx = nw / 2, ly = nh / 2;                                             // the star centre in the null's own space
+
+        // soft-edged half-plane mattes: side -1 = everything left of the star (sentence 2), +1 = right of it (sentence 1)
+        function edge(side) {
+            var M = shapeLayer(comp, "MK Star Swipe · Reveal " + (side < 0 ? "2" : "1"));
+            var gi = newGroup(M, "Reveal"), big = comp.width * 3;
+            addRect(M, gi, big, comp.height * 2, 0, [side * big / 2, 0]);
+            addFill(M, gi, [1, 1, 1], 100);
+            fxSet(fxAdd(M, "ADBE Gaussian Blur 2"), 1, o.softness);
+            M.parent = nul;
+            setXY(M.transform.position, lx, ly);
+            return M;
+        }
+        var mA = edge(-1), mB = edge(1);
+        setMatte(texts[1], mA, "alpha");
+        setMatte(texts[0], mB, "alpha");
+        try { mA.enabled = false; mB.enabled = false; } catch (eM) {}
+
+        var tA = t0 + o.hold, tB = tA + o.dur, trailL = null;
+        if (o.trail) {
+            var len = comp.width * SS.trailK;
+            trailL = shapeLayer(comp, "MK Star Swipe · Trail");
+            var gt = newGroup(trailL, "Trail");
+            addRect(trailL, gt, len, h * 1.3, h * 0.65, [-len / 2 - iconSize * 0.1, 0]);
+            addFill(trailL, gt, o.trailColor, 100);
+            fxSet(fxAdd(trailL, "ADBE Gaussian Blur 2"), 1, h * 0.45);
+            trailL.parent = nul;
+            setXY(trailL.transform.position, lx, ly);
+            setKeys(trailL.transform.opacity, [[t0, 0], [tA, 0], [tA + o.dur * 0.45, 100], [tB, 0]]);
+        }
+
+        var star = o.iconFile ? tiIconFromFile(comp, o.iconFile, iconSize) : tiSparkleLayer(comp, iconSize, o.iconColor);
+        star.name = "MK Star Swipe · Star";
+        star.parent = nul;
+        setXY(star.transform.position, lx, ly);
+
+        // keys go on last, once everything is linked (links are made while the mover is at rest)
+        var pp = nul.transform.position;
+        setKeys(pp, [[tA, vecLike(pp, x0, cy)], [tB, vecLike(pp, x1, cy)]]);
+        easeBetweenKeys(pp, tA, tB, SS.curve);
+        if (o.spin) {
+            var rot = star.transform.rotation;
+            setKeys(rot, [[tA, 0], [tB, 180]]);
+            easeBetweenKeys(rot, tA, tB, SS.curve);
+        }
+
+        var all = texts.concat([mA, mB, star, nul]);
+        if (trailL) { all.push(trailL); }
+        for (i = 0; i < all.length; i++) {
+            try { all[i].inPoint = Math.max(0, t0); all[i].outPoint = Math.min(comp.duration, t0 + o.length); } catch (e1) {}
+            all[i].selected = false;
+        }
+        star.selected = true;
+        try { nul.moveToBeginning(); } catch (eT) {}
+    }

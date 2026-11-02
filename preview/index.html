@@ -324,6 +324,7 @@
     { group: "Transitions", name: "Shape wipe", ui: [H("Select 2 clips, or put the playhead on the cut."), D("Shape:", ["Circle", "Triangle"]), D("Grow from:", ["Center", "Left", "Right", "Top", "Bottom"]), T("Blue accent shape leads the reveal", true), F("Accent lead (frames):", "3"), B("Add shape wipe", "Added the shape wipe.")] },
     { group: "Text", name: "Motion", ui: [H("Select text layer(s), put the playhead where it should start, click a preset."), /*TEXT_PRESET_BUTTONS*/ ROW([["1by1", "Applied the 1by1 preset."], ["Bounce text", "Applied the Bounce text preset."]]), ROW([["Bouncing Text HQ", "Applied the Bouncing Text HQ preset."], ["Bouncy Color FadeOut HQ", "Applied the Bouncy Color FadeOut HQ preset."]]), ROW([["Character down", "Applied the Character down preset."], ["Character right", "Applied the Character right preset."]]), ROW([["Color FadeOut HQ", "Applied the Color FadeOut HQ preset."], ["Gg MotionTypeLite", "Applied the Gg MotionTypeLite preset."]]), ROW([["SaaS Text Preset 3", "Applied the SaaS Text Preset 3 preset."], ["SaaS Text Preset 4", "Applied the SaaS Text Preset 4 preset."]]), ROW([["SaaS Text Preset 5", "Applied the SaaS Text Preset 5 preset."], ["SNAP TEXT", "Applied the SNAP TEXT preset."]]), ROW([["SNAP TEXT 2", "Applied the SNAP TEXT 2 preset."], ["Snapping Text HQ", "Applied the Snapping Text HQ preset."]]), ROW([["Word down", "Applied the Word down preset."], ["Word right", "Applied the Word right preset."]]) /*END_TEXT_PRESET_BUTTONS*/] },
     { group: "Text", name: "Text + Icon", ui: [["textIcon"]] },
+    { group: "Text", name: "Star Swipe", ui: [["starSwipe"]] },
     { group: "UI Kit", name: "Pill button", ui: [F("Label:", "+ New", { wide: true }), D("Style:", ["Primary", "White glass", "Outline"]), T("Pop in at playhead", true), B("Create pill button", "Created the pill button.")] },
     { group: "UI Kit", name: "Frosted glass", ui: [H("Select shapes; blurs whatever is behind them."), F("Blur radius:", "30"), B("Frost selected shapes", "Frosted the selected shapes.")] },
     { group: "UI Kit", name: "AI glow button", ui: [F("Label:", "Creating…", { wide: true }), B("Create AI glow button", "Created the AI glow button.")] },
@@ -746,6 +747,72 @@
     return wrap;
   }
 
+
+  // ---------- Star Swipe: the icon sweeps across sentence 1, sentence 2 appears in its wake ----------
+  function starSwipeControl() {
+    var wrap = el("div", { class: "ti", style: "display:grid;gap:7px" });
+    function inp(v, w) { return el("input", { type: "text", id: "ss" + (++uid), value: v, style: w ? "width:" + w + "px" : "", class: w ? "" : "wide" }); }
+    var a = inp(load("ss_first", "Give your users a place")), b = inp(load("ss_second", "to give feedback,"));
+    var hold = inp("0.4", 52), dur = inp("0.8", 52), soft = inp("30", 52), size = inp("90", 52), pct = inp("100", 52), len = inp("5", 52);
+    var tcolRow = colorControl("Sentence color:", "#9AA0A6", true), icolRow = colorControl("Star color:", "#9AA0A6", true), trcRow = colorControl("Trail color:", "#C158BE", true);
+    function colorOf(r) { return r.querySelector("input").value; }
+    var trailOn = toggle("Glow trail", true, "A soft glow that follows the icon and fades out.");
+    var spinOn = toggle("Spin the icon", true, "Half a turn while it sweeps.");
+    var stage = el("div", { class: "ti-stage", "aria-label": "Replay of the star swipe", style: "height:110px" });
+    var s1 = el("span", { class: "w" }), s2 = el("span", { class: "w" }), trail = el("div", { style: "position:absolute;top:50%;left:0;border-radius:99px;pointer-events:none" });
+    var star = el("div", { style: "position:absolute;top:50%;left:0" });
+    star.innerHTML = '<svg viewBox="-50 -50 100 100" style="position:absolute;left:-50%;top:-50%;width:100%;height:100%;overflow:visible"><path d="M0 -50 C3.5 -22 22 -3.5 50 0 C22 3.5 3.5 22 0 50 C-3.5 22 -22 3.5 -50 0 C-22 -3.5 -3.5 -22 0 -50Z" fill="#9AA0A6"/></svg>';
+    [s1, s2].forEach(function (x) { x.style.left = "50%"; x.style.transform = "translate(-50%,-50%)"; x.style.padding = ".3em 0"; });
+    stage.appendChild(s1); stage.appendChild(s2); stage.appendChild(trail); stage.appendChild(star);
+    var raf = 0, startT = 0;
+    function ease(t) { return tiProg([0.55, 0, 0.3, 1], t); }
+    function draw(tau) {
+      var W = stage.clientWidth || 320, fs = 30, h = fs * 0.75, isz = 1.85 * h * (+pct.value || 100) / 100;
+      var H = +hold.value || 0, D = Math.max(0.2, +dur.value || 0.8), sf = +soft.value || 0;
+      s1.textContent = a.value; s2.textContent = b.value;
+      var col = colorOf(tcolRow); s1.style.color = col; s2.style.color = col;
+      var w1 = s1.getBoundingClientRect().width;
+      var x0 = W / 2 - w1 / 2 - isz * 0.75, x1 = W + isz * 1.5 + sf, p = Math.max(0, Math.min(1, (tau - H) / D)), e = ease(p), x = x0 + (x1 - x0) * e;
+      star.style.left = x + "px"; star.firstChild.style.width = star.firstChild.style.height = isz + "px";
+      star.firstChild.style.left = (-isz / 2) + "px"; star.firstChild.style.top = (-isz / 2) + "px";
+      star.firstChild.querySelector("path").setAttribute("fill", colorOf(icolRow));
+      star.style.transform = "rotate(" + (spinOn.getAttribute("aria-checked") === "true" ? 180 * e : 0) + "deg)";
+      // the wipe: left of the star shows sentence 2, right of it sentence 1 (soft edge)
+      var f = Math.max(1, sf * 0.5), L = (x - f) + "px", R = (x + f) + "px";
+      s2.style.webkitMaskImage = s2.style.maskImage = "linear-gradient(90deg,#000 " + L + ",transparent " + R + ")";
+      s1.style.webkitMaskImage = s1.style.maskImage = "linear-gradient(90deg,transparent " + L + ",#000 " + R + ")";
+      // sentence boxes are centred spans, so mask coordinates are relative to each span: shift by the span's left edge
+      [s1, s2].forEach(function (sp, i) {
+        var off = sp.getBoundingClientRect().left - stage.getBoundingClientRect().left, g = i === 0 ? "linear-gradient(90deg,transparent " + (x - f - off) + "px,#000 " + (x + f - off) + "px)" : "linear-gradient(90deg,#000 " + (x - f - off) + "px,transparent " + (x + f - off) + "px)";
+        sp.style.webkitMaskImage = sp.style.maskImage = g;
+      });
+      var tl = W * 0.3, tOn = trailOn.getAttribute("aria-checked") === "true";
+      trail.style.width = tl + "px"; trail.style.height = (h * 1.3) + "px"; trail.style.left = (x - tl - isz * 0.1) + "px"; trail.style.marginTop = (-h * 0.65) + "px";
+      trail.style.background = colorOf(trcRow); trail.style.filter = "blur(" + (h * 0.45) + "px)";
+      trail.style.opacity = tOn ? (p <= 0 || p >= 1 ? 0 : p < 0.45 ? p / 0.45 : (1 - p) / 0.55) : 0;
+    }
+    function play() {
+      cancelAnimationFrame(raf); startT = null;
+      (function tick(now) {
+        if (startT === null) startT = now; var tau = (now - startT) / 1000; draw(tau);
+        if (tau < (+hold.value || 0) + (+dur.value || 0.8) + 0.4) raf = requestAnimationFrame(tick); else draw(1e9);
+      })(performance.now());
+    }
+    var go = el("button", { class: "btn primary", type: "button", text: "Build star swipe", title: "Builds both sentences, the wipe, the glow trail and the icon at the playhead. Everything follows one Move null.",
+      onclick: function () { play(); toast("Built the star swipe at the playhead."); } });
+    wrap.appendChild(el("p", { class: "hint", text: "An icon sweeps across sentence 1; sentence 2 appears in its wake." }));
+    wrap.appendChild(row("First sentence:", a, a.id)); wrap.appendChild(row("Second sentence:", b, b.id));
+    wrap.appendChild(tcolRow); wrap.appendChild(icolRow); wrap.appendChild(trailOn); wrap.appendChild(trcRow);
+    wrap.appendChild(row("Font size:", size, size.id)); wrap.appendChild(row("Star size (%):", pct, pct.id));
+    wrap.appendChild(row("Wait (s):", hold, hold.id)); wrap.appendChild(row("Sweep (s):", dur, dur.id)); wrap.appendChild(row("Edge softness (px):", soft, soft.id));
+    wrap.appendChild(spinOn); wrap.appendChild(row("Length (s):", len, len.id));
+    wrap.appendChild(stage); wrap.appendChild(go);
+    wrap.addEventListener("input", function () { save("ss_first", a.value); save("ss_second", b.value); draw(0); });
+    wrap.addEventListener("change", function () { draw(0); });
+    requestAnimationFrame(function () { draw(0); });      // rest pose: the star waits in front of sentence 1
+    return wrap;
+  }
+
   function colorControl(label, hex, big) {
     var id = "c" + (++uid);
     var sw = big ? el("button", { class: "swatch big", type: "button", title: "Click to choose a color", "aria-label": label + " color", style: "background:" + hex, onclick: function () { choose(); } }) : el("span", { class: "swatch", style: "background:" + hex });
@@ -814,6 +881,7 @@
     if (t === "bounce") return bounceControl(spec[1]);
     if (t === "flow") return flowControl();
     if (t === "textIcon") return textIconControl();
+    if (t === "starSwipe") return starSwipeControl();
     if (t === "theme") return themeControl();
     return null;
   }
