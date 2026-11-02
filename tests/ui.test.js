@@ -458,8 +458,9 @@ function fakeNode(matchName, dims, base) {
   Object.defineProperty(n, 'name', { get() { return this._name; }, set(v) { this._name = v; } });
   Object.defineProperty(n, 'numProperties', { get() { return this.children.length; } });
   n.addProperty = function (mn) { const c = fakeNode(mn); this.children.push(c); return c; };
+  n.canAddProperty = () => true;
   n.property = function (x) {
-    if (typeof x === 'number') return this.children[x - 1];
+    if (typeof x === 'number') { while (this.children.length < x) this.children.push(fakeNode('param' + (this.children.length + 1))); return this.children[x - 1]; }
     let c = this.children.find(k => k.matchName === x || k._name === x);
     if (!c) { c = fakeNode(x); this.children.push(c); }
     return c;
@@ -675,196 +676,85 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`star swipe: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
-// Typewriter: a button in Text > Motion; types out the selected text layer, no settings
+// ---------------------------------------------------------------------------------------------
+// Typewriter + Typewriter Block: TWO keyframes (a "Typed" slider 0 -> total); everything else is an expression that reads it
 {
-  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
-  const { comp, made } = fakeBuild(); app.project.activeItem = comp;
-  const L0 = comp.layers.addText('Hi there'); L0.doc.fontSize = 90;
-  L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, -33.75]);
-  comp.selectedLayers = [L0];
-  const twBtn = walk(root).filter(n => n.type === 'button' && n.text === 'Typewriter' && n.parent && n.parent.isBtnRow)[0];
-  R['"Typewriter" is a plain button in the Motion card (no fields of its own)'] = !!twBtn && !walk(root).some(n => n.cardTitle === 'Typewriter');
-  twBtn.onClick();
-  app.project.activeItem = null;
-  const live = made.filter(L => !L.removed), caret = live.find(L => L.name === 'MK Typewriter · Caret');
-  R['scratch measuring layer is removed; the layer and the caret remain'] = made.filter(L => L.kind === 'text').length === 2 && made.filter(L => L.removed).length === 1 && !!caret;
-  R['the text keeps its own style (scratch copy did not change it)'] = L0.doc.text === 'Hi there' && L0.doc.fontSize === 90;
-  // font 90: every letter is 45 px wide in the fake font; "Hi there" = 8 letters; first letter lands 0.3 s after the playhead (2 s), then 14 letters/s
-  const an = L0.property('ADBE Text Properties').property('ADBE Text Animators').children[0];
-  const start = an.property('ADBE Text Selectors').children[0].property('ADBE Text Index Start');
-  R['animator hides everything (opacity 0)'] = an.name === 'MK Typewriter' && an.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0;
-  R['9 hold keys: Start steps 0..8, first letter 0.3 s after the playhead, then 1/14 s per letter'] = start.keys.length === 9 && start.keys.every((k, i) => k.v === i && k.inT === 'H' && k.outT === 'H') && near(start.keys[0].t, 2) && near(start.keys[1].t, 2.3) && near(start.keys[8].t, 2.3 + 7 / 14);
-  const pk = L0.transform.position.keys;
-  R['line stays centred: the layer starts half the line too far right and settles on its own position'] = pk.length === 9 && near(pk[0].v[0], 960 + 180) && near(pk[1].v[0], 960 + (360 - 45) / 2) && near(pk[8].v[0], 960) && pk.every(k => near(k.v[1], 540));
-  const ck = caret.transform.position.keys, cw = Math.max(2, 90 * 0.045), gap = 90 * 0.06;
-  R['caret sits just after the last letter, 22.5 px further right per letter'] = ck.length === 9 && near(ck[0].v[0], 960 + 180 + gap + cw / 2) && near(ck[8].v[0], 960 + 360 + gap + cw / 2) && near(ck[3].t, pk[3].t) && near(ck[1].v[0] - ck[0].v[0], 22.5);
-  R['caret height 1.1x the font size, on the text baseline'] = near(ck[0].v[1], 540 + 33.75 - 90 * 0.3);
-  const ok = caret.transform.opacity.keys;
-  R['caret is on from the start, then blinks twice after the last letter and goes away'] = ok[0].v === 100 && near(ok[0].t, 2) && ok.map(k => k.v).join() === '100,0,100,0,100,0' && near(ok[1].t, 2.3 + 7 / 14 + 0.4) && ok.every(k => k.inT === 'H');
-  const rs = L => L.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Rect').property('ADBE Vector Rect Size').value;
-  R['caret is a thin bar'] = near(rs(caret)[0], cw) && near(rs(caret)[1], 99);
-  // pressing it again replaces the first animator instead of stacking a second one
-  app.project.activeItem = comp; comp.selectedLayers = [L0]; twBtn.onClick(); app.project.activeItem = null;
-  R['a second press replaces the first animator'] = L0.property('ADBE Text Properties').property('ADBE Text Animators').children.filter(c => c.name === 'MK Typewriter').length === 1;
-  // nothing selected: asks for a text layer and builds nothing
-  const n0 = made.length; app.project.activeItem = comp; comp.selectedLayers = []; twBtn.onClick(); app.project.activeItem = null;
-  R['nothing selected: nothing built'] = made.length === n0;
-  const bad = Object.keys(R).filter(kk => !R[kk]);
-  console.log(`typewriter: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
-}
-
-// Text + Icon: the panel itself shows a picture of the finished line (not only the browser preview)
-{
-  const R = {};
-  const stage = walk(root).filter(n => n.type === 'group' && typeof n.onDraw === 'function' && n.preferredSize && (n.preferredSize[1] === 92 || n.preferredSize.height === 92))[0];
-  R['the Text + Icon card has a preview stage'] = !!stage;
-  const calls = { str: [], pts: [] };
-  const rec = gfx(); const ds = rec.drawString, mv = rec.moveTo, ln = rec.lineTo;
-  rec.drawString = (s, p, x, yy, f) => { ds(s, p, x, yy, f); calls.str.push({ s, x, y: yy }); };
-  rec.moveTo = (x, yy) => { mv(x, yy); calls.pts.push([x, yy]); }; rec.lineTo = (x, yy) => { ln(x, yy); calls.pts.push([x, yy]); };
-  stage.size = [300, 92]; stage.graphics = rec;
-  setField('Sentence:', 'feature requests');
-  stage.onDraw();
-  const words = calls.str.map(c => c.s);
-  R['draws both words'] = words.indexOf('feature') >= 0 && words.indexOf('requests') >= 0;
-  const sparkle = calls.pts.slice(-28);
-  const sx = sparkle.map(p => p[0]), cxs = (Math.min(...sx) + Math.max(...sx)) / 2, fx = calls.str.find(c => c.s === 'feature'), rx = calls.str.find(c => c.s === 'requests');
-  R['icon sparkle (28 outline points) sits between the two words'] = sparkle.length === 28 && cxs > fx.x && cxs < rx.x;
-  R['everything stays inside the stage'] = calls.pts.every(p => p[0] >= 0 && p[0] <= 300 && p[1] >= 0 && p[1] <= 92) && calls.str.every(c => c.x >= 0 && c.x <= 300);
-  // a wider gap pushes the words apart, and a long sentence is shrunk to fit
-  const gapBefore = rx.x - fx.x;
-  R['words never overlap: the second starts after the first one ends (width of "feature" at 30px is about 110+)'] = gapBefore > 100;
-  setField('Icon gap (px):', '200');
-  calls.str.length = 0; calls.pts.length = 0; stage.onDraw();
-  const gapAfter = calls.str.find(c => c.s === 'requests').x - calls.str.find(c => c.s === 'feature').x;
-  R['a bigger gap field moves the words apart in the preview'] = gapAfter > gapBefore;
-  setField('Icon gap (px):', '0');
-  setField('Sentence:', 'this is a rather long sentence of many words'); calls.str.length = 0; calls.pts.length = 0; stage.onDraw();
-  R['a long sentence still fits (words drawn, none outside)'] = calls.str.length === 9 && calls.str.every(c => c.x >= 0 && c.x <= 300);
-  setField('Sentence:', 'feature requests');
-  const bad = Object.keys(R).filter(k => !R[k]);
-  console.log(`text + icon panel preview: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
-}
-
-// Star Swipe: the panel shows a picture of the sweep halfway through
-{
-  const R = {};
-  const stage = walk(root).filter(n => n.type === 'group' && typeof n.onDraw === 'function' && n.preferredSize && (n.preferredSize[1] === 92 || n.preferredSize.height === 92)).filter(n => { let p = n.parent; while (p) { if (p.cardTitle === 'Star Swipe') return true; p = p.parent; } return false; })[0];
-  R['the Star Swipe card has a preview stage'] = !!stage;
-  const calls = { str: [], pts: [] }, rec = gfx(), ds = rec.drawString, mv = rec.moveTo, ln = rec.lineTo;
-  rec.drawString = (s, p, x, yy, f) => { ds(s, p, x, yy, f); calls.str.push({ s, x, y: yy }); };
-  rec.moveTo = (x, yy) => { mv(x, yy); calls.pts.push([x, yy]); }; rec.lineTo = (x, yy) => { ln(x, yy); calls.pts.push([x, yy]); };
-  stage.size = [300, 92]; stage.graphics = rec; stage.onDraw();
-  const letters = calls.str.map(c => c.s).join('');
-  R['draws letters of both sentences (second behind the star, first ahead of it)'] = /to|giv|fee/.test(letters) && /pla|ace|use/.test(letters) && calls.str.length > 6;
-  R['star sparkle (28 outline points) is drawn'] = calls.pts.length >= 28;
-  R['everything stays inside the stage'] = calls.pts.every(p => p[0] >= 0 && p[0] <= 300 && p[1] >= 0 && p[1] <= 92) && calls.str.every(c => c.x >= 0 && c.x <= 300);
-  const bad = Object.keys(R).filter(k => !R[k]);
-  console.log(`star swipe panel preview: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
-}
-
-// Typewriter Block: word by word, a gradient block over the next word, a blue wave behind it
-{
-  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
-  function run(boxed) {
-    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
-    const L0 = comp.layers.addText('Hi there you'); L0.doc.fontSize = 90;
-    if (boxed) { L0.doc.boxText = true; L0.doc.boxTextSize = [500, 300]; }
-    L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, -33.75]);
-    comp.selectedLayers = [L0];
-    const b = walk(root).filter(n => n.type === 'button' && n.text === 'Typewriter Block' && n.parent && n.parent.isBtnRow)[0];
-    b.onClick(); app.project.activeItem = null;
-    return { b, L0, made, block: made.filter(L => !L.removed).find(L => L.name === 'MK Typewriter · Block') };
+  const near = (a, b) => Math.abs(a - b) < 0.011, R = {};   // expressions carry 2 decimals
+  // run an expression the way AE would: effect("Typed")("Slider") (or through thisComp.layer(...)) returns a property that behaves like a number
+  function ev(expr, slider, time, value, keyTime) {
+    const prop = { valueOf() { return slider; }, key() { return { time: keyTime }; } };
+    const effect = () => () => prop, thisComp = { layer: () => ({ effect }) };
+    return eval(expr);                       // eslint-disable-line no-eval
   }
-  const { b, L0, made, block } = run(false);
-  R['"Typewriter Block" is a plain button next to "Typewriter"'] = !!b && !walk(root).some(n => n.cardTitle === 'Typewriter Block');
-  R['scratch layer removed; the text and the block remain'] = made.filter(L => L.removed).length === 1 && !!block;
-  const anims = L0.property('ADBE Text Properties').property('ADBE Text Animators').children;
-  const reveal = anims.find(a => a.name === 'MK Typewriter'), wave = anims.find(a => a.name === 'MK Typewriter Wave');
-  const sel = a => a.property('ADBE Text Selectors').children[0], adv = a => sel(a).property('ADBE Text Range Advanced');
-  R['two animators: reveal + wave; both on Words / Index units'] = !!reveal && !!wave && [reveal, wave].every(a => adv(a).property('ADBE Text Range Units').value === 2 && adv(a).property('ADBE Text Range Type2').value === 3);
-  const st = sel(reveal).property('ADBE Text Index Start').keys, dt = 1 / 6;
-  R['reveal: 4 hold keys 0..3, first word after 0.3 s, then 1/6 s per word'] = st.length === 4 && st.every((k, i) => k.v === i && k.inT === 'H') && near(st[0].t, 2) && near(st[1].t, 2.3) && near(st[3].t, 2.3 + 2 * dt);
-  R['reveal hides everything (opacity 0)'] = reveal.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0;
-  const ws = sel(wave).property('ADBE Text Index Start').keys, we = sel(wave).property('ADBE Text Index End').keys;
-  R['wave: window of the last 7 words, Ramp Up, blue fill'] = adv(wave).property('ADBE Text Range Shape').value === 2 && ws.map(k => k.v).join() === '0,0,0,0' && we.map(k => k.v).join() === '0,1,2,3' && Math.abs(wave.property('ADBE Text Animator Properties').property('ADBE Text Fill Color').value[2] - 0.965) < 1e-6;
-  // font 90: 45 px per letter; "Hi " = 135, "Hi there " = 405; words are 90, 225 and 135 px wide
-  const bp = block.transform.position.keys, bs = block.transform.scale.keys;
-  R['block sits on the next word: x = 0, 135, 405 px from the text start (3 keys)'] = bp.length === 3 && near(bp[0].v[0], 960) && near(bp[1].v[0], 960 + 135) && near(bp[2].v[0], 960 + 405) && bp.every(k => near(k.v[1], 540));
-  R['block is as wide as that word (scale 90 / 225 / 135 %)'] = bs.length === 3 && near(bs[0].v[0], 90) && near(bs[1].v[0], 225) && near(bs[2].v[0], 135) && bs.every(k => k.v[1] === 100);
-  const bo = block.transform.opacity.keys;
-  R['block goes away when the last word lands'] = bo.length === 2 && bo[0].v === 100 && bo[1].v === 0 && near(bo[1].t, 2.3 + 2 * dt);
-  const fillOf = i => block.property('ADBE Root Vectors Group').children[i].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Graphic - Fill').property('ADBE Vector Fill Color').value;
-  R['block is a gradient: 10 slices from cyan-blue to periwinkle'] = block.property('ADBE Root Vectors Group').children.length === 10 && fillOf(0)[0] < fillOf(9)[0] && fillOf(0)[2] < fillOf(9)[2] + 1;
-  R['the text keeps its style'] = L0.doc.text === 'Hi there you' && L0.doc.fontSize === 90;
-  // paragraph text: the third word wraps onto the second line (box 500 px wide), so the block drops one line (108 px)
-  const bx = run(true).block.transform.position.keys;
-  R['paragraph text: the block follows the wrap (next line, back to the left edge)'] = bx.length === 3 && near(bx[2].v[0], 960) && near(bx[2].v[1], 540 + 108) && near(bx[1].v[1], 540);
-  const bad = Object.keys(R).filter(kk => !R[kk]);
-  console.log(`typewriter block: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
-}
-
-// Both typewriters on multi-line text: explicit line breaks and wrapped paragraph (box) text
-{
-  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
-  function press(label, text, boxed) {
-    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
-    const L0 = comp.layers.addText(text); L0.doc.fontSize = 90;
-    if (boxed) { L0.doc.boxText = true; L0.doc.boxTextSize = [500, 300]; }
-    L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, -33.75]);
-    comp.selectedLayers = [L0];
-    walk(root).filter(n => n.type === 'button' && n.text === label && n.parent && n.parent.isBtnRow)[0].onClick();
-    app.project.activeItem = null;
-    return { L0, made, layer: n => made.filter(L => !L.removed).find(L => L.name === n) };
-  }
-  const cw = Math.max(2, 90 * 0.045), gap = 90 * 0.06, y0 = 540 + 33.75 - 90 * 0.3;
-  // Typewriter, explicit line breaks: "Hi" / "there" (8 letters, the break is one of them)
-  const a = press('Typewriter', 'Hi\rthere', false), ak = a.layer('MK Typewriter · Caret').transform.position.keys;
-  R['caret: 9 steps (the line break is a letter), no centring shift on multi-line text'] = ak.length === 9 && a.L0.transform.position.numKeys === 0;
-  R['caret: after "Hi" it is at x = 90 on line 1; the break moves it to the start of line 2 (+108 px)'] = near(ak[2].v[0], 960 + 90 + gap + cw / 2) && near(ak[2].v[1], y0) && near(ak[3].v[0], 960 + gap + cw / 2) && near(ak[3].v[1], y0 + 108);
-  R['caret: "there" runs along the second line'] = near(ak[8].v[0], 960 + 225 + gap + cw / 2) && near(ak[8].v[1], y0 + 108) && near(ak[5].v[0] - ak[4].v[0], 45);
-  // Typewriter, wrapped paragraph text (box 500 px): "Hi there " then "you"
-  const b = press('Typewriter', 'Hi there you', true), bk = b.layer('MK Typewriter · Caret').transform.position.keys;
-  R['caret on wrapped text: the word that does not fit starts line 2 at the left edge'] = bk.length === 13 && near(bk[9].v[0], 960 + 405 + gap + cw / 2) && near(bk[9].v[1], y0) && near(bk[10].v[0], 960 + 45 + gap + cw / 2) && near(bk[10].v[1], y0 + 108) && near(bk[12].v[0], 960 + 135 + gap + cw / 2);
-  R['wrapped paragraph is not shifted to stay centred'] = b.L0.transform.position.numKeys === 0;
-  // Typewriter Block with explicit line breaks: Hi | there you
-  const c = press('Typewriter Block', 'Hi\rthere you', false), cp = c.layer('MK Typewriter · Block').transform.position.keys, cs = c.layer('MK Typewriter · Block').transform.scale.keys;
-  R['block: words on each line (x restarts at the left edge, y drops 108 px)'] = cp.length === 3 && near(cp[0].v[0], 960) && near(cp[1].v[0], 960) && near(cp[1].v[1], 540 + 108) && near(cp[2].v[0], 960 + 270) && near(cp[2].v[1], 540 + 108) && near(cs[1].v[0], 225) && near(cs[2].v[0], 135);
-  const st = c.L0.property('ADBE Text Properties').property('ADBE Text Animators').children[0].property('ADBE Text Selectors').children[0].property('ADBE Text Index Start').keys;
-  R['block: 3 words -> 4 reveal keys even though the text has a line break'] = st.length === 4;
-  // an empty layer is refused instead of building nothing silently
-  const e = press('Typewriter', '   ', false);
-  R['empty text: nothing built'] = !e.layer('MK Typewriter · Caret');
-  const bad = Object.keys(R).filter(k => !R[k]);
-  console.log(`typewriters on multi-line text: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
-}
-
-// Paragraph text is not drawn from the layer origin: the box sits at boxTextPos, and the effects must start THERE
-{
-  const near = (a, b) => Math.abs(a - b) < 1e-6, R = {};
-  function press(label, text, props) {
+  function press(label, text, props, pos) {
     const { comp, made } = fakeBuild(); app.project.activeItem = comp;
     const L0 = comp.layers.addText(text); L0.doc.fontSize = 90; Object.assign(L0.doc, props || {});
-    // like a real paragraph layer: anchor at the origin, position at the comp centre, the box far up-left of both
-    L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue([0, 0]);
+    L0.transform.position.setValue([960, 540]); L0.transform.anchorPoint.setValue(pos || [0, -33.75]);
     comp.selectedLayers = [L0];
-    walk(root).filter(n => n.type === 'button' && n.text === label && n.parent && n.parent.isBtnRow)[0].onClick();
-    app.project.activeItem = null;
-    return { L0, layer: n => made.filter(L => !L.removed).find(L => L.name === n) };
+    const b = walk(root).filter(n => n.type === 'button' && n.text === label && n.parent && n.parent.isBtnRow)[0];
+    b.onClick(); app.project.activeItem = null;
+    const live = () => made.filter(L => !L.removed);
+    return { b, L0, made, live, find: pre => live().find(L => L.name.indexOf(pre) === 0) };
   }
+  const anim = (L, i) => L.property('ADBE Text Properties').property('ADBE Text Animators').children[i];
+  const sel = a => a.property('ADBE Text Selectors').children[0], adv = a => sel(a).property('ADBE Text Range Advanced');
+  const slider = h => h.property('ADBE Effect Parade').children[0].children[0];
+  const cw = Math.max(2, 90 * 0.045), gap = 90 * 0.06, y0 = 540 + 33.75 - 90 * 0.3;
+
+  // ---- Typewriter, single line "Hi there" (45 px per letter, 8 letters)
+  const a = press('Typewriter', 'Hi there');
+  const caret = a.find('MK Typewriter · Caret '), sk = slider(caret).keys, dt = 1 / 14;
+  R['"Typewriter" is a plain button in the Motion card'] = !!a.b && !walk(root).some(n => n.cardTitle === 'Typewriter');
+  R['exactly TWO keyframes, on one slider: 0 -> 8 letters, linear'] = sk.length === 2 && sk[0].v === 0 && sk[1].v === 8 && sk.every(k => k.inT === 'L' && k.outT === 'L') && caret.transform.position.numKeys === 0 && a.L0.transform.position.numKeys === 0;
+  R['first letter lands 0.3 s after the playhead, then 14 letters/s'] = near(sk[0].t, 2 + 0.3 - dt) && near(sk[1].t, 2 + 0.3 + 7 * dt) && near(((2.3) - sk[0].t) / (sk[1].t - sk[0].t) * 8, 1);
+  const an = anim(a.L0, 0), refName = caret.name;
+  R['one animator hides everything (opacity 0), Index units, Based On Characters; its Start is the floored slider'] = an.name.indexOf('MK Typewriter ') === 0 && an.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0 && adv(an).property('ADBE Text Range Units').value === 2 && ev(sel(an).property('ADBE Text Index Start').expression, 3.7, 0, 0, 0) === 3 && sel(an).property('ADBE Text Index Start').expression.indexOf(refName) >= 0;
+  const cpos = s => ev(caret.transform.position.expression, s, 0, 0, 0);
+  R['caret follows the letters (centred line): 22.5 px further right per letter, ends 180 px right of the layer position'] = near(cpos(0)[0], 960 + 180 + gap + cw / 2) && near(cpos(1)[0] - cpos(0)[0], 22.5) && near(cpos(8)[0], 960 + 360 + gap + cw / 2) && near(cpos(4)[1], y0) && near(cpos(3.9)[0], cpos(3)[0]);
+  const lpos = s => ev(a.L0.transform.position.expression, s, 0, [960, 540], 0);
+  R['the line stays centred: it starts 180 px right and settles on its own position'] = near(lpos(0)[0], 960 + 180) && near(lpos(8)[0], 960) && near(lpos(2)[1], 540);
+  const tB = sk[1].t, op = (s, tm) => ev(caret.transform.opacity.expression, s, tm, 0, tB);
+  R['caret is on while typing, blinks twice after the last letter, then goes away'] = op(3, 2.5) === 100 && op(8, tB + 0.2) === 100 && op(8, tB + 0.5) === 0 && op(8, tB + 0.9) === 100 && op(8, tB + 1.3) === 0 && op(8, tB + 1.7) === 100 && op(8, tB + 2.2) === 0;
+  R['the helper caret is a thin bar'] = near(caret.property('ADBE Root Vectors Group').children[0].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Shape - Rect').property('ADBE Vector Rect Size').value[1], 99);
+  // pressing again replaces everything (one animator, one helper layer, expression back to the new one)
+  app.project.activeItem = null; { const comp = a.made[0] && null; }
+  const a2 = (() => { const { comp, made } = fakeBuild(); app.project.activeItem = comp; const L0 = comp.layers.addText('Hi there'); L0.doc.fontSize = 90; comp.selectedLayers = [L0];
+    const b = walk(root).filter(n => n.type === 'button' && n.text === 'Typewriter' && n.parent && n.parent.isBtnRow)[0]; b.onClick(); b.onClick(); app.project.activeItem = null; return { L0, made }; })();
+  R['a second press replaces the first: one animator, one live helper layer'] = a2.L0.property('ADBE Text Properties').property('ADBE Text Animators').children.filter(c => c.name.indexOf('MK Typewriter') === 0).length === 1 && a2.made.filter(L => !L.removed && L.name.indexOf('MK Typewriter · Caret ') === 0).length === 1;
+
+  // ---- Typewriter on lines: explicit break ("Hi" / "there") and wrapped paragraph text (box 500 px)
+  const m = press('Typewriter', 'Hi\rthere'), mc = m.find('MK Typewriter · Caret '), mp = s => ev(mc.transform.position.expression, s, 0, 0, 0);
+  R['line break: 9 steps; the break moves the caret to the start of the next line (+108 px), text is not shifted'] = slider(mc).keys[1].v === 8 && near(mp(2)[0], 960 + 90 + gap + cw / 2) && near(mp(2)[1], y0) && near(mp(3)[0], 960 + gap + cw / 2) && near(mp(3)[1], y0 + 108) && near(mp(8)[0], 960 + 225 + gap + cw / 2) && m.L0.transform.position.expression === '';
+  const w = press('Typewriter', 'Hi there you', { boxText: true, boxTextSize: [500, 300] }), wc = w.find('MK Typewriter · Caret '), wp = s => ev(wc.transform.position.expression, s, 0, 0, 0);
+  R['wrapped paragraph: the word that does not fit starts line 2 at the left edge; no centring shift'] = near(wp(9)[0], 960 + 405 + gap + cw / 2) && near(wp(9)[1], y0) && near(wp(10)[0], 960 + 45 + gap + cw / 2) && near(wp(10)[1], y0 + 108) && w.L0.transform.position.expression === '';
+
+  // ---- Typewriter Block on "Hi there you" (words 90 / 225 / 135 px wide, starting at 0 / 135 / 405)
+  const b = press('Typewriter Block', 'Hi there you'), blk = b.find('MK Typewriter · Block '), bk = slider(blk).keys;
+  R['block: TWO keyframes, slider 0 -> 3 words, first word 0.3 s after the playhead, 6 words/s'] = bk.length === 2 && bk[0].v === 0 && bk[1].v === 3 && near(bk[0].t, 2 + 0.3 - 1 / 6) && near(bk[1].t, 2 + 0.3 + 2 / 6) && blk.transform.position.numKeys === 0 && blk.transform.scale.numKeys === 0;
+  const bp = s => ev(blk.transform.position.expression, s, 0, 0, 0), bs = s => ev(blk.transform.scale.expression, s, 0, 0, 0);
+  R['block sits on the next word and is as wide as it is'] = near(bp(0)[0], 960) && near(bp(1)[0], 960 + 135) && near(bp(2)[0], 960 + 405) && near(bp(2)[1], 540) && near(bs(0)[0], 90) && near(bs(1)[0], 225) && near(bs(2)[0], 135) && bs(1)[1] === 100;
+  R['block goes away when the last word lands'] = ev(blk.transform.opacity.expression, 2.9, 0, 0, 0) === 100 && ev(blk.transform.opacity.expression, 3, 0, 0, 0) === 0;
+  const an1 = anim(b.L0, 0), an2 = anim(b.L0, 1);
+  R['two animators on Words / Index units: reveal (hides) + wave (blue, Ramp Up)'] = an1.name.indexOf('MK Typewriter ') === 0 && an2.name.indexOf('MK Typewriter Wave ') === 0 && [an1, an2].every(x => adv(x).property('ADBE Text Range Units').value === 2 && adv(x).property('ADBE Text Range Type2').value === 3) && adv(an2).property('ADBE Text Range Shape').value === 2 && an1.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0 && Math.abs(an2.property('ADBE Text Animator Properties').property('ADBE Text Fill Color').value[2] - 0.965) < 1e-6;
+  R['wave window: the last 7 words, newest strongest (Start = typed - 7, End = typed)'] = ev(sel(an2).property('ADBE Text Index Start').expression, 12, 0, 0, 0) === 5 && ev(sel(an2).property('ADBE Text Index Start').expression, 3, 0, 0, 0) === 0 && ev(sel(an2).property('ADBE Text Index End').expression, 12.9, 0, 0, 0) === 12 && ev(sel(an1).property('ADBE Text Index Start').expression, 2.5, 0, 0, 0) === 2;
+  const fillOf = i => blk.property('ADBE Root Vectors Group').children[i].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Graphic - Fill').property('ADBE Vector Fill Color').value;
+  R['block is a gradient of 10 slices (cyan-blue to periwinkle)'] = blk.property('ADBE Root Vectors Group').children.length === 10 && fillOf(0)[0] < fillOf(9)[0];
+  const bl = press('Typewriter Block', 'Hi\rthere you'), blb = bl.find('MK Typewriter · Block '), blp = s => ev(blb.transform.position.expression, s, 0, 0, 0);
+  R['block on lines: x restarts at the left edge and y drops 108 px after a break'] = near(blp(0)[1], 540) && near(blp(1)[0], 960) && near(blp(1)[1], 540 + 108) && near(blp(2)[0], 960 + 270) && near(blp(2)[1], 540 + 108);
+
+  // ---- Paragraph boxes sit at boxTextPos, not at the layer origin
   const box = { boxText: true, boxTextSize: [900, 300], boxTextPos: [-732, -384] };
-  const cw = Math.max(2, 90 * 0.045), gap = 90 * 0.06;
-  const a = press('Typewriter', 'Hi there you', box), ck = a.layer('MK Typewriter · Caret').transform.position.keys;
-  // box top is y = -384 (layer space); the first baseline is there (fake font: the glyph top sits on the box top)
-  R['caret starts at the box (top-left of the text), not at the layer position'] = near(ck[0].v[0], 960 - 732 + gap + cw / 2) && near(ck[0].v[1], 540 - 384 - 90 * 0.3);
-  R['caret follows the letters from there'] = near(ck[2].v[0], 960 - 732 + 90 + gap + cw / 2) && near(ck[2].v[1], ck[0].v[1]);
-  const b = press('Typewriter Block', 'Hi there you', box), bp = b.layer('MK Typewriter · Block').transform.position.keys;
-  R['block starts on the first word of the box'] = near(bp[0].v[0], 960 - 732) && near(bp[1].v[0], 960 - 732 + 135) && near(bp[0].v[1], 540 - 384 - 90 * 0.375);
-  // centred paragraph: lines sit in the middle of the box (box 900 wide, "Hi there you" = 540 px wide)
+  const pc = press('Typewriter', 'Hi there you', box, [0, 0]), pcc = pc.find('MK Typewriter · Caret ');
+  R['paragraph box: the caret starts at the top-left of the box, not at the layer position'] = near(ev(pcc.transform.position.expression, 0, 0, 0, 0)[0], 960 - 732 + gap + cw / 2) && near(ev(pcc.transform.position.expression, 0, 0, 0, 0)[1], 540 - 384 - 90 * 0.3) && near(ev(pcc.transform.position.expression, 2, 0, 0, 0)[0], 960 - 732 + 90 + gap + cw / 2);
+  const pb = press('Typewriter Block', 'Hi there you', box, [0, 0]), pbb = pb.find('MK Typewriter · Block ');
+  R['paragraph box: the block starts on the first word of the box'] = near(ev(pbb.transform.position.expression, 0, 0, 0, 0)[0], 960 - 732) && near(ev(pbb.transform.position.expression, 1, 0, 0, 0)[0], 960 - 732 + 135) && near(ev(pbb.transform.position.expression, 0, 0, 0, 0)[1], 540 - 384 - 90 * 0.375);
   g.ParagraphJustification.CENTER_JUSTIFY = 'C';
-  const c = press('Typewriter Block', 'Hi there you', Object.assign({ justification: 'C' }, box));
+  const pj = press('Typewriter Block', 'Hi there you', Object.assign({ justification: 'C' }, box), [0, 0]), pjb = pj.find('MK Typewriter · Block ');
   delete g.ParagraphJustification.CENTER_JUSTIFY;
-  R['centred paragraph: the first word starts (900 - 540) / 2 = 180 px into the box'] = near(c.layer('MK Typewriter · Block').transform.position.keys[0].v[0], 960 - 732 + 180);
+  R['centred paragraph: the first word starts (900 - 540) / 2 = 180 px into the box'] = near(ev(pjb.transform.position.expression, 0, 0, 0, 0)[0], 960 - 732 + 180);
+  // nothing selected / empty text
+  const e = press('Typewriter', '   ');
+  R['empty text: nothing built'] = !e.find('MK Typewriter · Caret ');
   const bad = Object.keys(R).filter(k => !R[k]);
-  console.log(`typewriters on paragraph boxes: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+  console.log(`typewriters (two keyframes): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

@@ -13605,16 +13605,6 @@
     var TB = { wps: 6, hold: 0.3, wave: 7, blockH: 0.95, blockRise: 0.375, blue: [0.231, 0.510, 0.965],
                c0: [0.10, 0.64, 0.96], c1: [0.55, 0.70, 0.98], slices: 10 };
 
-    // Hold keys: the value jumps at each key and stays until the next one (crisp per-letter / per-word steps)
-    function holdKeys(prop, pairs) {
-        var i, idx;
-        for (i = 0; i < pairs.length; i++) { prop.setValueAtTime(pairs[i][0], pairs[i][1]); }
-        for (i = 0; i < pairs.length; i++) {
-            idx = prop.nearestKeyIndex(pairs[i][0]);
-            try { prop.setInterpolationTypeAtKey(idx, KeyframeInterpolationType.HOLD, KeyframeInterpolationType.HOLD); } catch (e) {}
-        }
-    }
-
     function isTextLayer(L) {
         try { return !!L.property("ADBE Text Properties") && L.property("ADBE Text Properties").property("ADBE Text Document") !== null; } catch (e) { return false; }
     }
@@ -13696,17 +13686,55 @@
         return { n: n, cx: cx, cl: cl, wx: wx, ww: ww, wl: wl, lineStep: lineStep, lines: lines.length, lineW: lineW, off: off, baseY: baseY, isBox: isBox, src: src };
     }
 
-    // A second press replaces the first typewriter animators on the layer
-    function clearTypewriter(L) {
-        var anims = L.property("ADBE Text Properties").property("ADBE Text Animators"), i;
+    // ---------------------------------------------------------------------
+    // Shared pieces. The whole effect runs on TWO keyframes: one slider ("Typed", on the caret / block layer) goes from 0 to the
+    // number of letters (or words) over the typing time, and everything else (what is revealed, the colour wave, the caret or
+    // block position, the blink, the centring shift) is an expression that reads that slider. Retime the effect by moving the
+    // two keys; nothing else has to change. Expressions work in both the Legacy and JavaScript engines.
+    // ---------------------------------------------------------------------
+    var TW_MARK = "// MK Typewriter";
+
+    function num2(v) { return String(Math.round(v * 100) / 100); }
+    function arrExpr(a) { var out = [], i; for (i = 0; i < a.length; i++) { out.push(num2(a[i])); } return "[" + out.join(",") + "]"; }
+    function typedRef(helperName) { return "thisComp.layer(\"" + helperName + "\").effect(\"Typed\")(\"Slider\")"; }
+    var TYPED_OWN = "effect(\"Typed\")(\"Slider\")";
+
+    // Removes the previous typewriter on this layer: its animators, the helper layer and the centring expression
+    function clearTypewriter(comp, L) {
+        var anims = L.property("ADBE Text Properties").property("ADBE Text Animators"), i, nm, tags = [], j, names;
         for (i = anims.numProperties; i >= 1; i--) {
-            if (anims.property(i).name === "MK Typewriter" || anims.property(i).name === "MK Typewriter Wave") { anims.property(i).remove(); }
+            nm = anims.property(i).name;
+            if (nm.indexOf("MK Typewriter") === 0) {
+                if (nm.indexOf("MK Typewriter Wave") !== 0) { tags.push(nm.substring("MK Typewriter ".length)); }
+                anims.property(i).remove();
+            }
         }
+        var gone = [];
+        for (j = 0; j < tags.length; j++) { gone.push("MK Typewriter · Caret " + tags[j]); gone.push("MK Typewriter · Block " + tags[j]); }
+        names = {};
+        for (j = 0; j < gone.length; j++) { names[gone[j]] = true; }
+        for (i = comp.numLayers; i >= 1; i--) {
+            try { if (names[comp.layer(i).name]) { comp.layer(i).remove(); } } catch (e) {}
+        }
+        try { if (L.transform.position.expression.indexOf(TW_MARK) >= 0) { L.transform.position.expression = ""; } } catch (e2) {}
         return anims;
     }
 
-    // Adds a text animator whose range selector works in Index units on Characters (type 1) or Words (3)
-    function indexAnimator(anims, name, basedOn) {
+    // The helper layer's slider: exactly two linear keys, 0 -> total
+    function addTypedSlider(helper, tA, tB, total) {
+        var e = fxAdd(helper, "ADBE Slider Control");
+        if (!e) { return null; }
+        e.name = "Typed";
+        var sl = e.property(1);
+        sl.setValueAtTime(tA, 0);
+        sl.setValueAtTime(tB, total);
+        try { sl.setInterpolationTypeAtKey(1, KeyframeInterpolationType.LINEAR, KeyframeInterpolationType.LINEAR); } catch (e1) {}
+        try { sl.setInterpolationTypeAtKey(2, KeyframeInterpolationType.LINEAR, KeyframeInterpolationType.LINEAR); } catch (e2) {}
+        return sl;
+    }
+
+    // Adds a text animator whose range selector works in Index units on Characters (1) or Words (3)
+    function indexAnimator(anims, name) {
         anims.addProperty("ADBE Text Animator");
         var an = anims.property(anims.numProperties);
         an.name = name;
@@ -13720,6 +13748,8 @@
         return sel;
     }
 
+    function newTag(comp) { return String(comp.numLayers + 1) + "-" + String(Math.round(new Date().getTime() % 100000)); }
+
     // ---------------------------------------------------------------------
     // Typewriter: letter by letter + caret
     // ---------------------------------------------------------------------
@@ -13727,52 +13757,47 @@
         var sp = textDocProp(L), src = sp.value, n = src.text.length, i;
         if (trim(src.text) === "") { return "skipped"; }
         var dt = 1 / TW.cps;
-        var anims = clearTypewriter(L);
-        var lay = layoutText(comp, L, t0);
+        var anims = clearTypewriter(comp, L);
+        var lay = layoutText(comp, L, t0), tag = newTag(comp), helperName = "MK Typewriter · Caret " + tag;
 
         var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
         var ox = P[0] - A[0] * s, baseline = P[1] + (lay.baseY - A[1]) * s, fs = src.fontSize * s;
         var single = lay.lines === 1;
-        var movable = single && !lay.isBox && L.transform.position.numKeys === 0 && !L.parent;      // only a single line of point text is kept centred while it grows
+        var movable = single && !lay.isBox && L.transform.position.numKeys === 0 && !L.parent && L.transform.position.expression === "";   // only a single line of point text is kept centred while it grows
         var W = lay.lineW[0], off0 = lay.off[0];
-        var times = [];
-        for (i = 0; i <= n; i++) { times.push(i === 0 ? t0 : t0 + TW.hold + (i - 1) * dt); }
-        var tEnd = times[n];
+        var tA = t0 + TW.hold - dt, tB = t0 + TW.hold + (n - 1) * dt;        // the first letter lands at t0 + hold; the last one at tB
 
-        // reveal: an animator hides everything from the Start index on; Start steps 0 -> n, one letter per key
-        var an = indexAnimator(anims, "MK Typewriter");
+        // the helper layer carries the two keys: a thin caret hugging the last letter
+        var cw = Math.max(2, fs * TW.caretW), ch = fs * TW.caretH, color = [0.6, 0.63, 0.65];
+        try { if (src.applyFill) { color = src.fillColor; } } catch (eC) {}
+        var caret = shapeLayer(comp, helperName);
+        var gi = newGroup(caret, "Caret");
+        addRect(caret, gi, cw, ch, cw / 2);
+        addFill(caret, gi, color, 100);
+        addTypedSlider(caret, tA, tB, n);
+
+        var xs = [], ys = [], sh = [];
+        for (i = 0; i <= n; i++) {
+            xs.push((movable ? ox + s * (off0 + (W + (lay.cx[i] - off0)) / 2) : ox + s * lay.cx[i]) + fs * TW.caretGap + cw / 2);
+            ys.push(baseline + s * lay.cl[i] * lay.lineStep - fs * TW.caretRise);
+            sh.push(s * (W - (lay.cx[i] - off0)) / 2);
+        }
+        caret.transform.position.expression = TW_MARK + "\nvar xs=" + arrExpr(xs) + ";\nvar ys=" + arrExpr(ys) + ";\nvar i=Math.floor(" + TYPED_OWN + ");\ni=Math.max(0,Math.min(xs.length-1,i));\n[xs[i],ys[i]]";
+        // on until the last letter lands, then it blinks and goes away
+        caret.transform.opacity.expression = TW_MARK + "\nvar p=" + TYPED_OWN + ";\nvar out=100;\nif(p>=" + n + "){var u=time-p.key(2).time-" + TW.blinkOn + ";\nif(u>=0){out=(u>=" + num2(TW.blinks * (TW.blinkOn + TW.blinkOff)) + ")?0:((Math.floor(u/" + TW.blinkOff + ")%2===0)?0:100);}}\nout";
+
+        // the text: everything from the Start index on is hidden; Start = letters typed so far
+        var an = indexAnimator(anims, "MK Typewriter " + tag);
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
         an.property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
         var sel = indexSelector(an, 1);
         try { sel.property("ADBE Text Index End").setValue(100000); } catch (eE) {}
-        var pairs = [];
-        for (i = 0; i <= n; i++) { pairs.push([times[i], i]); }
-        holdKeys(sel.property("ADBE Text Index Start"), pairs);
+        sel.property("ADBE Text Index Start").expression = TW_MARK + "\nMath.floor(" + typedRef(helperName) + ")";
 
-        // a single line stays centred: shift the layer right by half of what is still missing
+        // a single line stays centred: the layer starts half of the missing width too far right and settles on its own position
         if (movable) {
-            var pp = L.transform.position, pk = [];
-            for (i = 0; i <= n; i++) { pk.push([times[i], vecLike(pp, P[0] + s * (W - (lay.cx[i] - off0)) / 2, P[1])]); }
-            holdKeys(pp, pk);
+            L.transform.position.expression = TW_MARK + "\nvar sh=" + arrExpr(sh) + ";\nvar i=Math.floor(" + typedRef(helperName) + ");\ni=Math.max(0,Math.min(sh.length-1,i));\n[value[0]+sh[i],value[1]]";
         }
-
-        // caret: a thin bar hugging the last letter (on the right line); on from the start, blinks after the last letter, then goes away
-        var cw = Math.max(2, fs * TW.caretW), ch = fs * TW.caretH, color = [0.6, 0.63, 0.65];
-        try { if (src.applyFill) { color = src.fillColor; } } catch (eC) {}
-        var caret = shapeLayer(comp, "MK Typewriter · Caret");
-        var gi = newGroup(caret, "Caret");
-        addRect(caret, gi, cw, ch, cw / 2);
-        addFill(caret, gi, color, 100);
-        var cp = caret.transform.position, ck = [], x;
-        for (i = 0; i <= n; i++) {
-            x = movable ? ox + s * (off0 + (W + (lay.cx[i] - off0)) / 2) : ox + s * lay.cx[i];
-            ck.push([times[i], vecLike(cp, x + fs * TW.caretGap + cw / 2, baseline + s * lay.cl[i] * lay.lineStep - fs * TW.caretRise)]);
-        }
-        holdKeys(cp, ck);
-        var ok = [[t0, 100]], b, tt = tEnd + TW.blinkOn;
-        for (b = 0; b < TW.blinks; b++) { ok.push([tt, 0]); tt += TW.blinkOff; ok.push([tt, 100]); tt += TW.blinkOn; }
-        ok.push([Math.max(tt, tEnd + TW.blinkOn), 0]);
-        holdKeys(caret.transform.opacity, ok);
         try { caret.inPoint = Math.max(0, t0); caret.outPoint = Math.max(caret.inPoint + 0.1, Math.min(comp.duration, L.outPoint)); } catch (e1) {}
         caret.selected = false;
         return caret;
@@ -13784,38 +13809,18 @@
     function typewriterBlockOne(comp, L, t0) {
         var sp = textDocProp(L), src = sp.value, i;
         if (trim(src.text) === "") { return "skipped"; }
-        var anims = clearTypewriter(L);
+        var anims = clearTypewriter(comp, L);
         var lay = layoutText(comp, L, t0), n = lay.wx.length;
         if (n < 1) { return "skipped"; }
+        var tag = newTag(comp), helperName = "MK Typewriter · Block " + tag;
 
         var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
         var ox = P[0] - A[0] * s, baseline = P[1] + (lay.baseY - A[1]) * s, fs = src.fontSize * s;
-        var dt = 1 / TB.wps, times = [];
-        for (i = 0; i <= n; i++) { times.push(i === 0 ? t0 : t0 + TB.hold + (i - 1) * dt); }
+        var dt = 1 / TB.wps;
+        var tA = t0 + TB.hold - dt, tB = t0 + TB.hold + (n - 1) * dt;
 
-        // 1) reveal: everything from word `Start` on is hidden; Start steps 0 -> n (Based On: Words, Index units)
-        var an = indexAnimator(anims, "MK Typewriter");
-        an.property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
-        an.property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
-        var sel = indexSelector(an, 3);
-        try { sel.property("ADBE Text Index End").setValue(100000); } catch (eE) {}
-        var pairs = [];
-        for (i = 0; i <= n; i++) { pairs.push([times[i], i]); }
-        holdKeys(sel.property("ADBE Text Index Start"), pairs);
-
-        // 2) colour wave: the last TB.wave words are blue, strongest on the newest word (Range Shape: Ramp Up)
-        var an2 = indexAnimator(anims, "MK Typewriter Wave");
-        an2.property("ADBE Text Animator Properties").addProperty("ADBE Text Fill Color");
-        try { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(c4(TB.blue)); } catch (eF) { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(TB.blue); }
-        var sel2 = indexSelector(an2, 3);
-        try { sel2.property("ADBE Text Range Advanced").property("ADBE Text Range Shape").setValue(2); } catch (eS) {}       // Ramp Up
-        var ps = [], pe = [];
-        for (i = 0; i <= n; i++) { ps.push([times[i], Math.max(0, i - TB.wave)]); pe.push([times[i], i]); }
-        holdKeys(sel2.property("ADBE Text Index Start"), ps);
-        holdKeys(sel2.property("ADBE Text Index End"), pe);
-
-        // 3) the block: 100 px wide gradient slices scaled to the width of the NEXT word; it sits on that word, then goes away
-        var bh = fs * TB.blockH, block = shapeLayer(comp, "MK Typewriter · Block"), sw = 100 / TB.slices, c, tt, gi;
+        // the helper layer carries the two keys: 100 px wide gradient slices scaled to the width of the NEXT word
+        var bh = fs * TB.blockH, block = shapeLayer(comp, helperName), sw = 100 / TB.slices, c, tt, gi;
         for (i = 0; i < TB.slices; i++) {
             tt = TB.slices > 1 ? i / (TB.slices - 1) : 0;
             c = [TB.c0[0] + (TB.c1[0] - TB.c0[0]) * tt, TB.c0[1] + (TB.c1[1] - TB.c0[1]) * tt, TB.c0[2] + (TB.c1[2] - TB.c0[2]) * tt];
@@ -13823,14 +13828,36 @@
             addRect(block, gi, sw + 0.6, bh, 0, [i * sw + sw / 2, 0]);
             addFill(block, gi, c, 100);
         }
-        var bp = block.transform.position, bs = block.transform.scale, kp = [], ks = [];
+        addTypedSlider(block, tA, tB, n);
+        var xs = [], ys = [], ws = [];
         for (i = 0; i < n; i++) {
-            kp.push([times[i], vecLike(bp, ox + s * lay.wx[i], baseline + s * lay.wl[i] * lay.lineStep - fs * TB.blockRise)]);
-            ks.push([times[i], [Math.max(1, s * lay.ww[i]), 100]]);
+            xs.push(ox + s * lay.wx[i]);
+            ys.push(baseline + s * lay.wl[i] * lay.lineStep - fs * TB.blockRise);
+            ws.push(Math.max(1, s * lay.ww[i]));
         }
-        holdKeys(bp, kp);
-        holdKeys(bs, ks);
-        holdKeys(block.transform.opacity, [[t0, 100], [times[n], 0]]);
+        var idx = "var i=Math.floor(" + TYPED_OWN + ");\ni=Math.max(0,Math.min(" + (n - 1) + ",i));\n";
+        block.transform.position.expression = TW_MARK + "\nvar xs=" + arrExpr(xs) + ";\nvar ys=" + arrExpr(ys) + ";\n" + idx + "[xs[i],ys[i]]";
+        block.transform.scale.expression = TW_MARK + "\nvar ws=" + arrExpr(ws) + ";\n" + idx + "[ws[i],100]";
+        block.transform.opacity.expression = TW_MARK + "\n(Math.floor(" + TYPED_OWN + ")>=" + n + ")?0:100";
+
+        // 1) reveal: everything from word `Start` on is hidden (Based On: Words, Index units)
+        var an = indexAnimator(anims, "MK Typewriter " + tag);
+        an.property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
+        an.property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
+        var sel = indexSelector(an, 3);
+        try { sel.property("ADBE Text Index End").setValue(100000); } catch (eE) {}
+        var ref = typedRef(helperName);
+        sel.property("ADBE Text Index Start").expression = TW_MARK + "\nMath.floor(" + ref + ")";
+
+        // 2) colour wave: the last TB.wave words are blue, strongest on the newest word (Range Shape: Ramp Up)
+        var an2 = indexAnimator(anims, "MK Typewriter Wave " + tag);
+        an2.property("ADBE Text Animator Properties").addProperty("ADBE Text Fill Color");
+        try { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(c4(TB.blue)); } catch (eF) { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(TB.blue); }
+        var sel2 = indexSelector(an2, 3);
+        try { sel2.property("ADBE Text Range Advanced").property("ADBE Text Range Shape").setValue(2); } catch (eS) {}       // Ramp Up
+        sel2.property("ADBE Text Index Start").expression = TW_MARK + "\nMath.max(0,Math.floor(" + ref + ")-" + TB.wave + ")";
+        sel2.property("ADBE Text Index End").expression = TW_MARK + "\nMath.floor(" + ref + ")";
+
         try { block.inPoint = Math.max(0, t0); block.outPoint = Math.max(block.inPoint + 0.1, Math.min(comp.duration, L.outPoint)); } catch (e3) {}
         block.selected = false;
         return block;
