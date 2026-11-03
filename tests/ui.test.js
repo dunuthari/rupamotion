@@ -14,7 +14,7 @@ function gfx() {
 }
 function el(type, text) {
   const o = { type, text: text||'', children: [], items: [], visible: true, size:[300,32],
-    preferredSize:{width:0,height:0}, maximumSize:{width:0,height:0}, graphics: gfx(), layout:{layout(){},resize(){}},
+    preferredSize:{width:0,height:0}, minimumSize:{width:0,height:0}, maximumSize:{width:0,height:0}, graphics: gfx(), layout:{layout(){},resize(){}},
     add(t,b,txt){ if(t==='item'){ const it={text:b,index:this.items.length}; this.items.push(it); return it; }
       const c = el(t, Array.isArray(txt)?'':txt); c.parent=this; if(t==='dropdownlist'&&Array.isArray(txt)) txt.forEach(s=>c.add('item',s)); this.children.push(c); return c; },
     remove(x){ const i = this.children.indexOf(x); if (i>=0) this.children.splice(i,1); },

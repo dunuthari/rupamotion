@@ -1843,14 +1843,15 @@
         main.spacing = 10;
 
         // ---- fixed-height viewport: the chips and the feature card live in `content`, which slides up and down behind a scrollbar ----
-        var SCROLL_MIN = 470;
+        var SCROLL_MIN = 470, SCROLL_START = 690;
+        function setViewH(h) { viewport.preferredSize.height = h; viewport.minimumSize.height = h; viewport.maximumSize.height = h; }
         var viewport = main.add("group");
         viewport.orientation = "row";
         viewport.alignChildren = ["fill", "top"];
         viewport.alignment = ["fill", "top"];
         viewport.spacing = 4;
         viewport.margins = 0;
-        viewport.preferredSize.height = SCROLL_MIN;
+        setViewH(SCROLL_START);
         var content = viewport.add("group");
         content.orientation = "column";
         content.alignChildren = ["fill", "top"];
@@ -2028,7 +2029,7 @@
         win.fitScroll = function () {
             try {
                 var other = 28 + head.size[1] + bar.size[1] + 30;
-                viewport.preferredSize.height = Math.max(SCROLL_MIN, Math.round(win.size[1] - other));
+                setViewH(Math.max(SCROLL_MIN, Math.round(win.size[1] - other)));
             } catch (eF) {}
         };
         var lastG = getS("ui_group", groups[0]), ok = false;
