@@ -1749,6 +1749,25 @@
             FEATURES[i].panel = p.wrap;
         }
 
+        // ---- fixed bar at the bottom of the panel: Cut Left / Cut / Cut Right (visible in every group) ----
+        var filler = win.add("group");
+        filler.alignment = ["fill", "fill"];
+        var bar = btnRow(win);
+        bar.alignment = ["fill", "bottom"];
+        var cutBtns = [
+            ["Cut Left", doCutLeft, "Select layer(s), put the playhead in them, click: cuts and removes everything BEFORE the playhead."],
+            ["Cut", doCutSplit, "Select layer(s), put the playhead in them, click: splits each layer at the playhead."],
+            ["Cut Right", doCutRight, "Select layer(s), put the playhead in them, click: cuts and removes everything AFTER the playhead."]
+        ];
+        (function () {
+            for (var ci = 0; ci < cutBtns.length; ci++) {
+                (function (cb) {
+                    var b = btn(bar, cb[0], function () { run(cb[0], cb[1]); }, cb[2], "secondary");
+                    b.alignment = ["fill", "center"];
+                })(cutBtns[ci]);
+            }
+        })();
+
         var curGroup = null;
 
         function showFeature(groupName, featName) {

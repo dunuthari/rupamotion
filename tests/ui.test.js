@@ -910,3 +910,28 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`blur fade in/out: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// Fixed bar: Cut Left / Cut / Cut Right
+{
+  const R = {};
+  const bt = n => walk(root).filter(b => b.type === 'button' && b.text === n && b.parent && b.parent.isBtnRow);
+  R['three outline buttons Cut Left, Cut, Cut Right sit in one row directly in the window (not inside a card)'] = ['Cut Left', 'Cut', 'Cut Right'].every(n => bt(n).length === 1) && bt('Cut')[0].parent === bt('Cut Left')[0].parent && bt('Cut')[0].parent.parent === root && bt('Cut')[0].variant === 'secondary';
+  function run(label, setup) {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp; comp.time = 6;
+    const mk = (a, b, name, locked) => { const L = baseLayer('shape'); L.name = name; L.inPoint = a; L.outPoint = b; L.locked = !!locked; made.push(L);
+      L.duplicate = () => { const d = baseLayer('shape'); d.name = L.name; d.inPoint = L.inPoint; d.outPoint = L.outPoint; made.push(d); return d; }; return L; };
+    const A = mk(0, 10, 'A'), B = mk(5, 15, 'B'), C = mk(8, 20, 'C'), D = mk(0, 10, 'D', true);       // C starts after the playhead, D is locked
+    comp.selectedLayers = [A, B, C, D];
+    bt(label)[0].onClick(); app.project.activeItem = null;
+    return { A, B, C, D, made };
+  }
+  const l = run('Cut Left'), r = run('Cut Right'), c = run('Cut');
+  R['Cut Left: in point moves to the playhead (6 s) on layers the playhead is inside; the out point stays'] = l.A.inPoint === 6 && l.A.outPoint === 10 && l.B.inPoint === 6 && l.B.outPoint === 15;
+  R['Cut Right: out point moves to the playhead, the in point stays'] = r.A.outPoint === 6 && r.A.inPoint === 0 && r.B.outPoint === 6 && r.B.inPoint === 5;
+  R['layers the playhead is not inside, and locked layers, are left alone'] = [l, r, c].every(x => x.C.inPoint === 8 && x.C.outPoint === 20 && x.D.inPoint === 0 && x.D.outPoint === 10);
+  const copies = c.made.filter(x => x.name === 'A' && x !== c.A);
+  R['Cut: each layer is split in two: the original ends at the playhead, a copy starts there and keeps the old end'] = c.A.outPoint === 6 && c.A.inPoint === 0 && copies.length === 1 && copies[0].inPoint === 6 && copies[0].outPoint === 10 && c.B.outPoint === 6 && c.made.filter(x => x.name === 'B').length === 2;
+  R['nothing is deleted: the layer count only grows with Cut'] = l.made.length === 4 && r.made.length === 4 && c.made.length === 6;
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`cut bar: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
