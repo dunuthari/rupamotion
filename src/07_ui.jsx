@@ -1843,14 +1843,49 @@
         main.alignment = ["fill", "top"];
         main.spacing = 10;
 
+        // ---- fixed-height viewport: the chips and the feature card live in `content`, which slides up and down behind a scrollbar ----
+        var SCROLL_MIN = 470;
+        var viewport = main.add("group");
+        viewport.orientation = "row";
+        viewport.alignChildren = ["fill", "top"];
+        viewport.alignment = ["fill", "top"];
+        viewport.spacing = 4;
+        viewport.margins = 0;
+        viewport.preferredSize.height = SCROLL_MIN;
+        var content = viewport.add("group");
+        content.orientation = "column";
+        content.alignChildren = ["fill", "top"];
+        content.alignment = ["fill", "top"];
+        content.spacing = 10;
+        var sbar = viewport.add("scrollbar", undefined, 0, 0, 100);
+        sbar.alignment = ["right", "fill"];
+        sbar.preferredSize.width = 16;
+        sbar.stepdelta = 30;
+        function placeContent() {
+            try { content.location = [content.location ? content.location[0] : 0, -Math.round(sbar.value)]; } catch (eP) {}
+        }
+        sbar.onChanging = sbar.onChange = placeContent;
+        function updateScroll(reset) {
+            var ch = 0, vh = 0;
+            try { ch = content.size[1]; vh = viewport.size[1]; } catch (eS) {}
+            if (reset) { sbar.value = 0; }
+            var over = Math.max(0, Math.round(ch - vh));
+            sbar.minvalue = 0;
+            sbar.maxvalue = over;
+            sbar.jumpdelta = Math.max(40, Math.round(vh * 0.8));
+            if (sbar.value > over) { sbar.value = over; }
+            sbar.enabled = over > 0;
+            placeContent();
+        }
+
         // ---- feature chips (only for groups with several features) ----
-        var chips = main.add("group");
+        var chips = content.add("group");
         chips.orientation = "column";
         chips.alignChildren = ["fill", "top"];
         chips.spacing = 6;
 
         // ---- feature cards (stacked, one visible) ----
-        var stack = main.add("group");
+        var stack = content.add("group");
         stack.orientation = "stack";
         stack.alignChildren = ["fill", "top"];
         for (i = 0; i < FEATURES.length; i++) {
@@ -1889,6 +1924,7 @@
             putS("ui_group", groupName);
             putS("ui_feature", featName);
             try { win.layout.layout(true); } catch (e) {}
+            updateScroll(true);
         }
 
         function buildChips(groupName, featName) {
@@ -1979,6 +2015,14 @@
             showFeature(groupName, feat);
         }
 
+        // keep the viewport as tall as the window allows (never below SCROLL_MIN), the same for every tab
+        win.updateScroll = updateScroll;
+        win.fitScroll = function () {
+            try {
+                var other = 28 + head.size[1] + bar.size[1] + 30;
+                viewport.preferredSize.height = Math.max(SCROLL_MIN, Math.round(win.size[1] - other));
+            } catch (eF) {}
+        };
         var lastG = getS("ui_group", groups[0]), ok = false;
         for (i = 0; i < groups.length; i++) { if (groups[i] === lastG) { ok = true; } }
         pickGroup(ok ? lastG : groups[0], getS("ui_feature", ""));
@@ -1988,7 +2032,11 @@
     function buildUI(thisObj) {
         var win = (thisObj instanceof Panel) ? thisObj : new Window("palette", NAME, undefined, { resizeable: true });
         buildContent(win);
-        win.onResizing = win.onResize = function () { this.layout.resize(); };
+        win.onResizing = win.onResize = function () {
+            if (this.fitScroll) { this.fitScroll(); }
+            this.layout.resize();
+            if (this.updateScroll) { this.updateScroll(false); }
+        };
         return win;
     }
 
