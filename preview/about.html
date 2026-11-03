@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ru Motion · About window (mock-up)</title>
+<style>
+  :root{--page:#1C1D20;--surface:#232428;--card:#2B2D31;--hair:#3C3E43;--text:#F1F2F4;--label:#BEC0C4;--hint:#90939A;--primary:#0A6CFF;--tint:#1E3357}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111214;font:13px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text);padding:24px}
+  .ae{width:100%;max-width:520px;background:var(--page);border:1px solid var(--hair);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#2a2b2f;border-bottom:1px solid var(--hair);color:var(--label);font-size:12px}
+  .bar b{font-weight:500}.bar span{opacity:.6}
+  .body{padding:26px 28px 22px}
+  .top{display:flex;gap:16px;align-items:center;margin-bottom:18px}
+  .logo{width:64px;height:64px;border-radius:18px;background:var(--primary);flex:none}
+  h1{margin:0;font-size:22px;letter-spacing:-.01em}
+  .ver{color:var(--hint);margin-top:2px}
+  .tag{color:var(--label);margin-top:6px;font-size:12.5px}
+  .card{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px;margin-top:12px}
+  .card h2{margin:0 0 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--hint)}
+  ol{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+  ol li{display:flex;gap:10px;align-items:flex-start}
+  .n{flex:none;width:22px;height:22px;border-radius:50%;background:var(--tint);color:#7db0ff;display:grid;place-items:center;font-size:12px;font-weight:700}
+  ul{margin:0;padding-left:18px;color:var(--label)}ul li{margin:2px 0}
+  .tips{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .credit{margin-top:14px;color:var(--hint);font-size:12px;text-align:center}
+  .credit i{font-style:normal;color:var(--label)}
+  .foot{display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:12px}
+  .chk{display:flex;align-items:center;gap:8px;color:var(--label);cursor:pointer;user-select:none}
+  .box{width:18px;height:18px;border-radius:5px;border:1px solid var(--hair);background:#101113;display:grid;place-items:center}
+  .box.on{background:var(--primary);border-color:var(--primary)}
+  .box.on:after{content:"";width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+  .go{appearance:none;border:0;border-radius:999px;background:var(--primary);color:#fff;font:700 13px inherit;font-family:inherit;padding:0 26px;height:36px;cursor:pointer}
+  .note{max-width:520px;margin:14px auto 0;color:#7c7f86;font-size:12px;text-align:center}
+</style></head><body>
+<div>
+  <div class="ae" role="dialog" aria-label="About Ru Motion">
+    <div class="bar"><b>About Ru Motion</b><span>×</span></div>
+    <div class="body">
+      <div class="top">
+        <div class="logo"><svg viewBox="0 0 100 100" aria-hidden="true" style="width:100%;height:100%;display:block"><path fill="#fff" d="M37.8 85.7 L35.6 85.7 L34 85.3 L31.8 84.1 L29.3 81.8 L26.3 77.2 L25.1 74.6 L23.9 71 L22.5 63.8 L22.3 55.4 L23.3 48.8 L25.1 42.4 L26.7 38.4 L29.1 33.6 L32.3 28.6 L34.8 25.5 L38.6 21.7 L41.4 19.5 L44.2 17.7 L47.4 16.1 L51 14.9 L53.8 14.3 L59.6 14.1 L63.8 15.1 L65.6 15.9 L68 17.5 L70.9 20.6 L73.1 24.6 L74.1 28 L74.5 30.6 L74.5 35.4 L73.3 41 L72.1 43.8 L70.7 46 L67.2 49.5 L65.2 50.7 L62 51.7 L57 51.7 L53.4 50.9 L49.6 49.3 L46.8 47.3 L45.5 45.8 L44.3 43.6 L44.1 42.8 L44.3 40.4 L44.9 39.4 L46.2 38.5 L49.4 37.7 L55.8 37.5 L57.8 37.1 L60.4 35.7 L61.7 34.2 L62.7 31.2 L62.7 28.2 L62.1 26 L61.1 24.2 L59 22.1 L56.4 20.7 L53.8 20.1 L49.6 20.3 L47 21.1 L43.6 22.9 L41.7 24.4 L37.9 28.6 L36.7 30.4 L34.3 35.6 L33.1 41 L33.1 46.6 L34.1 50.6 L35.3 53.2 L36.7 55.4 L38.5 57.6 L42.5 61.6 L45.3 65 L46.9 67.8 L47.7 71 L47.7 73.8 L47.3 76 L46.7 77.8 L45.1 80.8 L42.6 83.5 L40 85.1Z M68 85.7 L65.2 85.5 L63.4 84.5 L61.5 82.6 L59.9 80.2 L58.1 76.2 L54.3 69.4 L50.8 65.5 L48.2 63.3 L45.2 61.5 L42.3 58.6 L40.1 55.4 L38.7 52.6 L37.7 50 L36.5 45 L36.3 43.2 L36.5 37.8 L37.5 34.4 L39.1 31.6 L41.2 29.5 L42.8 28.5 L44 28.1 L46.8 28.1 L47.8 28.5 L48.7 29.4 L49.1 30.4 L49.1 32.6 L47.5 35.6 L42.7 40.6 L41.1 43.2 L40.7 44.6 L40.7 47.2 L41.9 49.8 L44.2 51.9 L48 54.1 L54.6 56.7 L62.8 59.3 L69.4 62.1 L73.4 64.7 L75.1 66.4 L76.7 68.8 L77.5 71.6 L77.5 74.4 L76.9 76.8 L75.9 79.2 L74.3 81.6 L72.2 83.7 L70 85.1Z"/></svg></div>
+        <div>
+          <h1>Ru Motion</h1>
+          <div class="ver">Version 1.0</div>
+          <div class="tag">Motion toolkit for After Effects</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>How it works</h2>
+        <ol>
+          <li><span class="n">1</span><div><b>Select</b> a layer or layers in your timeline.</div></li>
+          <li><span class="n">2</span><div><b>Click</b> an effect in the panel. It starts at the playhead.</div></li>
+          <li><span class="n">3</span><div><b>Adjust</b> timing by moving the keyframes, or press the button again to replace it.</div></li>
+        </ol>
+      </div>
+      <div class="tips">
+        <div class="card"><h2>What's inside</h2><ul><li>Fades, slides and pops</li><li>Text effects and typewriters</li><li>Shapes, camera and easing</li></ul></div>
+        <div class="card"><h2>Good to know</h2><ul><li>Undo with Ctrl / Cmd + Z</li><li>Layers are named “MK …”</li><li>Cut tools sit at the bottom</li></ul></div>
+      </div>
+      <div class="credit">Made by <i>[Your name or studio]</i> · <i>[website or email]</i><br>Ru (රූ) means “form, image”.</div>
+      <div class="foot">
+        <label class="chk"><span class="box on"></span>Don't show this again</label>
+        <button class="go" type="button">Get started</button>
+      </div>
+    </div>
+  </div>
+  <p class="note">Mock-up of the first-run About window (not built into the plugin yet). The bracketed parts are placeholders.</p>
+</div>
+</body></html>
