@@ -17106,13 +17106,18 @@
         var stack = content.add("group");
         stack.orientation = "stack";
         stack.alignChildren = ["fill", "top"];
-        for (i = 0; i < FEATURES.length; i++) {
-            var p = card(stack, FEATURES[i].name, 0);
+        // cards are built the first time they are shown (startup builds none of them), unless a test asks for all
+        function ensureBuilt(f) {
+            if (f.panel) { return; }
+            var p = card(stack, f.name, 0);
             p.spacing = 7;
-            FEATURES[i].build(p);
+            f.build(p);
             p.wrap.visible = false;
-            FEATURES[i].panel = p.wrap;
+            f.panel = p.wrap;
         }
+        var eager = false;
+        try { eager = ($.global.RuMotionEager === true); } catch (eE) {}
+        if (eager) { for (i = 0; i < FEATURES.length; i++) { ensureBuilt(FEATURES[i]); } }
 
         // ---- fixed bar at the bottom of the panel: Cut Left / Cut / Cut Right (visible in every group) ----
         var filler = win.add("group");
@@ -17135,12 +17140,16 @@
 
         var curGroup = null;
 
+        var savedGroup = "", savedFeat = "";
         function showFeature(groupName, featName) {
             for (var k = 0; k < FEATURES.length; k++) {
-                FEATURES[k].panel.visible = (FEATURES[k].group === groupName && FEATURES[k].name === featName);
+                var f = FEATURES[k], on = (f.group === groupName && f.name === featName);
+                if (on) { ensureBuilt(f); }
+                if (f.panel && f.panel.visible !== on) { f.panel.visible = on; }
             }
-            putS("ui_group", groupName);
-            putS("ui_feature", featName);
+            // preferences are written to disk, so only when something changed
+            if (savedGroup !== groupName) { putS("ui_group", groupName); savedGroup = groupName; }
+            if (savedFeat !== featName) { putS("ui_feature", featName); savedFeat = featName; }
             try { win.layout.layout(true); } catch (e) {}
             updateScroll(true);
         }
@@ -17181,7 +17190,7 @@
                             for (var q = 0; q < mine.length; q++) {
                                 mine[q].variant = (mine[q] === c) ? "chip-on" : "chip";
                                 if (CLASSIC) { mine[q].text = (mine[q] === c ? "● " : "") + mine[q].baseText; }
-                                else { repaint(mine[q]); }
+                                else { redraw(mine[q]); }
                             }
                             onPick(nm);
                         };
@@ -17227,7 +17236,7 @@
             for (k = 0; k < tiles.length; k++) {
                 tiles[k].active = (tiles[k].groupName === groupName);
                 if (CLASSIC) { tiles[k].text = (tiles[k].active ? "● " : "") + tiles[k].baseText; }
-                else { repaint(tiles[k]); }
+                else { redraw(tiles[k]); }
             }
             buildChips(groupName, feat);
             showFeature(groupName, feat);

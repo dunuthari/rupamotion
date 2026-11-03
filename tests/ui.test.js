@@ -30,7 +30,7 @@ FakeFile0.written = [];
 FakeFile0.prototype.open = function () { return true; }; FakeFile0.prototype.write = function (d) { this.data += d; };
 FakeFile0.prototype.close = function () {}; FakeFile0.prototype.remove = function () { return true; };
 const settings = {}; let scheduled = null;
-const $g = { global: {}, colorPicker: ()=>-1 };
+const $g = { global: { RuMotionEager: true }, colorPicker: ()=>-1 };
 const app = { settings:{haveSetting:(s,k)=>(s+k) in settings,getSetting:(s,k)=>settings[s+k],saveSetting:(s,k,v)=>{settings[s+k]=v;}},
   project:{activeItem:null, importFile(io) { return { width: 200, height: 100, file: io.file, name: 'icon' }; }}, fonts:null, beginUndoGroup(){}, endUndoGroup(){}, scheduleTask(code){ scheduled = code; } };
 function Panel(){}; let lastWin = null, windowsMade = 0; function Window(){ windowsMade++; lastWin = el('window'); lastWin.windowArgs = Array.prototype.slice.call(arguments); return lastWin; }
@@ -986,4 +986,18 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['Ru Bounce is the new live-bounce effect name; old "MK Bounce" layers are still recognised'] = /"Ru Bounce"/.test(src) && /MK Bounce/.test(src) && !/"MK (Swipe|Star|Typewriter|Text)/.test(src);
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`about window: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Lazy cards: with no eager flag only the visible feature is built, others appear when their tab is opened
+{
+  const prev = $g.global.RuMotionEager; $g.global.RuMotionEager = false;
+  const rootL = Object.assign(new Panel(), el('panel', 'rootL'));
+  run(...Object.values(g), rootL);
+  const cardsAt = () => walk(rootL).filter(n => n.cardLevel === 0 && n.cardTitle).length;
+  const first = cardsAt();
+  const tile = walk(rootL).filter(n => n.type === 'button' && n.groupName === 'Camera')[0];
+  if (tile) tile.onClick();
+  const after = cardsAt();
+  $g.global.RuMotionEager = prev;
+  console.log(`lazy cards: ${first} built at start, ${after} after opening Camera -> ${first <= 2 && after === first + 1 ? 'OK' : 'WRONG'}`);
 }

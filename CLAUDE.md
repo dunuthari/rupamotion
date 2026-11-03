@@ -64,6 +64,10 @@ Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.js
 - Redraw a custom control with `redraw(ctrl)` (`notify("onDraw")`) or `repaint(ctrl)` (hide/show). Buttons made by
   `styleButton` show a pressed state on mouse down; `btn()` keeps it through the action so quick clicks are visible. Toggles expose `.value` and `.onToggle`.
 
+## Performance notes
+- Feature cards are built lazily (`ensureBuilt` in `buildContent`) the first time their chip/tab is shown; tests set `$.global.RuMotionEager = true` to build all of them.
+- Preferences are written only when the saved tab/feature actually changes; tab and chip repaints use `redraw` (no hide/show, which re-lays-out the panel).
+
 ## Design system (dark)
 page `#1C1D20` · surface `#232428` · card `#2B2D31` · hairline `#3C3E43` · text `#F1F2F4` · label `#BEC0C4` ·
 hint `#90939A` · primary `#0A6CFF` · tint `#1E3357`. Pill buttons: primary = solid blue (main action),
