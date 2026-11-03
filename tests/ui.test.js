@@ -911,27 +911,37 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`blur fade in/out: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
-// Fixed bar: Cut Left / Cut / Cut Right
+// Fixed bar: Cut Before / Split / Cut After
 {
   const R = {};
   const bt = n => walk(root).filter(b => b.type === 'button' && b.text === n && b.parent && b.parent.isBtnRow);
-  R['three outline buttons Cut Left, Cut, Cut Right sit in one row directly in the window (not inside a card)'] = ['Cut Left', 'Cut', 'Cut Right'].every(n => bt(n).length === 1) && bt('Cut')[0].parent === bt('Cut Left')[0].parent && bt('Cut')[0].parent.parent === root && bt('Cut')[0].variant === 'secondary';
-  function run(label, setup) {
+  R['three outline buttons Cut Before, Split, Cut After sit in one row directly in the window (not inside a card); the old names are gone'] = ['Cut Before', 'Split', 'Cut After'].every(n => bt(n).length === 1) && bt('Split')[0].parent === bt('Cut Before')[0].parent && bt('Split')[0].parent.parent === root && bt('Split')[0].variant === 'secondary' && ['Cut Left', 'Cut Right'].every(n => bt(n).length === 0);
+  // quirk = true makes a layer behave like AE can: moving one end drags the other end along (the "right area gets longer" report)
+  function run(label, quirk) {
     const { comp, made } = fakeBuild(); app.project.activeItem = comp; comp.time = 6;
-    const mk = (a, b, name, locked) => { const L = baseLayer('shape'); L.name = name; L.inPoint = a; L.outPoint = b; L.locked = !!locked; made.push(L);
-      L.duplicate = () => { const d = baseLayer('shape'); d.name = L.name; d.inPoint = L.inPoint; d.outPoint = L.outPoint; made.push(d); return d; }; return L; };
+    const mk = (a, b, name, locked) => {
+      const L = baseLayer('shape'); L.name = name; L.locked = !!locked; made.push(L);
+      let i = a, o = b;
+      Object.defineProperty(L, 'inPoint', { get() { return i; }, set(v) { if (quirk) { o += (v - i) * 0.5; } i = v; }, configurable: true });
+      Object.defineProperty(L, 'outPoint', { get() { return o; }, set(v) { o = v; }, configurable: true });
+      L.duplicate = () => { const d = mk(L.inPoint, L.outPoint, L.name, false); return d; };
+      return L;
+    };
     const A = mk(0, 10, 'A'), B = mk(5, 15, 'B'), C = mk(8, 20, 'C'), D = mk(0, 10, 'D', true);       // C starts after the playhead, D is locked
     comp.selectedLayers = [A, B, C, D];
     bt(label)[0].onClick(); app.project.activeItem = null;
     return { A, B, C, D, made };
   }
-  const l = run('Cut Left'), r = run('Cut Right'), c = run('Cut');
-  R['Cut Left: in point moves to the playhead (6 s) on layers the playhead is inside; the out point stays'] = l.A.inPoint === 6 && l.A.outPoint === 10 && l.B.inPoint === 6 && l.B.outPoint === 15;
-  R['Cut Right: out point moves to the playhead, the in point stays'] = r.A.outPoint === 6 && r.A.inPoint === 0 && r.B.outPoint === 6 && r.B.inPoint === 5;
-  R['layers the playhead is not inside, and locked layers, are left alone'] = [l, r, c].every(x => x.C.inPoint === 8 && x.C.outPoint === 20 && x.D.inPoint === 0 && x.D.outPoint === 10);
-  const copies = c.made.filter(x => x.name === 'A' && x !== c.A);
-  R['Cut: each layer is split in two: the original ends at the playhead, a copy starts there and keeps the old end'] = c.A.outPoint === 6 && c.A.inPoint === 0 && copies.length === 1 && copies[0].inPoint === 6 && copies[0].outPoint === 10 && c.B.outPoint === 6 && c.made.filter(x => x.name === 'B').length === 2;
-  R['nothing is deleted: the layer count only grows with Cut'] = l.made.length === 4 && r.made.length === 4 && c.made.length === 6;
+  for (const quirk of [false, true]) {
+    const tag = quirk ? ' (even when moving one end drags the other)' : '';
+    const l = run('Cut Before', quirk), r = run('Cut After', quirk), c = run('Split', quirk);
+    R['Cut Before: in point moves to the playhead (6 s), the out point stays' + tag] = l.A.inPoint === 6 && l.A.outPoint === 10 && l.B.inPoint === 6 && l.B.outPoint === 15;
+    R['Cut After: out point moves to the playhead, the in point stays' + tag] = r.A.outPoint === 6 && r.A.inPoint === 0 && r.B.outPoint === 6 && r.B.inPoint === 5;
+    R['layers the playhead is not inside, and locked layers, are left alone' + tag] = [l, r, c].every(x => x.C.inPoint === 8 && x.C.outPoint === 20 && x.D.inPoint === 0 && x.D.outPoint === 10);
+    const copies = c.made.filter(x => x.name === 'A' && x !== c.A);
+    R['Split: the original ends at the playhead, the copy starts there and ends EXACTLY where the original ended' + tag] = c.A.outPoint === 6 && c.A.inPoint === 0 && copies.length === 1 && copies[0].inPoint === 6 && copies[0].outPoint === 10 && c.B.outPoint === 6 && c.B.inPoint === 5 && c.made.filter(x => x.name === 'B').length === 2 && c.made.filter(x => x.name === 'B').every(x => x === c.B || (x.inPoint === 6 && x.outPoint === 15));
+  }
+  R['nothing is deleted: the layer count only grows with Split'] = run('Cut Before').made.length === 4 && run('Cut After').made.length === 4 && run('Split').made.length === 6;
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`cut bar: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

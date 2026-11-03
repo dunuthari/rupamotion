@@ -1755,9 +1755,9 @@
         var bar = btnRow(win);
         bar.alignment = ["fill", "bottom"];
         var cutBtns = [
-            ["Cut Left", doCutLeft, "Select layer(s), put the playhead in them, click: cuts and removes everything BEFORE the playhead."],
-            ["Cut", doCutSplit, "Select layer(s), put the playhead in them, click: splits each layer at the playhead."],
-            ["Cut Right", doCutRight, "Select layer(s), put the playhead in them, click: cuts and removes everything AFTER the playhead."]
+            ["Cut Before", doCutLeft, "Select layer(s), put the playhead in them, click: cuts and removes everything BEFORE the playhead."],
+            ["Split", doCutSplit, "Select layer(s), put the playhead in them, click: splits each layer at the playhead."],
+            ["Cut After", doCutRight, "Select layer(s), put the playhead in them, click: cuts and removes everything AFTER the playhead."]
         ];
         (function () {
             for (var ci = 0; ci < cutBtns.length; ci++) {
