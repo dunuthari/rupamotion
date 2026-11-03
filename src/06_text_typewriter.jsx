@@ -99,7 +99,7 @@
     // block position, the blink, the centring shift) is an expression that reads that slider. Retime the effect by moving the
     // two keys; nothing else has to change. Expressions work in both the Legacy and JavaScript engines.
     // ---------------------------------------------------------------------
-    var TW_MARK = "// MK Typewriter";
+    var TW_MARK = "// Ru Typewriter";
 
     function num2(v) { return String(Math.round(v * 100) / 100); }
     function arrExpr(a) { var out = [], i; for (i = 0; i < a.length; i++) { out.push(num2(a[i])); } return "[" + out.join(",") + "]"; }
@@ -111,13 +111,13 @@
         var anims = L.property("ADBE Text Properties").property("ADBE Text Animators"), i, nm, tags = [], j, names;
         for (i = anims.numProperties; i >= 1; i--) {
             nm = anims.property(i).name;
-            if (nm.indexOf("MK Typewriter") === 0) {
-                if (nm.indexOf("MK Typewriter Wave") !== 0) { tags.push(nm.substring("MK Typewriter ".length)); }
+            if (nm.indexOf("Ru Typewriter") === 0) {
+                if (nm.indexOf("Ru Typewriter Wave") !== 0) { tags.push(nm.substring("Ru Typewriter ".length)); }
                 anims.property(i).remove();
             }
         }
         var gone = [];
-        for (j = 0; j < tags.length; j++) { gone.push("MK Typewriter · Caret " + tags[j]); gone.push("MK Typewriter · Block " + tags[j]); }
+        for (j = 0; j < tags.length; j++) { gone.push("Ru Typewriter · Caret " + tags[j]); gone.push("Ru Typewriter · Block " + tags[j]); }
         names = {};
         for (j = 0; j < gone.length; j++) { names[gone[j]] = true; }
         for (i = comp.numLayers; i >= 1; i--) {
@@ -165,7 +165,7 @@
         if (trim(src.text) === "") { return "skipped"; }
         var dt = 1 / TW.cps;
         var anims = clearTypewriter(comp, L);
-        var lay = layoutText(comp, L, t0), tag = newTag(comp), helperName = "MK Typewriter · Caret " + tag;
+        var lay = layoutText(comp, L, t0), tag = newTag(comp), helperName = "Ru Typewriter · Caret " + tag;
 
         var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
         var ox = P[0] - A[0] * s, baseline = P[1] + (lay.baseY - A[1]) * s, fs = src.fontSize * s;
@@ -194,7 +194,7 @@
         caret.transform.opacity.expression = TW_MARK + "\nvar p=" + TYPED_OWN + ";\nvar out=100;\nif(p>=" + n + "){var u=time-p.key(2).time-" + TW.blinkOn + ";\nif(u>=0){out=(u>=" + num2(TW.blinks * (TW.blinkOn + TW.blinkOff)) + ")?0:((Math.floor(u/" + TW.blinkOff + ")%2===0)?0:100);}}\nout";
 
         // the text: everything from the Start index on is hidden; Start = letters typed so far
-        var an = indexAnimator(anims, "MK Typewriter " + tag);
+        var an = indexAnimator(anims, "Ru Typewriter " + tag);
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
         an.property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
         var sel = indexSelector(an, 1);
@@ -219,7 +219,7 @@
         var anims = clearTypewriter(comp, L);
         var lay = layoutText(comp, L, t0), n = lay.wx.length;
         if (n < 1) { return "skipped"; }
-        var tag = newTag(comp), helperName = "MK Typewriter · Block " + tag;
+        var tag = newTag(comp), helperName = "Ru Typewriter · Block " + tag;
 
         var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
         var ox = P[0] - A[0] * s, baseline = P[1] + (lay.baseY - A[1]) * s, fs = src.fontSize * s;
@@ -248,7 +248,7 @@
         block.transform.opacity.expression = TW_MARK + "\n(Math.floor(" + TYPED_OWN + ")>=" + n + ")?0:100";
 
         // 1) reveal: everything from word `Start` on is hidden (Based On: Words, Index units)
-        var an = indexAnimator(anims, "MK Typewriter " + tag);
+        var an = indexAnimator(anims, "Ru Typewriter " + tag);
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
         an.property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
         var sel = indexSelector(an, 3);
@@ -257,7 +257,7 @@
         sel.property("ADBE Text Index Start").expression = TW_MARK + "\nMath.floor(" + ref + ")";
 
         // 2) colour wave: the last TB.wave words are blue, strongest on the newest word (Range Shape: Ramp Up)
-        var an2 = indexAnimator(anims, "MK Typewriter Wave " + tag);
+        var an2 = indexAnimator(anims, "Ru Typewriter Wave " + tag);
         an2.property("ADBE Text Animator Properties").addProperty("ADBE Text Fill Color");
         try { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(c4(TB.blue)); } catch (eF) { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(TB.blue); }
         var sel2 = indexSelector(an2, 3);

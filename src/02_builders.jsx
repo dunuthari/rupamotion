@@ -235,7 +235,7 @@
         for (var i = 0; i < fills.length; i++) {
             try { fills[i].property("ADBE Vector Fill Opacity").setValue(100); } catch (e) {}
         }
-        var adj = addAdjustment(comp, "MK Frost · " + layer.name);
+        var adj = addAdjustment(comp, "Ru Frost · " + layer.name);
         var b = fxAdd(adj, "ADBE Box Blur2");
         fxSet(b, 1, radius || 30);
         fxSet(b, 2, 3);
@@ -254,7 +254,7 @@
         var t = comp.time;
         var size = o.size || 44;
         var text = makeText(comp, o.label, { size: size, color: o.textColor || [1, 1, 1], font: pickFont(true), just: "center" });
-        text.name = "MK Pill Label · " + o.label;
+        text.name = "Ru Pill Label · " + o.label;
         var r = text.sourceRectAtTime(t, false);
         var padX = (o.padX !== undefined) ? o.padX : size * 0.9;
         var padY = (o.padY !== undefined) ? o.padY : size * 0.5;
@@ -262,7 +262,7 @@
         var w = Math.round(r.width + padX * 2 + extra);
         var h = Math.round(Math.max(r.height, size * 0.9) + padY * 2);
 
-        var pill = shapeLayer(comp, "MK Pill · " + o.label);
+        var pill = shapeLayer(comp, "Ru Pill · " + o.label);
         var g1 = newGroup(pill, "Inner Stroke");
         addRect(pill, g1, w - 6, h - 6, (h - 6) / 2);
         addStroke(pill, g1, [1, 1, 1], 2, 45);
@@ -288,7 +288,7 @@
 
     // Slow camera push-in with depth of field. Returns the camera.
     function cameraPush(comp, t, len, push, aperture) {
-        var cam = comp.layers.addCamera("MK Camera", [comp.width / 2, comp.height / 2]);
+        var cam = comp.layers.addCamera("Ru Camera", [comp.width / 2, comp.height / 2]);
         var opts = cam.property("ADBE Camera Options Group");
         var zoom = opts.property("ADBE Camera Zoom").value;
         try { opts.property("ADBE Camera Depth of Field").setValue(1); } catch (e1) {}

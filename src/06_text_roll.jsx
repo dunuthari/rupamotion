@@ -16,9 +16,9 @@
 
     function clearRoll(L) {
         var anims = L.property("ADBE Text Properties").property("ADBE Text Animators"), i, fx, m;
-        for (i = anims.numProperties; i >= 1; i--) { if (anims.property(i).name === "MK SaaS Roll") { anims.property(i).remove(); } }
+        for (i = anims.numProperties; i >= 1; i--) { if (anims.property(i).name === "Ru SaaS Roll") { anims.property(i).remove(); } }
         try { fx = L.property("ADBE Effect Parade"); for (i = fx.numProperties; i >= 1; i--) { if (fx.property(i).name === "Roll") { fx.property(i).remove(); } } } catch (e1) {}
-        try { m = L.property("ADBE Mask Parade"); for (i = m.numProperties; i >= 1; i--) { if (m.property(i).name === "MK Roll Window") { m.property(i).remove(); } } } catch (e2) {}
+        try { m = L.property("ADBE Mask Parade"); for (i = m.numProperties; i >= 1; i--) { if (m.property(i).name === "Ru Roll Window") { m.property(i).remove(); } } } catch (e2) {}
     }
 
     // mode: "both" (one layer, two lines), "out" (this layer's text leaves upwards) or "in" (this layer's text arrives from below)
@@ -46,7 +46,7 @@
         // the window: one line tall, very wide, in layer space on the first line
         var top = lay.baseY - SR.top * fs, bot = lay.baseY + SR.bottom * fs, X = comp.width * 3;
         var win = addMask(L, makeShape([[-X, top], [X, top], [X, bot], [-X, bot]], [[0, 0], [0, 0], [0, 0], [0, 0]], [[0, 0], [0, 0], [0, 0], [0, 0]], true));
-        try { win.name = "MK Roll Window"; } catch (eN) {}
+        try { win.name = "Ru Roll Window"; } catch (eN) {}
 
         // the two keyframes
         var e = fxAdd(L, "ADBE Slider Control");
@@ -63,7 +63,7 @@
         var anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
         anims.addProperty("ADBE Text Animator");
         var an = anims.property(anims.numProperties);
-        an.name = "MK SaaS Roll";
+        an.name = "Ru SaaS Roll";
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Position 3D");
         var pos = an.property("ADBE Text Animator Properties").property("ADBE Text Position 3D");
         var dir = (mode === "in") ? 1 : -1;                  // arriving text starts one line lower and rises into place
@@ -81,7 +81,7 @@
                     // Based On: Words (3) when the property can be found; otherwise it stays on Characters and the expression copes
                     var names = ["ADBE Text Expressible Type", "ADBE Text Expressible Basis", "ADBE Text Expressible Units", "Based On"], q;
                     for (q = 0; q < names.length; q++) { try { var bo = sel.property(names[q]); if (bo) { bo.setValue(3); break; } } catch (eB) {} }
-                    amt.expression = "// MK SaaS Text Roll\nvar LW=" + arrExpr(inLine) + ";\nvar LC=" + arrExpr(perChar) + ";\nvar NW=" + inLine.length + ";\n" +
+                    amt.expression = "// Ru SaaS Text Roll\nvar LW=" + arrExpr(inLine) + ";\nvar LC=" + arrExpr(perChar) + ";\nvar NW=" + inLine.length + ";\n" +
                         "var v=effect(\"Roll\")(\"Slider\");\n" +
                         "var k=(textTotal===NW)?LW[textIndex-1]:LC[textIndex-1];\n" +
                         "var u=(v-k*" + SR.stagger + ")/" + SR.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\n" + (mode === "in" ? "(1-u)*100" : "u*100");

@@ -18,8 +18,8 @@
 
     var NAME = "Ru Motion";
     var SET = "MotionKit_v1";
-    var FX_B = "MK Bounce";
-    var FX_BS = "MK Bounce Strength";
+    var FX_B = "Ru Bounce";
+    var FX_BS = "Ru Bounce Strength";
 
     // =====================================================================
     // Basic helpers (ExtendScript is ES3: no JSON, Array.indexOf, trim…)
@@ -324,8 +324,25 @@
     // Live bounce: effect controls on the layer + a spring expression
     // =====================================================================
 
+    // Layers made before the rename carry "MK Bounce" / "MK Bounce Strength"; they are still recognised and driven
+    var FX_B_LEGACY = "MK Bounce", FX_BS_LEGACY = "MK Bounce Strength";
+    function bounceNames(layer) {
+        try {
+            var f = layer.property("ADBE Effect Parade");
+            if (!f) { return null; }
+            if (f.property(FX_B) && f.property(FX_BS)) { return [FX_B, FX_BS]; }
+            if (f.property(FX_B_LEGACY) && f.property(FX_BS_LEGACY)) { return [FX_B_LEGACY, FX_BS_LEGACY]; }
+        } catch (e) {}
+        return null;
+    }
+
     function ensureBounce(layer) {
-        var fx = layer.property("ADBE Effect Parade");
+        var fx = layer.property("ADBE Effect Parade"), bn = bounceNames(layer);
+        if (bn) {
+            fx.property(bn[0]).property(1).setValue(style.bounceOn === "1" ? 1 : 0);
+            fx.property(bn[1]).property(1).setValue(num(style.bounceAmt, 10, 1, 60));
+            return;
+        }
         if (!fx.property(FX_B)) {
             var c = fx.addProperty("ADBE Checkbox Control");
             c.name = FX_B;
@@ -346,7 +363,9 @@
         var L = [];
         L.push("// Motion Kit live bounce. Toggle with the \"" + FX_B + "\" effect on this layer.");
         L.push("var b = 0, s = 10;");
-        L.push("try { b = effect(\"" + FX_B + "\")(1).value; s = effect(\"" + FX_BS + "\")(1).value; } catch (err) {}");
+        L.push("try { b = effect(\"" + FX_B + "\")(1).value; s = effect(\"" + FX_BS + "\")(1).value; } catch (err) {");
+        L.push("  try { b = effect(\"" + FX_B_LEGACY + "\")(1).value; s = effect(\"" + FX_BS_LEGACY + "\")(1).value; } catch (err2) {}");
+        L.push("}");
         L.push("var out = value;");
         L.push("if (b != 0 && numKeys >= 2) {");
         L.push("  var i = nearestKey(time).index;");
@@ -389,12 +408,7 @@
         return L.join("\n");
     }
 
-    function hasBounce(layer) {
-        try {
-            var fx = layer.property("ADBE Effect Parade");
-            return !!(fx && fx.property(FX_B) && fx.property(FX_BS));
-        } catch (e) { return false; }
-    }
+    function hasBounce(layer) { return !!bounceNames(layer); }
 
     // Applies the footer bounce state to selected layers, or to Motion Kit
     // layers inside selected precomp layers. Returns how many were changed.
@@ -415,9 +429,9 @@
         if (targets.length === 0) { return 0; }
         app.beginUndoGroup(NAME + ": Bounce");
         for (var k = 0; k < targets.length; k++) {
-            var fx = targets[k].property("ADBE Effect Parade");
-            fx.property(FX_B).property(1).setValue(style.bounceOn === "1" ? 1 : 0);
-            fx.property(FX_BS).property(1).setValue(num(style.bounceAmt, 10, 1, 60));
+            var fx = targets[k].property("ADBE Effect Parade"), bn = bounceNames(targets[k]);
+            fx.property(bn[0]).property(1).setValue(style.bounceOn === "1" ? 1 : 0);
+            fx.property(bn[1]).property(1).setValue(num(style.bounceAmt, 10, 1, 60));
         }
         app.endUndoGroup();
         return targets.length;

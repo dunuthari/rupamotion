@@ -6,7 +6,7 @@
     function isContentLayer(L) {
         if (!(L instanceof AVLayer)) { return false; }
         if (L.adjustmentLayer || L.guideLayer || !L.enabled) { return false; }
-        if (/^MK /.test(L.name)) { return false; }
+        if (/^(Ru|MK) /.test(L.name)) { return false; }
         return true;
     }
 
@@ -62,16 +62,16 @@
         var comp = activeComp(); if (!comp) { return; }
         var ctx = transitionContext(comp, false); if (!ctx) { return; }
         var fr = comp.frameDuration, d = o.frames * fr, k = Math.max(1.2, o.intensity), cut = ctx.cut;
-        var adj = cutAdjustment(comp, "MK Zoom " + (zoomIn ? "In" : "Out") + " Cut", cut, d, o.blur);
+        var adj = cutAdjustment(comp, "Ru Zoom " + (zoomIn ? "In" : "Out") + " Cut", cut, d, o.blur);
         var sc = transformFx(adj).property(4);
         var a = zoomIn ? 100 * k : 100 / k, b = zoomIn ? 100 / k : 100 * k;
         setKeys(sc, [[cut - d, 100], [cut - fr, a], [cut, b], [cut + d, 100]], { eases: CUT_EASES });
     }
 
     // Swipe cut = a small rig of three linked nulls (the same set-up you would build by hand):
-    //   MK Swipe · Move  a short null around the cut; its Position is the only thing animated (0.9 / 0.1 ease, one key each end)
-    //   MK Swipe · Out   child of Move, holds the outgoing clip (runs up to the cut)
-    //   MK Swipe · In    child of Move, offset by the swipe distance, holds the incoming clip (runs from the cut)
+    //   Ru Swipe · Move  a short null around the cut; its Position is the only thing animated (0.9 / 0.1 ease, one key each end)
+    //   Ru Swipe · Out   child of Move, holds the outgoing clip (runs up to the cut)
+    //   Ru Swipe · In    child of Move, offset by the swipe distance, holds the incoming clip (runs from the cut)
     // Move slides that distance, so the old clip leaves while the new one enters, and the hard cut happens mid-whoosh.
     // Anchor and position of the nulls are both (0,0), so linking a clip does not move it.
     // cubic-bezier (0.9, 0, 0.1, 1): the ease the hand-made version's Move keys actually hold (measured from its
@@ -114,9 +114,9 @@
         try { if (outL.outPoint > cut) { outL.outPoint = cut; } } catch (e0) {}
         try { if (inL.inPoint < cut) { inL.inPoint = cut; } } catch (e1) {}
 
-        var move = swipeNull(comp, "MK Swipe · Move", t0, t1);
-        var outN = swipeNull(comp, "MK Swipe · Out", outL.inPoint, cut);
-        var inN = swipeNull(comp, "MK Swipe · In", cut, inL.outPoint);
+        var move = swipeNull(comp, "Ru Swipe · Move", t0, t1);
+        var outN = swipeNull(comp, "Ru Swipe · Out", outL.inPoint, cut);
+        var inN = swipeNull(comp, "Ru Swipe · In", cut, inL.outPoint);
         // Link everything first, while all three nulls are still at rest (0,0). Assigning .parent makes AE shift
         // the child's own position so it doesn't jump, which would cancel the offset if it were already set.
         outN.parent = move;
@@ -173,13 +173,13 @@
         }
 
         if (o.accent) {
-            var acc = buildShape("MK Wipe Accent", col("primary"));
+            var acc = buildShape("Ru Wipe Accent", col("primary"));
             animateShape(acc, cut);
             acc.inPoint = Math.max(0, cut);
             acc.outPoint = Math.min(comp.duration, cut + d + lead + fr);
             acc.moveAfter(inL);
         }
-        var matte = buildShape("MK Wipe Matte", [1, 1, 1]);
+        var matte = buildShape("Ru Wipe Matte", [1, 1, 1]);
         animateShape(matte, cut + lead);
         matte.inPoint = Math.max(0, cut);
         matte.outPoint = inL.outPoint;

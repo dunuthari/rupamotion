@@ -31,7 +31,7 @@
             t0 = Math.min(t0, sel[i].inPoint);
             t1 = Math.max(t1, sel[i].outPoint);
         }
-        var name = "MK Precomp " + nextItemNumber("MK Precomp ");
+        var name = "Ru Precomp " + nextItemNumber("Ru Precomp ");
         var nc = comp.layers.precompose(idx, name, true);
         for (i = 1; i <= comp.numLayers; i++) {
             var L = comp.layer(i);
@@ -162,7 +162,7 @@
 
         if (o.keepTransform && hasOwnTransform(pl, src, comp)) {
             var nul = comp.layers.addNull();
-            nul.name = "MK Unwrap · " + src.name;
+            nul.name = "Ru Unwrap · " + src.name;
             nul.source.width = src.width; nul.source.height = src.height;
             if (pl.threeDLayer) { nul.threeDLayer = true; }
             var keys = ["anchorPoint", "position", "scale", "rotation"];
@@ -208,7 +208,7 @@
         var s = comp.selectedLayers, sel = [], i, is3D = false;
         for (i = 0; i < s.length; i++) { sel.push(s[i]); if (s[i].threeDLayer) { is3D = true; } }
         var n = comp.layers.addNull();
-        n.name = "MK Null " + stamp(comp);
+        n.name = "Ru Null " + stamp(comp);
         var w = 100, h = 100;
         try { n.source.width = 50; n.source.height = 50; w = 50; h = 50; } catch (e) {}
         setXY(n.transform.anchorPoint, w / 2, h / 2);
@@ -233,7 +233,7 @@
         var comp = activeComp(); if (!comp) { return; }
         var s = comp.selectedLayers, sel = [];
         for (var i = 0; i < s.length; i++) { sel.push(s[i]); }
-        var a = addAdjustment(comp, "MK Adjustment " + stamp(comp));
+        var a = addAdjustment(comp, "Ru Adjustment " + stamp(comp));
         if (sel.length > 0) { a.moveBefore(topmost(sel)); }
     }
 
@@ -241,19 +241,19 @@
         var comp = activeComp(); if (!comp) { return; }
         var s = comp.selectedLayers, sel = [];
         for (var i = 0; i < s.length; i++) { sel.push(s[i]); }
-        var L = addSolid(comp, rgb, "MK Solid · " + rgbToHex(rgb));
+        var L = addSolid(comp, rgb, "Ru Solid · " + rgbToHex(rgb));
         if (sel.length > 0) { L.moveAfter(sel[sel.length - 1]); }
     }
 
     function buildCameraRig(comp) {
         var W = comp.width, H = comp.height;
-        var orbit = addNull(comp, "MK Cam · Orbit", [W / 2, H / 2]);
+        var orbit = addNull(comp, "Ru Cam · Orbit", [W / 2, H / 2]);
         orbit.threeDLayer = true;
         orbit.transform.position.setValue([W / 2, H / 2, 0]);
-        var dolly = addNull(comp, "MK Cam · Dolly", [W / 2, H / 2]);
+        var dolly = addNull(comp, "Ru Cam · Dolly", [W / 2, H / 2]);
         dolly.threeDLayer = true;
         dolly.transform.position.setValue([W / 2, H / 2, 0]);
-        var cam = comp.layers.addCamera("MK Camera 3-Node", [W / 2, H / 2]);
+        var cam = comp.layers.addCamera("Ru Camera 3-Node", [W / 2, H / 2]);
         try { cam.autoOrient = AutoOrientType.NO_AUTO_ORIENT; } catch (e) {}
         var opts = cam.property("ADBE Camera Options Group");
         var zoom = opts.property("ADBE Camera Zoom").value;
@@ -363,8 +363,8 @@
     function addLockedGradient(L, dir) {
         var e = fxAdd(L, "ADBE Ramp");
         if (!e) { return; }
-        e.name = "MK Locked Gradient";
-        var g = L.property("ADBE Effect Parade").property("MK Locked Gradient");
+        e.name = "Ru Locked Gradient";
+        var g = L.property("ADBE Effect Parade").property("Ru Locked Gradient");
         fxSet(g, 2, c4(col("gradStart")));
         fxSet(g, 4, c4(col("gradEnd")));
         var r = "var r = thisLayer.sourceRectAtTime(time, false);\n";
@@ -410,7 +410,7 @@
         var fx = L.property("ADBE Effect Parade");
         for (var i = fx.numProperties; i >= 1; i--) {
             var e = fx.property(i);
-            if (e.matchName === "ADBE Drop Shadow" || e.name === "MK Locked Gradient") { e.remove(); }
+            if (e.matchName === "ADBE Drop Shadow" || e.name === "Ru Locked Gradient") { e.remove(); }
             fx = L.property("ADBE Effect Parade");
         }
         if (o.gradient) { addLockedGradient(L, o.gradDir); }
@@ -419,7 +419,7 @@
 
     function doCreateShape(o) {
         var comp = activeComp(); if (!comp) { return; }
-        var L = shapeLayer(comp, "MK Shape · " + SHAPE_TYPES[o.type] + " " + stamp(comp));
+        var L = shapeLayer(comp, "Ru Shape · " + SHAPE_TYPES[o.type] + " " + stamp(comp));
         buildShapeContents(L, o);
         applyShapeEffects(L, o);
         setXY(L.transform.position, comp.width / 2, comp.height / 2);
@@ -444,7 +444,7 @@
             while (root.numProperties > 0) { root.property(1).remove(); root = contentsOf(L); }
             buildShapeContents(L, o);
             applyShapeEffects(L, o);
-            if (/^MK Shape · /.test(L.name)) { L.name = "MK Shape · " + SHAPE_TYPES[o.type] + " " + L.index; }
+            if (/^Ru Shape · /.test(L.name)) { L.name = "Ru Shape · " + SHAPE_TYPES[o.type] + " " + L.index; }
             done++;
         }
         if (done === 0) { alert("Select shape layers to update.", NAME); }
@@ -484,11 +484,11 @@
 
         var t = comp.time;
         var fx = follower.property("ADBE Effect Parade");
-        if (!fx.property("MK Path Progress")) {
+        if (!fx.property("Ru Path Progress")) {
             var sl = fx.addProperty("ADBE Slider Control");
-            sl.name = "MK Path Progress";
+            sl.name = "Ru Path Progress";
         }
-        var prog = follower.property("ADBE Effect Parade").property("MK Path Progress").property(1);
+        var prog = follower.property("ADBE Effect Parade").property("Ru Path Progress").property(1);
         setKeys(prog, [[t, 0], [t + seconds, 100]]);
         if (loop) { prog.expression = "loopOut(\"cycle\");"; }
 
@@ -498,7 +498,7 @@
         var head =
             "var L = thisComp.layer(\"" + esc(pathL.name) + "\");\n" +
             "var p = " + ref + ";\n" +
-            "var prog = clamp(effect(\"MK Path Progress\")(1) / 100, 0, 1);\n";
+            "var prog = clamp(effect(\"Ru Path Progress\")(1) / 100, 0, 1);\n";
         pos.expression = head +
             "var pt = L.toComp(p.pointOnPath(prog));\n" +
             "if (hasParent) { pt = parent.fromComp(pt); }\n" +
@@ -562,9 +562,9 @@
             var t = comp.time + i * stagger * fr;
             var e = fxAdd(L, "ADBE Gaussian Blur 2");
             if (!e) { return; }
-            e.name = "MK Blur Fade";
+            e.name = "Ru Blur Fade";
             fxSet(e, 3, 1);
-            var bp = L.property("ADBE Effect Parade").property("MK Blur Fade").property(1);
+            var bp = L.property("ADBE Effect Parade").property("Ru Blur Fade").property(1);
             var op = L.transform.opacity.valueAtTime(t, false) || 100;
             if (isIn) {
                 setKeys(bp, [[t, 40], [t + d, 0]]);

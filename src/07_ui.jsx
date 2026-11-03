@@ -370,12 +370,12 @@
         [0.68,0.857,0.652,0.855,0.634,0.845,0.615,0.826,0.599,0.802,0.581,0.762,0.543,0.694,0.508,0.655,0.482,0.633,0.452,0.615,0.423,0.586,0.401,0.554,0.387,0.526,0.377,0.5,0.365,0.45,0.363,0.432,0.365,0.378,0.375,0.344,0.391,0.316,0.412,0.295,0.428,0.285,0.44,0.281,0.468,0.281,0.478,0.285,0.487,0.294,0.491,0.304,0.491,0.326,0.475,0.356,0.427,0.406,0.411,0.432,0.407,0.446,0.407,0.472,0.419,0.498,0.442,0.519,0.48,0.541,0.546,0.567,0.628,0.593,0.694,0.621,0.734,0.647,0.751,0.664,0.767,0.688,0.775,0.716,0.775,0.744,0.769,0.768,0.759,0.792,0.743,0.816,0.722,0.837,0.7,0.851]
     ];
 
-    function logo(parent) {
-        var l = parent.add("group");
-        l.preferredSize = [26, 26];
+    function logo(parent, size) {
+        var S = size || 26, l = parent.add("group");
+        l.preferredSize = [S, S];
         l.onDraw = function () {
-            var g = this.graphics, S = 26, i, k, pts;
-            rrPath(g, 0.5, 0.5, 25, 25, 8);
+            var g = this.graphics, i, k, pts;
+            rrPath(g, 0.5, 0.5, S - 1, S - 1, S * 0.31);
             g.fillPath(brush(g, DS.primary));
             for (k = 0; k < LOGO_SHAPES.length; k++) {
                 pts = LOGO_SHAPES[k];
@@ -388,6 +388,65 @@
             }
         };
         return l;
+    }
+
+    // ---- About window: opens once on the first run, and from the About button in the header ----
+    var ABOUT = { version: "1.0", author: "Tharindu Lakshan", email: "tlakshan10106@gmail.com" };
+
+    function aboutLine(parent, text, color) {
+        var t = parent.add("statictext", undefined, text);
+        setFg(t, color || DS.label);
+        return t;
+    }
+
+    function showAbout() {
+        var dlg = new Window("dialog", "About " + NAME);
+        dlg.orientation = "column";
+        dlg.alignChildren = ["fill", "top"];
+        dlg.spacing = 12;
+        dlg.margins = 20;
+        if (!CLASSIC) { try { dlg.graphics.backgroundColor = brush(dlg.graphics, DS.bg); } catch (e0) {} }
+
+        var top = dlg.add("group");
+        top.orientation = "row";
+        top.alignChildren = ["left", "center"];
+        top.spacing = 14;
+        logo(top, 64);
+        var tx = top.add("group");
+        tx.orientation = "column";
+        tx.alignChildren = ["left", "top"];
+        tx.spacing = 2;
+        var t1 = tx.add("statictext", undefined, NAME);
+        setFont(t1, "BOLD", 20);
+        setFg(t1, DS.text);
+        aboutLine(tx, "Version " + ABOUT.version, DS.muted);
+        aboutLine(tx, "Motion toolkit for After Effects", DS.label);
+
+        var how = card(dlg, "How it works", 0);
+        aboutLine(how, "1   Select a layer or layers in your timeline.", DS.text);
+        aboutLine(how, "2   Click an effect in the panel. It starts at the playhead.", DS.text);
+        aboutLine(how, "3   Retime the keyframes, or click again to replace it.", DS.text);
+
+        var cols = dlg.add("group");
+        cols.orientation = "row";
+        cols.alignChildren = ["fill", "top"];
+        cols.spacing = 10;
+        var a = card(cols, "What's inside", 1);
+        aboutLine(a, "\u2022  Fades, slides and pops");
+        aboutLine(a, "\u2022  Text effects and typewriters");
+        aboutLine(a, "\u2022  Shapes, camera and easing");
+        var b = card(cols, "Good to know", 1);
+        aboutLine(b, "\u2022  Undo with Ctrl / Cmd + Z");
+        aboutLine(b, "\u2022  Layers are named \u201CRu \u2026\u201D");
+        aboutLine(b, "\u2022  Cut tools sit at the bottom");
+
+        var cr = aboutLine(dlg, "Made by " + ABOUT.author + "  \u00B7  " + ABOUT.email, DS.muted);
+        cr.alignment = ["center", "top"];
+        var go = btn(dlg, "Get started", function () { dlg.close(); }, "", "primary");
+        go.alignment = ["center", "top"];
+        go.preferredSize.width = 160;
+        dlg.center();
+        dlg.show();
     }
 
     // =====================================================================
@@ -678,7 +737,7 @@
         var fpO = check(fp, "Orient along path", false);
         btn(fp, "Follow Path", function () {
             run("Follow Path", function () { doFollowPath(num(fpD.text, 3, 0.1, 600), fpL.value, fpO.value); });
-        }, "The follower moves along the path, driven by an \"MK Path Progress\" slider.");
+        }, "The follower moves along the path, driven by an \"Ru Path Progress\" slider.");
     });
 
     // ---------------- Quick Actions ----------------
@@ -1718,9 +1777,9 @@
         if (!CLASSIC) { setFg(title, DS.text); }
         var spacer = head.add("group");
         spacer.alignment = ["fill", "center"];
-        var ver = head.add("statictext", undefined, "Toolkit");
-        setFg(ver, DS.muted);
-        ver.alignment = ["right", "center"];
+        var aboutB = btn(head, "About", function () { try { showAbout(); } catch (eA) {} }, "About " + NAME + " (opens once on the first run, then only from here)", "secondary");
+        aboutB.preferredSize = [64, 26];
+        aboutB.alignment = ["right", "center"];
 
         // ---- layout: icon rail on the left, chips + feature card on the right ----
         var body = win.add("group");
@@ -1900,6 +1959,12 @@
         ui.show();
     } else {
         ui.layout.layout(true);
+    }
+
+    // first run only: mark it seen BEFORE showing so a failure can never make the window come back every time
+    if (getS("about_seen", "") !== "1") {
+        putS("about_seen", "1");
+        try { showAbout(); } catch (eFirst) {}
     }
 
 })(this);

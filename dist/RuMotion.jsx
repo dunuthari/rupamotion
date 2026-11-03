@@ -18,8 +18,8 @@
 
     var NAME = "Ru Motion";
     var SET = "MotionKit_v1";
-    var FX_B = "MK Bounce";
-    var FX_BS = "MK Bounce Strength";
+    var FX_B = "Ru Bounce";
+    var FX_BS = "Ru Bounce Strength";
 
     // =====================================================================
     // Basic helpers (ExtendScript is ES3: no JSON, Array.indexOf, trim…)
@@ -324,8 +324,25 @@
     // Live bounce: effect controls on the layer + a spring expression
     // =====================================================================
 
+    // Layers made before the rename carry "MK Bounce" / "MK Bounce Strength"; they are still recognised and driven
+    var FX_B_LEGACY = "MK Bounce", FX_BS_LEGACY = "MK Bounce Strength";
+    function bounceNames(layer) {
+        try {
+            var f = layer.property("ADBE Effect Parade");
+            if (!f) { return null; }
+            if (f.property(FX_B) && f.property(FX_BS)) { return [FX_B, FX_BS]; }
+            if (f.property(FX_B_LEGACY) && f.property(FX_BS_LEGACY)) { return [FX_B_LEGACY, FX_BS_LEGACY]; }
+        } catch (e) {}
+        return null;
+    }
+
     function ensureBounce(layer) {
-        var fx = layer.property("ADBE Effect Parade");
+        var fx = layer.property("ADBE Effect Parade"), bn = bounceNames(layer);
+        if (bn) {
+            fx.property(bn[0]).property(1).setValue(style.bounceOn === "1" ? 1 : 0);
+            fx.property(bn[1]).property(1).setValue(num(style.bounceAmt, 10, 1, 60));
+            return;
+        }
         if (!fx.property(FX_B)) {
             var c = fx.addProperty("ADBE Checkbox Control");
             c.name = FX_B;
@@ -346,7 +363,9 @@
         var L = [];
         L.push("// Motion Kit live bounce. Toggle with the \"" + FX_B + "\" effect on this layer.");
         L.push("var b = 0, s = 10;");
-        L.push("try { b = effect(\"" + FX_B + "\")(1).value; s = effect(\"" + FX_BS + "\")(1).value; } catch (err) {}");
+        L.push("try { b = effect(\"" + FX_B + "\")(1).value; s = effect(\"" + FX_BS + "\")(1).value; } catch (err) {");
+        L.push("  try { b = effect(\"" + FX_B_LEGACY + "\")(1).value; s = effect(\"" + FX_BS_LEGACY + "\")(1).value; } catch (err2) {}");
+        L.push("}");
         L.push("var out = value;");
         L.push("if (b != 0 && numKeys >= 2) {");
         L.push("  var i = nearestKey(time).index;");
@@ -389,12 +408,7 @@
         return L.join("\n");
     }
 
-    function hasBounce(layer) {
-        try {
-            var fx = layer.property("ADBE Effect Parade");
-            return !!(fx && fx.property(FX_B) && fx.property(FX_BS));
-        } catch (e) { return false; }
-    }
+    function hasBounce(layer) { return !!bounceNames(layer); }
 
     // Applies the footer bounce state to selected layers, or to Motion Kit
     // layers inside selected precomp layers. Returns how many were changed.
@@ -415,9 +429,9 @@
         if (targets.length === 0) { return 0; }
         app.beginUndoGroup(NAME + ": Bounce");
         for (var k = 0; k < targets.length; k++) {
-            var fx = targets[k].property("ADBE Effect Parade");
-            fx.property(FX_B).property(1).setValue(style.bounceOn === "1" ? 1 : 0);
-            fx.property(FX_BS).property(1).setValue(num(style.bounceAmt, 10, 1, 60));
+            var fx = targets[k].property("ADBE Effect Parade"), bn = bounceNames(targets[k]);
+            fx.property(bn[0]).property(1).setValue(style.bounceOn === "1" ? 1 : 0);
+            fx.property(bn[1]).property(1).setValue(num(style.bounceAmt, 10, 1, 60));
         }
         app.endUndoGroup();
         return targets.length;
@@ -689,7 +703,7 @@
         for (var i = 0; i < fills.length; i++) {
             try { fills[i].property("ADBE Vector Fill Opacity").setValue(100); } catch (e) {}
         }
-        var adj = addAdjustment(comp, "MK Frost · " + layer.name);
+        var adj = addAdjustment(comp, "Ru Frost · " + layer.name);
         var b = fxAdd(adj, "ADBE Box Blur2");
         fxSet(b, 1, radius || 30);
         fxSet(b, 2, 3);
@@ -708,7 +722,7 @@
         var t = comp.time;
         var size = o.size || 44;
         var text = makeText(comp, o.label, { size: size, color: o.textColor || [1, 1, 1], font: pickFont(true), just: "center" });
-        text.name = "MK Pill Label · " + o.label;
+        text.name = "Ru Pill Label · " + o.label;
         var r = text.sourceRectAtTime(t, false);
         var padX = (o.padX !== undefined) ? o.padX : size * 0.9;
         var padY = (o.padY !== undefined) ? o.padY : size * 0.5;
@@ -716,7 +730,7 @@
         var w = Math.round(r.width + padX * 2 + extra);
         var h = Math.round(Math.max(r.height, size * 0.9) + padY * 2);
 
-        var pill = shapeLayer(comp, "MK Pill · " + o.label);
+        var pill = shapeLayer(comp, "Ru Pill · " + o.label);
         var g1 = newGroup(pill, "Inner Stroke");
         addRect(pill, g1, w - 6, h - 6, (h - 6) / 2);
         addStroke(pill, g1, [1, 1, 1], 2, 45);
@@ -742,7 +756,7 @@
 
     // Slow camera push-in with depth of field. Returns the camera.
     function cameraPush(comp, t, len, push, aperture) {
-        var cam = comp.layers.addCamera("MK Camera", [comp.width / 2, comp.height / 2]);
+        var cam = comp.layers.addCamera("Ru Camera", [comp.width / 2, comp.height / 2]);
         var opts = cam.property("ADBE Camera Options Group");
         var zoom = opts.property("ADBE Camera Zoom").value;
         try { opts.property("ADBE Camera Depth of Field").setValue(1); } catch (e1) {}
@@ -917,10 +931,10 @@
         if (o.precomp) {
             var n = 1;
             for (var i = 1; i <= app.project.numItems; i++) {
-                var m = /^MK Shape Morph (\d+)$/.exec(app.project.item(i).name);
+                var m = /^Ru Shape Morph (\d+)$/.exec(app.project.item(i).name);
                 if (m) { n = Math.max(n, parseInt(m[1], 10) + 1); }
             }
-            var nc = comp.layers.precompose([src.index, tgt.index], "MK Shape Morph " + n, true);
+            var nc = comp.layers.precompose([src.index, tgt.index], "Ru Shape Morph " + n, true);
             for (var j = 1; j <= comp.numLayers; j++) { comp.layer(j).selected = (comp.layer(j).source === nc); }
         }
         if (mismatch) {
@@ -1150,7 +1164,7 @@
     function isContentLayer(L) {
         if (!(L instanceof AVLayer)) { return false; }
         if (L.adjustmentLayer || L.guideLayer || !L.enabled) { return false; }
-        if (/^MK /.test(L.name)) { return false; }
+        if (/^(Ru|MK) /.test(L.name)) { return false; }
         return true;
     }
 
@@ -1206,16 +1220,16 @@
         var comp = activeComp(); if (!comp) { return; }
         var ctx = transitionContext(comp, false); if (!ctx) { return; }
         var fr = comp.frameDuration, d = o.frames * fr, k = Math.max(1.2, o.intensity), cut = ctx.cut;
-        var adj = cutAdjustment(comp, "MK Zoom " + (zoomIn ? "In" : "Out") + " Cut", cut, d, o.blur);
+        var adj = cutAdjustment(comp, "Ru Zoom " + (zoomIn ? "In" : "Out") + " Cut", cut, d, o.blur);
         var sc = transformFx(adj).property(4);
         var a = zoomIn ? 100 * k : 100 / k, b = zoomIn ? 100 / k : 100 * k;
         setKeys(sc, [[cut - d, 100], [cut - fr, a], [cut, b], [cut + d, 100]], { eases: CUT_EASES });
     }
 
     // Swipe cut = a small rig of three linked nulls (the same set-up you would build by hand):
-    //   MK Swipe · Move  a short null around the cut; its Position is the only thing animated (0.9 / 0.1 ease, one key each end)
-    //   MK Swipe · Out   child of Move, holds the outgoing clip (runs up to the cut)
-    //   MK Swipe · In    child of Move, offset by the swipe distance, holds the incoming clip (runs from the cut)
+    //   Ru Swipe · Move  a short null around the cut; its Position is the only thing animated (0.9 / 0.1 ease, one key each end)
+    //   Ru Swipe · Out   child of Move, holds the outgoing clip (runs up to the cut)
+    //   Ru Swipe · In    child of Move, offset by the swipe distance, holds the incoming clip (runs from the cut)
     // Move slides that distance, so the old clip leaves while the new one enters, and the hard cut happens mid-whoosh.
     // Anchor and position of the nulls are both (0,0), so linking a clip does not move it.
     // cubic-bezier (0.9, 0, 0.1, 1): the ease the hand-made version's Move keys actually hold (measured from its
@@ -1258,9 +1272,9 @@
         try { if (outL.outPoint > cut) { outL.outPoint = cut; } } catch (e0) {}
         try { if (inL.inPoint < cut) { inL.inPoint = cut; } } catch (e1) {}
 
-        var move = swipeNull(comp, "MK Swipe · Move", t0, t1);
-        var outN = swipeNull(comp, "MK Swipe · Out", outL.inPoint, cut);
-        var inN = swipeNull(comp, "MK Swipe · In", cut, inL.outPoint);
+        var move = swipeNull(comp, "Ru Swipe · Move", t0, t1);
+        var outN = swipeNull(comp, "Ru Swipe · Out", outL.inPoint, cut);
+        var inN = swipeNull(comp, "Ru Swipe · In", cut, inL.outPoint);
         // Link everything first, while all three nulls are still at rest (0,0). Assigning .parent makes AE shift
         // the child's own position so it doesn't jump, which would cancel the offset if it were already set.
         outN.parent = move;
@@ -1317,13 +1331,13 @@
         }
 
         if (o.accent) {
-            var acc = buildShape("MK Wipe Accent", col("primary"));
+            var acc = buildShape("Ru Wipe Accent", col("primary"));
             animateShape(acc, cut);
             acc.inPoint = Math.max(0, cut);
             acc.outPoint = Math.min(comp.duration, cut + d + lead + fr);
             acc.moveAfter(inL);
         }
-        var matte = buildShape("MK Wipe Matte", [1, 1, 1]);
+        var matte = buildShape("Ru Wipe Matte", [1, 1, 1]);
         animateShape(matte, cut + lead);
         matte.inPoint = Math.max(0, cut);
         matte.outPoint = inL.outPoint;
@@ -1366,7 +1380,7 @@
         var p = makePill(comp, { label: label, size: size, fill: col("primary"), textColor: [1, 1, 1], extraLeft: sparkW + 14 });
         var pos = p.pill.transform.position.value;
 
-        var sp = shapeLayer(comp, "MK Sparkle");
+        var sp = shapeLayer(comp, "Ru Sparkle");
         var gs = newGroup(sp, "Sparkle");
         addStar(sp, gs, 1, 4, 22, 6, 0);
         addFill(sp, gs, [1, 1, 1], 100);
@@ -1380,14 +1394,14 @@
         sp.moveBefore(p.text);
 
         var bloom = p.pill.duplicate();
-        bloom.name = "MK Bloom · " + label;
+        bloom.name = "Ru Bloom · " + label;
         clearEffects(bloom);
         var gb = fxAdd(bloom, "ADBE Gaussian Blur 2");
         fxSet(gb, 1, 80);
         bloom.transform.opacity.expression = "60 + Math.sin(time * 2 * Math.PI * 0.5) * 20;";
         bloom.moveAfter(p.pill);
 
-        var nul = addNull(comp, "MK AI Button · " + label, [pos[0], pos[1]]);
+        var nul = addNull(comp, "Ru AI Button · " + label, [pos[0], pos[1]]);
         p.pill.parent = nul;
         bloom.parent = nul;
         setKeys(nul.transform.scale, [[t, [0, 0]], [t + d * 0.6, [108, 108]], [t + d, [100, 100]]]);
@@ -1399,13 +1413,13 @@
     function findCursor(comp) {
         var sel = comp.selectedLayers;
         if (sel.length > 0) { return sel[0]; }
-        for (var i = 1; i <= comp.numLayers; i++) { if (/^MK Cursor/.test(comp.layer(i).name)) { return comp.layer(i); } }
+        for (var i = 1; i <= comp.numLayers; i++) { if (/^Ru Cursor/.test(comp.layer(i).name)) { return comp.layer(i); } }
         return null;
     }
 
     function doAddCursor() {
         var comp = activeComp(); if (!comp) { return; }
-        var L = shapeLayer(comp, "MK Cursor");
+        var L = shapeLayer(comp, "Ru Cursor");
         var gi = newGroup(L, "Pointer");
         var v = [[0, 0], [0, 36], [9, 28], [15, 42], [21, 39], [15, 26], [27, 26]];
         var z = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]];
@@ -1427,7 +1441,7 @@
         var s = L.transform.scale.valueAtTime(t, false);
         setKeys(L.transform.scale, [[t, s], [t + 3 * fr, scaled(s, 0.85)], [t + 9 * fr, s]], { curve: CURVES.apple });
         var p = L.transform.position.valueAtTime(t, false);
-        var ring = shapeLayer(comp, "MK Click Ripple");
+        var ring = shapeLayer(comp, "Ru Click Ripple");
         var gi = newGroup(ring, "Ring");
         addEllipse(ring, gi, 40, 40);
         addStroke(ring, gi, col("primary"), 4, 100);
@@ -1456,7 +1470,7 @@
         var step = D * 0.78, pad = D * 0.12, totalW = D + (n - 1) * step;
         var cx = comp.width / 2, cy = comp.height / 2;
 
-        var pill = shapeLayer(comp, "MK Avatar Pill");
+        var pill = shapeLayer(comp, "Ru Avatar Pill");
         var g1 = newGroup(pill, "Inner Stroke");
         addRect(pill, g1, totalW + pad * 2 - 6, D + pad * 2 - 6, (D + pad * 2 - 6) / 2);
         addStroke(pill, g1, [1, 1, 1], 2, 45);
@@ -1509,11 +1523,11 @@
             app.executeCommand(app.findMenuCommandId("Convert Audio to Keyframes"));
             if (comp.numLayers === before) { alert("After Effects couldn't convert the audio to keyframes.", NAME); return; }
             var amp = comp.layer(1);
-            amp.name = "MK Audio Amplitude " + stamp(comp);
+            amp.name = "Ru Audio Amplitude " + stamp(comp);
             ampName = amp.name;
         }
         var N = o.bars, barW = 12, spacing = 20, minH = 12, maxH = o.maxH;
-        var L = shapeLayer(comp, "MK Waveform");
+        var L = shapeLayer(comp, "Ru Waveform");
         for (i = 0; i < N; i++) {
             var x = (i - (N - 1) / 2) * spacing;
             var env = Math.exp(-Math.pow((i - (N - 1) / 2) / (N / 3), 2));
@@ -1543,7 +1557,7 @@
         var t = comp.time, d = animDur(comp), cx = comp.width / 2, cy = comp.height / 2;
         var size = 48;
         var txt = makeText(comp, label, { size: size, color: col("primary"), font: pickFont(true), just: "center" });
-        txt.name = "MK Glass Label · " + label;
+        txt.name = "Ru Glass Label · " + label;
         var tw = textWidth(txt, t), iconW = 34, gapI = 18;
         var w = Math.round(tw + iconW + gapI + 120), h = 112;
 
@@ -1559,14 +1573,14 @@
             return L;
         }
 
-        var outer = ring("MK Glass · Outer", w + 96, h + 96, 22, 55);
+        var outer = ring("Ru Glass · Outer", w + 96, h + 96, 22, 55);
         softShadow(outer);
         makeFrosted(comp, outer, 36);
-        var middle = ring("MK Glass · Middle", w + 46, h + 46, 32, 65);
-        var inner = ring("MK Glass · Inner", w, h, 85, 90);
+        var middle = ring("Ru Glass · Middle", w + 46, h + 46, 32, 65);
+        var inner = ring("Ru Glass · Inner", w, h, 85, 90);
         softShadow(inner);
 
-        var icon = shapeLayer(comp, "MK Glass · Play Icon");
+        var icon = shapeLayer(comp, "Ru Glass · Play Icon");
         var gi = newGroup(icon, "Play");
         addStar(icon, gi, 2, 3, iconW / 2, 0, 90);
         addFill(icon, gi, col("primary"), 100);
@@ -1576,7 +1590,7 @@
         setXY(txt.transform.position, left + iconW + gapI + tw / 2, cy);
         txt.moveBefore(icon);
 
-        var nul = addNull(comp, "MK Glass Button · " + label, [cx, cy]);
+        var nul = addNull(comp, "Ru Glass Button · " + label, [cx, cy]);
         var parts = [outer, middle, inner, icon, txt];
         var mt = comp.layer(outer.index + 1);
         if (/glass matte/.test(mt.name)) { parts.push(mt); }
@@ -1612,7 +1626,7 @@
         if (items.length === 0) { alert("Select clips or images in the Project panel first.", NAME); return; }
 
         var W = comp.width, H = comp.height, dur = comp.duration;
-        var g = app.project.items.addComp("MK Media Grid", W, H, comp.pixelAspect, dur, comp.frameRate);
+        var g = app.project.items.addComp("Ru Media Grid", W, H, comp.pixelAspect, dur, comp.frameRate);
         g.motionBlur = true;
         var cols = o.cols, gap = o.gap, gridW = W * 1.5;
         var cellW = (gridW - gap * (cols - 1)) / cols, cellH = cellW * 9 / 16;
@@ -1659,7 +1673,7 @@
         root.transform.rotation.setValue(o.tilt);
 
         var gl = comp.layers.add(g);
-        gl.name = "MK Media Grid";
+        gl.name = "Ru Media Grid";
         mb(gl);
     }
 
@@ -1780,7 +1794,7 @@
     }
 
     function tiSparkleLayer(comp, size, color) {
-        var L = shapeLayer(comp, "MK Text+Icon · Icon");
+        var L = shapeLayer(comp, "Ru Text+Icon · Icon");
         var gi = newGroup(L, "Sparkle");
         addPathVec(L, gi, sparkleShape(size / 2));
         addFill(L, gi, color, 100);
@@ -1792,7 +1806,7 @@
         try { io.importAs = ImportAsType.FOOTAGE; } catch (e) {}
         var item = app.project.importFile(io);
         var L = comp.layers.add(item);
-        L.name = "MK Text+Icon · Icon";
+        L.name = "Ru Text+Icon · Icon";
         var s = size / Math.max(item.width, item.height) * 100;
         L.transform.scale.setValue(L.threeDLayer ? [s, s, s] : [s, s]);
         return L;
@@ -1804,7 +1818,7 @@
         anims().addProperty("ADBE Text Animator");
         var idx = anims().numProperties;
         function an() { return anims().property(idx); }
-        an().name = "MK Highlight";
+        an().name = "Ru Highlight";
         an().property("ADBE Text Animator Properties").addProperty("ADBE Text Fill Color");
         if (an().property("ADBE Text Selectors").numProperties === 0) { an().property("ADBE Text Selectors").addProperty("ADBE Text Selector"); }
         var fill = an().property("ADBE Text Animator Properties").property("ADBE Text Fill Color");
@@ -1826,7 +1840,7 @@
         var t0 = comp.time, cx = comp.width / 2, cy = comp.height / 2, font = pickFont(true);
 
         var nul = comp.layers.addNull();
-        nul.name = "MK Text+Icon · Move";
+        nul.name = "Ru Text+Icon · Move";
         // Anchor at the null's own centre, null sitting at the comp centre (so scaling/rotating it pivots on the middle of
         // the frame). The children are placed relative to it: local = comp position - (null position - null anchor).
         var nw = 100, nh = 100;
@@ -1839,7 +1853,7 @@
         var layers = [], widths = [], lefts = [], top = 0;
         for (i = 0; i < n; i++) {
             var L = makeText(comp, words[i], { size: o.size, color: o.textColor, font: font, just: "left" });
-            L.name = "MK Text+Icon · " + words[i];
+            L.name = "Ru Text+Icon · " + words[i];
             var r = L.sourceRectAtTime(t0, false);
             widths.push(r.width);
             lefts.push(r.left);
@@ -1900,7 +1914,7 @@
         var texts = [], strs = [s1, s2], rects = [], top = 0;
         for (i = 0; i < 2; i++) {
             var T = makeText(comp, strs[i], { size: o.size, color: o.textColor, font: font, just: "left" });
-            T.name = "MK Star Swipe · Sentence " + (i + 1);
+            T.name = "Ru Star Swipe · Sentence " + (i + 1);
             var r = T.sourceRectAtTime(t0, false);
             rects.push(r); top = Math.min(top, r.top); texts.push(T);
         }
@@ -1920,7 +1934,7 @@
 
         // the mover: its centre is the star's centre, so the wipe edge, the trail and the star all travel with it
         var nul = comp.layers.addNull();
-        nul.name = "MK Star Swipe · Move";
+        nul.name = "Ru Star Swipe · Move";
         var nw = 100, nh = 100;
         try { nw = nul.source.width; nh = nul.source.height; } catch (eN) {}
         setXY(nul.transform.anchorPoint, nw / 2, nh / 2);
@@ -1929,7 +1943,7 @@
 
         // soft-edged half-plane mattes: side -1 = everything left of the star (sentence 2), +1 = right of it (sentence 1)
         function edge(side) {
-            var M = shapeLayer(comp, "MK Star Swipe · Reveal " + (side < 0 ? "2" : "1"));
+            var M = shapeLayer(comp, "Ru Star Swipe · Reveal " + (side < 0 ? "2" : "1"));
             var gi = newGroup(M, "Reveal"), big = comp.width * 3;
             addRect(M, gi, big, comp.height * 2, 0, [side * big / 2, 0]);
             addFill(M, gi, [1, 1, 1], 100);
@@ -1946,7 +1960,7 @@
         var tA = t0 + o.hold, tB = tA + o.dur, trailL = null;
         if (o.trail) {
             var len = comp.width * SS.trailK, N = SS.trailSlices, sw = len / N, k, op;
-            trailL = shapeLayer(comp, "MK Star Swipe · Trail");
+            trailL = shapeLayer(comp, "Ru Star Swipe · Trail");
             // a fading tail: N thin slices whose opacity rises from 0% at the far end to 100% at the star; the blur melts them into one smooth ramp
             for (k = 0; k < N; k++) {
                 op = Math.pow((k + 0.5) / N, SS.trailPow) * 100;
@@ -1961,7 +1975,7 @@
         }
 
         var star = o.iconFile ? tiIconFromFile(comp, o.iconFile, iconSize) : tiSparkleLayer(comp, iconSize, o.iconColor);
-        star.name = "MK Star Swipe · Star";
+        star.name = "Ru Star Swipe · Star";
         star.parent = nul;
         setXY(star.transform.position, lx, ly);
 
@@ -13656,9 +13670,9 @@
 
     function clearRoll(L) {
         var anims = L.property("ADBE Text Properties").property("ADBE Text Animators"), i, fx, m;
-        for (i = anims.numProperties; i >= 1; i--) { if (anims.property(i).name === "MK SaaS Roll") { anims.property(i).remove(); } }
+        for (i = anims.numProperties; i >= 1; i--) { if (anims.property(i).name === "Ru SaaS Roll") { anims.property(i).remove(); } }
         try { fx = L.property("ADBE Effect Parade"); for (i = fx.numProperties; i >= 1; i--) { if (fx.property(i).name === "Roll") { fx.property(i).remove(); } } } catch (e1) {}
-        try { m = L.property("ADBE Mask Parade"); for (i = m.numProperties; i >= 1; i--) { if (m.property(i).name === "MK Roll Window") { m.property(i).remove(); } } } catch (e2) {}
+        try { m = L.property("ADBE Mask Parade"); for (i = m.numProperties; i >= 1; i--) { if (m.property(i).name === "Ru Roll Window") { m.property(i).remove(); } } } catch (e2) {}
     }
 
     // mode: "both" (one layer, two lines), "out" (this layer's text leaves upwards) or "in" (this layer's text arrives from below)
@@ -13686,7 +13700,7 @@
         // the window: one line tall, very wide, in layer space on the first line
         var top = lay.baseY - SR.top * fs, bot = lay.baseY + SR.bottom * fs, X = comp.width * 3;
         var win = addMask(L, makeShape([[-X, top], [X, top], [X, bot], [-X, bot]], [[0, 0], [0, 0], [0, 0], [0, 0]], [[0, 0], [0, 0], [0, 0], [0, 0]], true));
-        try { win.name = "MK Roll Window"; } catch (eN) {}
+        try { win.name = "Ru Roll Window"; } catch (eN) {}
 
         // the two keyframes
         var e = fxAdd(L, "ADBE Slider Control");
@@ -13703,7 +13717,7 @@
         var anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
         anims.addProperty("ADBE Text Animator");
         var an = anims.property(anims.numProperties);
-        an.name = "MK SaaS Roll";
+        an.name = "Ru SaaS Roll";
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Position 3D");
         var pos = an.property("ADBE Text Animator Properties").property("ADBE Text Position 3D");
         var dir = (mode === "in") ? 1 : -1;                  // arriving text starts one line lower and rises into place
@@ -13721,7 +13735,7 @@
                     // Based On: Words (3) when the property can be found; otherwise it stays on Characters and the expression copes
                     var names = ["ADBE Text Expressible Type", "ADBE Text Expressible Basis", "ADBE Text Expressible Units", "Based On"], q;
                     for (q = 0; q < names.length; q++) { try { var bo = sel.property(names[q]); if (bo) { bo.setValue(3); break; } } catch (eB) {} }
-                    amt.expression = "// MK SaaS Text Roll\nvar LW=" + arrExpr(inLine) + ";\nvar LC=" + arrExpr(perChar) + ";\nvar NW=" + inLine.length + ";\n" +
+                    amt.expression = "// Ru SaaS Text Roll\nvar LW=" + arrExpr(inLine) + ";\nvar LC=" + arrExpr(perChar) + ";\nvar NW=" + inLine.length + ";\n" +
                         "var v=effect(\"Roll\")(\"Slider\");\n" +
                         "var k=(textTotal===NW)?LW[textIndex-1]:LC[textIndex-1];\n" +
                         "var u=(v-k*" + SR.stagger + ")/" + SR.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\n" + (mode === "in" ? "(1-u)*100" : "u*100");
@@ -13874,7 +13888,7 @@
         var sp = L.transform.scale, base = sp.valueAtTime(t, false);
         if (allZero(base)) { base = [100, 100]; }
         tsSmooth(sp, [[t, scaled(base, o.from)], [t + o.dur, base]], o.curve);
-        tsBlur(L, "MK Hero Blur", [[t, o.blur], [t + o.dur, 0]], o.curve);
+        tsBlur(L, "Ru Hero Blur", [[t, o.blur], [t + o.dur, 0]], o.curve);
         tsFadeIn(L, t, o.fade);
     }
 
@@ -13895,7 +13909,7 @@
         var sp = L.transform.scale, base = sp.valueAtTime(t, false), op = L.transform.opacity, to = 100, o = TS.blurOut;
         if (allZero(base)) { base = [100, 100]; }
         tsSmooth(sp, [[t, base], [t + o.dur, scaled(base, o.to)]], [0.4, 0, 0.6, 1]);
-        tsBlur(L, "MK Blur Out", [[t, 0], [t + o.dur, o.blur]], [0.4, 0, 0.6, 1]);
+        tsBlur(L, "Ru Blur Out", [[t, 0], [t + o.dur, o.blur]], [0.4, 0, 0.6, 1]);
         try { to = op.numKeys === 0 ? op.value : op.valueAtTime(t, false); } catch (e) {}
         tsSmooth(op, [[t, to], [t + o.hold, to], [t + o.dur, 0]], [0.4, 0, 0.6, 1]);
     }
@@ -13921,10 +13935,10 @@
         var t = comp.time, o = TS.letter, i, failed = 0;
         for (i = 0; i < list.length; i++) {
             var L = list[i], n = textDocProp(L).value.text.length, T = Math.max(1, n - 1) * o.stagger + o.dur;
-            var sl = tsSlider(L, "MK Reveal", t, T), ok = false;
+            var sl = tsSlider(L, "Ru Reveal", t, T), ok = false;
             if (sl) {
-                ok = tsExprAnimator(L, "MK Letter Blur", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
-                    "// MK Letter Blur\nvar v=effect(\"MK Reveal\")(\"Slider\");\nvar u=(v-(textIndex-1)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\n(1-u)*100", 1);
+                ok = tsExprAnimator(L, "Ru Letter Blur", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
+                    "// Ru Letter Blur\nvar v=effect(\"Ru Reveal\")(\"Slider\");\nvar u=(v-(textIndex-1)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\n(1-u)*100", 1);
             }
             if (!ok) { failed++; tsHero(L, t, TS.blurIn); }       // fallback: the whole line blurs in
         }
@@ -13937,11 +13951,11 @@
         var t = comp.time, o = TS.del, i, failed = 0;
         for (i = 0; i < list.length; i++) {
             var L = list[i], n = textDocProp(L).value.text.length, T = Math.max(1, n - 1) * o.stagger + o.dur;
-            var sl = tsSlider(L, "MK Delete", t, T), ok = false;
+            var sl = tsSlider(L, "Ru Delete", t, T), ok = false;
             if (sl) {
                 // letters leave from the END: the last letter starts first
-                ok = tsExprAnimator(L, "MK Delete Out", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]]],
-                    "// MK Delete Out\nvar v=effect(\"MK Delete\")(\"Slider\");\nvar u=(v-(" + n + "-textIndex)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=u*u*(3-2*u);\nu*100", 1);
+                ok = tsExprAnimator(L, "Ru Delete Out", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]]],
+                    "// Ru Delete Out\nvar v=effect(\"Ru Delete\")(\"Slider\");\nvar u=(v-(" + n + "-textIndex)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=u*u*(3-2*u);\nu*100", 1);
             }
             if (!ok) { failed++; tsBlurOut(L, t); }
         }
@@ -13968,10 +13982,10 @@
         for (i = 0; i < list.length; i++) {
             var L = list[i], src = textDocProp(L).value, lay = layoutText(comp, L, t), tb = tsTables(lay, src.text);
             if (tb.n < 1) { continue; }
-            var T = tb.n * o.step + o.ramp * 2 + 0.2, sl = tsSlider(L, "MK Highlight", t, T), ok = false;
+            var T = tb.n * o.step + o.ramp * 2 + 0.2, sl = tsSlider(L, "Ru Highlight", t, T), ok = false;
             if (sl) {
-                ok = tsExprAnimator(L, "MK Word Highlight", [["ADBE Text Fill Color", TS.teal]],
-                    "// MK Word Highlight\nvar WI=" + arrExpr(tb.charWord) + ";\nvar NW=" + tb.n + ";\nvar v=effect(\"MK Highlight\")(\"Slider\");\nvar k=(textTotal===NW)?(textIndex-1):WI[textIndex-1];\n" +
+                ok = tsExprAnimator(L, "Ru Word Highlight", [["ADBE Text Fill Color", TS.teal]],
+                    "// Ru Word Highlight\nvar WI=" + arrExpr(tb.charWord) + ";\nvar NW=" + tb.n + ";\nvar v=effect(\"Ru Highlight\")(\"Slider\");\nvar k=(textTotal===NW)?(textIndex-1):WI[textIndex-1];\n" +
                     "var a=Math.max(0,Math.min(1,(v-k*" + o.step + ")/" + o.ramp + "));\nvar b=Math.max(0,Math.min(1,1-(v-(k+1)*" + o.step + ")/" + o.ramp + "));\nMath.min(a,b)*100", 3);
             }
             if (!ok) { failed++; }
@@ -13989,12 +14003,12 @@
             var tb = tsTables(lay, src.text), maxK = 0, w;
             for (w = 0; w < tb.n; w++) { if (tb.wordLine[w] > 0) { maxK = Math.max(maxK, tb.wordK[w]); } }
             var T = o.delay + maxK * o.stagger + o.dur + 0.1;
-            tsRemoveNamed(L.property("ADBE Effect Parade"), "MK Stack");
-            var sl = tsSlider(L, "MK Stack", t, T), ok = false;
+            tsRemoveNamed(L.property("ADBE Effect Parade"), "Ru Stack");
+            var sl = tsSlider(L, "Ru Stack", t, T), ok = false;
             if (sl) {
-                ok = tsExprAnimator(L, "MK Stack", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
-                    "// MK Stack\nvar LN=" + arrExpr(tb.wordLine) + ";\nvar KK=" + arrExpr(tb.wordK) + ";\nvar CL=" + arrExpr(tb.charLine) + ";\nvar CK=" + arrExpr(tb.charK) + ";\nvar NW=" + tb.n + ";\n" +
-                    "var v=effect(\"MK Stack\")(\"Slider\");\nvar w=(textTotal===NW);\nvar ln=w?LN[textIndex-1]:CL[textIndex-1];\nvar k=w?KK[textIndex-1]:CK[textIndex-1];\nvar out=0;\n" +
+                ok = tsExprAnimator(L, "Ru Stack", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
+                    "// Ru Stack\nvar LN=" + arrExpr(tb.wordLine) + ";\nvar KK=" + arrExpr(tb.wordK) + ";\nvar CL=" + arrExpr(tb.charLine) + ";\nvar CK=" + arrExpr(tb.charK) + ";\nvar NW=" + tb.n + ";\n" +
+                    "var v=effect(\"Ru Stack\")(\"Slider\");\nvar w=(textTotal===NW);\nvar ln=w?LN[textIndex-1]:CL[textIndex-1];\nvar k=w?KK[textIndex-1]:CK[textIndex-1];\nvar out=0;\n" +
                     "if(ln>0){var u=(v-" + o.delay + "-k*" + o.stagger + ")/" + o.dur + ";u=Math.max(0,Math.min(1,u));u=1-Math.pow(1-u,3);out=(1-u)*100;}\nout", 3);
             }
             if (!ok) { bad++; continue; }
@@ -14002,7 +14016,7 @@
             var s = L.transform.scale.value[0] / 100, off = (lay.lines - 1) * lay.lineStep * s / 2;
             try {
                 if (L.transform.position.numKeys === 0 && !L.parent && L.transform.position.expression === "") {
-                    L.transform.position.expression = "// MK Stack\nvar v=effect(\"MK Stack\")(\"Slider\");\nvar p=Math.max(0,Math.min(1,(v-" + o.delay + ")/" + o.glide + "));p=1-Math.pow(1-p,3);\n[value[0],value[1]+" + num2(off) + "*(1-p)]";
+                    L.transform.position.expression = "// Ru Stack\nvar v=effect(\"Ru Stack\")(\"Slider\");\nvar p=Math.max(0,Math.min(1,(v-" + o.delay + ")/" + o.glide + "));p=1-Math.pow(1-p,3);\n[value[0],value[1]+" + num2(off) + "*(1-p)]";
                 }
             } catch (eP) {}
         }
@@ -14109,7 +14123,7 @@
     // block position, the blink, the centring shift) is an expression that reads that slider. Retime the effect by moving the
     // two keys; nothing else has to change. Expressions work in both the Legacy and JavaScript engines.
     // ---------------------------------------------------------------------
-    var TW_MARK = "// MK Typewriter";
+    var TW_MARK = "// Ru Typewriter";
 
     function num2(v) { return String(Math.round(v * 100) / 100); }
     function arrExpr(a) { var out = [], i; for (i = 0; i < a.length; i++) { out.push(num2(a[i])); } return "[" + out.join(",") + "]"; }
@@ -14121,13 +14135,13 @@
         var anims = L.property("ADBE Text Properties").property("ADBE Text Animators"), i, nm, tags = [], j, names;
         for (i = anims.numProperties; i >= 1; i--) {
             nm = anims.property(i).name;
-            if (nm.indexOf("MK Typewriter") === 0) {
-                if (nm.indexOf("MK Typewriter Wave") !== 0) { tags.push(nm.substring("MK Typewriter ".length)); }
+            if (nm.indexOf("Ru Typewriter") === 0) {
+                if (nm.indexOf("Ru Typewriter Wave") !== 0) { tags.push(nm.substring("Ru Typewriter ".length)); }
                 anims.property(i).remove();
             }
         }
         var gone = [];
-        for (j = 0; j < tags.length; j++) { gone.push("MK Typewriter · Caret " + tags[j]); gone.push("MK Typewriter · Block " + tags[j]); }
+        for (j = 0; j < tags.length; j++) { gone.push("Ru Typewriter · Caret " + tags[j]); gone.push("Ru Typewriter · Block " + tags[j]); }
         names = {};
         for (j = 0; j < gone.length; j++) { names[gone[j]] = true; }
         for (i = comp.numLayers; i >= 1; i--) {
@@ -14175,7 +14189,7 @@
         if (trim(src.text) === "") { return "skipped"; }
         var dt = 1 / TW.cps;
         var anims = clearTypewriter(comp, L);
-        var lay = layoutText(comp, L, t0), tag = newTag(comp), helperName = "MK Typewriter · Caret " + tag;
+        var lay = layoutText(comp, L, t0), tag = newTag(comp), helperName = "Ru Typewriter · Caret " + tag;
 
         var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
         var ox = P[0] - A[0] * s, baseline = P[1] + (lay.baseY - A[1]) * s, fs = src.fontSize * s;
@@ -14204,7 +14218,7 @@
         caret.transform.opacity.expression = TW_MARK + "\nvar p=" + TYPED_OWN + ";\nvar out=100;\nif(p>=" + n + "){var u=time-p.key(2).time-" + TW.blinkOn + ";\nif(u>=0){out=(u>=" + num2(TW.blinks * (TW.blinkOn + TW.blinkOff)) + ")?0:((Math.floor(u/" + TW.blinkOff + ")%2===0)?0:100);}}\nout";
 
         // the text: everything from the Start index on is hidden; Start = letters typed so far
-        var an = indexAnimator(anims, "MK Typewriter " + tag);
+        var an = indexAnimator(anims, "Ru Typewriter " + tag);
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
         an.property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
         var sel = indexSelector(an, 1);
@@ -14229,7 +14243,7 @@
         var anims = clearTypewriter(comp, L);
         var lay = layoutText(comp, L, t0), n = lay.wx.length;
         if (n < 1) { return "skipped"; }
-        var tag = newTag(comp), helperName = "MK Typewriter · Block " + tag;
+        var tag = newTag(comp), helperName = "Ru Typewriter · Block " + tag;
 
         var s = L.transform.scale.value[0] / 100, P = L.transform.position.value, A = L.transform.anchorPoint.value;
         var ox = P[0] - A[0] * s, baseline = P[1] + (lay.baseY - A[1]) * s, fs = src.fontSize * s;
@@ -14258,7 +14272,7 @@
         block.transform.opacity.expression = TW_MARK + "\n(Math.floor(" + TYPED_OWN + ")>=" + n + ")?0:100";
 
         // 1) reveal: everything from word `Start` on is hidden (Based On: Words, Index units)
-        var an = indexAnimator(anims, "MK Typewriter " + tag);
+        var an = indexAnimator(anims, "Ru Typewriter " + tag);
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
         an.property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
         var sel = indexSelector(an, 3);
@@ -14267,7 +14281,7 @@
         sel.property("ADBE Text Index Start").expression = TW_MARK + "\nMath.floor(" + ref + ")";
 
         // 2) colour wave: the last TB.wave words are blue, strongest on the newest word (Range Shape: Ramp Up)
-        var an2 = indexAnimator(anims, "MK Typewriter Wave " + tag);
+        var an2 = indexAnimator(anims, "Ru Typewriter Wave " + tag);
         an2.property("ADBE Text Animator Properties").addProperty("ADBE Text Fill Color");
         try { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(c4(TB.blue)); } catch (eF) { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(TB.blue); }
         var sel2 = indexSelector(an2, 3);
@@ -14330,7 +14344,7 @@
             t0 = Math.min(t0, sel[i].inPoint);
             t1 = Math.max(t1, sel[i].outPoint);
         }
-        var name = "MK Precomp " + nextItemNumber("MK Precomp ");
+        var name = "Ru Precomp " + nextItemNumber("Ru Precomp ");
         var nc = comp.layers.precompose(idx, name, true);
         for (i = 1; i <= comp.numLayers; i++) {
             var L = comp.layer(i);
@@ -14461,7 +14475,7 @@
 
         if (o.keepTransform && hasOwnTransform(pl, src, comp)) {
             var nul = comp.layers.addNull();
-            nul.name = "MK Unwrap · " + src.name;
+            nul.name = "Ru Unwrap · " + src.name;
             nul.source.width = src.width; nul.source.height = src.height;
             if (pl.threeDLayer) { nul.threeDLayer = true; }
             var keys = ["anchorPoint", "position", "scale", "rotation"];
@@ -14507,7 +14521,7 @@
         var s = comp.selectedLayers, sel = [], i, is3D = false;
         for (i = 0; i < s.length; i++) { sel.push(s[i]); if (s[i].threeDLayer) { is3D = true; } }
         var n = comp.layers.addNull();
-        n.name = "MK Null " + stamp(comp);
+        n.name = "Ru Null " + stamp(comp);
         var w = 100, h = 100;
         try { n.source.width = 50; n.source.height = 50; w = 50; h = 50; } catch (e) {}
         setXY(n.transform.anchorPoint, w / 2, h / 2);
@@ -14532,7 +14546,7 @@
         var comp = activeComp(); if (!comp) { return; }
         var s = comp.selectedLayers, sel = [];
         for (var i = 0; i < s.length; i++) { sel.push(s[i]); }
-        var a = addAdjustment(comp, "MK Adjustment " + stamp(comp));
+        var a = addAdjustment(comp, "Ru Adjustment " + stamp(comp));
         if (sel.length > 0) { a.moveBefore(topmost(sel)); }
     }
 
@@ -14540,19 +14554,19 @@
         var comp = activeComp(); if (!comp) { return; }
         var s = comp.selectedLayers, sel = [];
         for (var i = 0; i < s.length; i++) { sel.push(s[i]); }
-        var L = addSolid(comp, rgb, "MK Solid · " + rgbToHex(rgb));
+        var L = addSolid(comp, rgb, "Ru Solid · " + rgbToHex(rgb));
         if (sel.length > 0) { L.moveAfter(sel[sel.length - 1]); }
     }
 
     function buildCameraRig(comp) {
         var W = comp.width, H = comp.height;
-        var orbit = addNull(comp, "MK Cam · Orbit", [W / 2, H / 2]);
+        var orbit = addNull(comp, "Ru Cam · Orbit", [W / 2, H / 2]);
         orbit.threeDLayer = true;
         orbit.transform.position.setValue([W / 2, H / 2, 0]);
-        var dolly = addNull(comp, "MK Cam · Dolly", [W / 2, H / 2]);
+        var dolly = addNull(comp, "Ru Cam · Dolly", [W / 2, H / 2]);
         dolly.threeDLayer = true;
         dolly.transform.position.setValue([W / 2, H / 2, 0]);
-        var cam = comp.layers.addCamera("MK Camera 3-Node", [W / 2, H / 2]);
+        var cam = comp.layers.addCamera("Ru Camera 3-Node", [W / 2, H / 2]);
         try { cam.autoOrient = AutoOrientType.NO_AUTO_ORIENT; } catch (e) {}
         var opts = cam.property("ADBE Camera Options Group");
         var zoom = opts.property("ADBE Camera Zoom").value;
@@ -14662,8 +14676,8 @@
     function addLockedGradient(L, dir) {
         var e = fxAdd(L, "ADBE Ramp");
         if (!e) { return; }
-        e.name = "MK Locked Gradient";
-        var g = L.property("ADBE Effect Parade").property("MK Locked Gradient");
+        e.name = "Ru Locked Gradient";
+        var g = L.property("ADBE Effect Parade").property("Ru Locked Gradient");
         fxSet(g, 2, c4(col("gradStart")));
         fxSet(g, 4, c4(col("gradEnd")));
         var r = "var r = thisLayer.sourceRectAtTime(time, false);\n";
@@ -14709,7 +14723,7 @@
         var fx = L.property("ADBE Effect Parade");
         for (var i = fx.numProperties; i >= 1; i--) {
             var e = fx.property(i);
-            if (e.matchName === "ADBE Drop Shadow" || e.name === "MK Locked Gradient") { e.remove(); }
+            if (e.matchName === "ADBE Drop Shadow" || e.name === "Ru Locked Gradient") { e.remove(); }
             fx = L.property("ADBE Effect Parade");
         }
         if (o.gradient) { addLockedGradient(L, o.gradDir); }
@@ -14718,7 +14732,7 @@
 
     function doCreateShape(o) {
         var comp = activeComp(); if (!comp) { return; }
-        var L = shapeLayer(comp, "MK Shape · " + SHAPE_TYPES[o.type] + " " + stamp(comp));
+        var L = shapeLayer(comp, "Ru Shape · " + SHAPE_TYPES[o.type] + " " + stamp(comp));
         buildShapeContents(L, o);
         applyShapeEffects(L, o);
         setXY(L.transform.position, comp.width / 2, comp.height / 2);
@@ -14743,7 +14757,7 @@
             while (root.numProperties > 0) { root.property(1).remove(); root = contentsOf(L); }
             buildShapeContents(L, o);
             applyShapeEffects(L, o);
-            if (/^MK Shape · /.test(L.name)) { L.name = "MK Shape · " + SHAPE_TYPES[o.type] + " " + L.index; }
+            if (/^Ru Shape · /.test(L.name)) { L.name = "Ru Shape · " + SHAPE_TYPES[o.type] + " " + L.index; }
             done++;
         }
         if (done === 0) { alert("Select shape layers to update.", NAME); }
@@ -14783,11 +14797,11 @@
 
         var t = comp.time;
         var fx = follower.property("ADBE Effect Parade");
-        if (!fx.property("MK Path Progress")) {
+        if (!fx.property("Ru Path Progress")) {
             var sl = fx.addProperty("ADBE Slider Control");
-            sl.name = "MK Path Progress";
+            sl.name = "Ru Path Progress";
         }
-        var prog = follower.property("ADBE Effect Parade").property("MK Path Progress").property(1);
+        var prog = follower.property("ADBE Effect Parade").property("Ru Path Progress").property(1);
         setKeys(prog, [[t, 0], [t + seconds, 100]]);
         if (loop) { prog.expression = "loopOut(\"cycle\");"; }
 
@@ -14797,7 +14811,7 @@
         var head =
             "var L = thisComp.layer(\"" + esc(pathL.name) + "\");\n" +
             "var p = " + ref + ";\n" +
-            "var prog = clamp(effect(\"MK Path Progress\")(1) / 100, 0, 1);\n";
+            "var prog = clamp(effect(\"Ru Path Progress\")(1) / 100, 0, 1);\n";
         pos.expression = head +
             "var pt = L.toComp(p.pointOnPath(prog));\n" +
             "if (hasParent) { pt = parent.fromComp(pt); }\n" +
@@ -14861,9 +14875,9 @@
             var t = comp.time + i * stagger * fr;
             var e = fxAdd(L, "ADBE Gaussian Blur 2");
             if (!e) { return; }
-            e.name = "MK Blur Fade";
+            e.name = "Ru Blur Fade";
             fxSet(e, 3, 1);
-            var bp = L.property("ADBE Effect Parade").property("MK Blur Fade").property(1);
+            var bp = L.property("ADBE Effect Parade").property("Ru Blur Fade").property(1);
             var op = L.transform.opacity.valueAtTime(t, false) || 100;
             if (isIn) {
                 setKeys(bp, [[t, 40], [t + d, 0]]);
@@ -15574,12 +15588,12 @@
         [0.68,0.857,0.652,0.855,0.634,0.845,0.615,0.826,0.599,0.802,0.581,0.762,0.543,0.694,0.508,0.655,0.482,0.633,0.452,0.615,0.423,0.586,0.401,0.554,0.387,0.526,0.377,0.5,0.365,0.45,0.363,0.432,0.365,0.378,0.375,0.344,0.391,0.316,0.412,0.295,0.428,0.285,0.44,0.281,0.468,0.281,0.478,0.285,0.487,0.294,0.491,0.304,0.491,0.326,0.475,0.356,0.427,0.406,0.411,0.432,0.407,0.446,0.407,0.472,0.419,0.498,0.442,0.519,0.48,0.541,0.546,0.567,0.628,0.593,0.694,0.621,0.734,0.647,0.751,0.664,0.767,0.688,0.775,0.716,0.775,0.744,0.769,0.768,0.759,0.792,0.743,0.816,0.722,0.837,0.7,0.851]
     ];
 
-    function logo(parent) {
-        var l = parent.add("group");
-        l.preferredSize = [26, 26];
+    function logo(parent, size) {
+        var S = size || 26, l = parent.add("group");
+        l.preferredSize = [S, S];
         l.onDraw = function () {
-            var g = this.graphics, S = 26, i, k, pts;
-            rrPath(g, 0.5, 0.5, 25, 25, 8);
+            var g = this.graphics, i, k, pts;
+            rrPath(g, 0.5, 0.5, S - 1, S - 1, S * 0.31);
             g.fillPath(brush(g, DS.primary));
             for (k = 0; k < LOGO_SHAPES.length; k++) {
                 pts = LOGO_SHAPES[k];
@@ -15592,6 +15606,65 @@
             }
         };
         return l;
+    }
+
+    // ---- About window: opens once on the first run, and from the About button in the header ----
+    var ABOUT = { version: "1.0", author: "Tharindu Lakshan", email: "tlakshan10106@gmail.com" };
+
+    function aboutLine(parent, text, color) {
+        var t = parent.add("statictext", undefined, text);
+        setFg(t, color || DS.label);
+        return t;
+    }
+
+    function showAbout() {
+        var dlg = new Window("dialog", "About " + NAME);
+        dlg.orientation = "column";
+        dlg.alignChildren = ["fill", "top"];
+        dlg.spacing = 12;
+        dlg.margins = 20;
+        if (!CLASSIC) { try { dlg.graphics.backgroundColor = brush(dlg.graphics, DS.bg); } catch (e0) {} }
+
+        var top = dlg.add("group");
+        top.orientation = "row";
+        top.alignChildren = ["left", "center"];
+        top.spacing = 14;
+        logo(top, 64);
+        var tx = top.add("group");
+        tx.orientation = "column";
+        tx.alignChildren = ["left", "top"];
+        tx.spacing = 2;
+        var t1 = tx.add("statictext", undefined, NAME);
+        setFont(t1, "BOLD", 20);
+        setFg(t1, DS.text);
+        aboutLine(tx, "Version " + ABOUT.version, DS.muted);
+        aboutLine(tx, "Motion toolkit for After Effects", DS.label);
+
+        var how = card(dlg, "How it works", 0);
+        aboutLine(how, "1   Select a layer or layers in your timeline.", DS.text);
+        aboutLine(how, "2   Click an effect in the panel. It starts at the playhead.", DS.text);
+        aboutLine(how, "3   Retime the keyframes, or click again to replace it.", DS.text);
+
+        var cols = dlg.add("group");
+        cols.orientation = "row";
+        cols.alignChildren = ["fill", "top"];
+        cols.spacing = 10;
+        var a = card(cols, "What's inside", 1);
+        aboutLine(a, "\u2022  Fades, slides and pops");
+        aboutLine(a, "\u2022  Text effects and typewriters");
+        aboutLine(a, "\u2022  Shapes, camera and easing");
+        var b = card(cols, "Good to know", 1);
+        aboutLine(b, "\u2022  Undo with Ctrl / Cmd + Z");
+        aboutLine(b, "\u2022  Layers are named \u201CRu \u2026\u201D");
+        aboutLine(b, "\u2022  Cut tools sit at the bottom");
+
+        var cr = aboutLine(dlg, "Made by " + ABOUT.author + "  \u00B7  " + ABOUT.email, DS.muted);
+        cr.alignment = ["center", "top"];
+        var go = btn(dlg, "Get started", function () { dlg.close(); }, "", "primary");
+        go.alignment = ["center", "top"];
+        go.preferredSize.width = 160;
+        dlg.center();
+        dlg.show();
     }
 
     // =====================================================================
@@ -15882,7 +15955,7 @@
         var fpO = check(fp, "Orient along path", false);
         btn(fp, "Follow Path", function () {
             run("Follow Path", function () { doFollowPath(num(fpD.text, 3, 0.1, 600), fpL.value, fpO.value); });
-        }, "The follower moves along the path, driven by an \"MK Path Progress\" slider.");
+        }, "The follower moves along the path, driven by an \"Ru Path Progress\" slider.");
     });
 
     // ---------------- Quick Actions ----------------
@@ -16922,9 +16995,9 @@
         if (!CLASSIC) { setFg(title, DS.text); }
         var spacer = head.add("group");
         spacer.alignment = ["fill", "center"];
-        var ver = head.add("statictext", undefined, "Toolkit");
-        setFg(ver, DS.muted);
-        ver.alignment = ["right", "center"];
+        var aboutB = btn(head, "About", function () { try { showAbout(); } catch (eA) {} }, "About " + NAME + " (opens once on the first run, then only from here)", "secondary");
+        aboutB.preferredSize = [64, 26];
+        aboutB.alignment = ["right", "center"];
 
         // ---- layout: icon rail on the left, chips + feature card on the right ----
         var body = win.add("group");
@@ -17104,6 +17177,12 @@
         ui.show();
     } else {
         ui.layout.layout(true);
+    }
+
+    // first run only: mark it seen BEFORE showing so a failure can never make the window come back every time
+    if (getS("about_seen", "") !== "1") {
+        putS("about_seen", "1");
+        try { showAbout(); } catch (eFirst) {}
     }
 
 })(this);

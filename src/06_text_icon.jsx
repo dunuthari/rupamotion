@@ -69,7 +69,7 @@
     }
 
     function tiSparkleLayer(comp, size, color) {
-        var L = shapeLayer(comp, "MK Text+Icon · Icon");
+        var L = shapeLayer(comp, "Ru Text+Icon · Icon");
         var gi = newGroup(L, "Sparkle");
         addPathVec(L, gi, sparkleShape(size / 2));
         addFill(L, gi, color, 100);
@@ -81,7 +81,7 @@
         try { io.importAs = ImportAsType.FOOTAGE; } catch (e) {}
         var item = app.project.importFile(io);
         var L = comp.layers.add(item);
-        L.name = "MK Text+Icon · Icon";
+        L.name = "Ru Text+Icon · Icon";
         var s = size / Math.max(item.width, item.height) * 100;
         L.transform.scale.setValue(L.threeDLayer ? [s, s, s] : [s, s]);
         return L;
@@ -93,7 +93,7 @@
         anims().addProperty("ADBE Text Animator");
         var idx = anims().numProperties;
         function an() { return anims().property(idx); }
-        an().name = "MK Highlight";
+        an().name = "Ru Highlight";
         an().property("ADBE Text Animator Properties").addProperty("ADBE Text Fill Color");
         if (an().property("ADBE Text Selectors").numProperties === 0) { an().property("ADBE Text Selectors").addProperty("ADBE Text Selector"); }
         var fill = an().property("ADBE Text Animator Properties").property("ADBE Text Fill Color");
@@ -115,7 +115,7 @@
         var t0 = comp.time, cx = comp.width / 2, cy = comp.height / 2, font = pickFont(true);
 
         var nul = comp.layers.addNull();
-        nul.name = "MK Text+Icon · Move";
+        nul.name = "Ru Text+Icon · Move";
         // Anchor at the null's own centre, null sitting at the comp centre (so scaling/rotating it pivots on the middle of
         // the frame). The children are placed relative to it: local = comp position - (null position - null anchor).
         var nw = 100, nh = 100;
@@ -128,7 +128,7 @@
         var layers = [], widths = [], lefts = [], top = 0;
         for (i = 0; i < n; i++) {
             var L = makeText(comp, words[i], { size: o.size, color: o.textColor, font: font, just: "left" });
-            L.name = "MK Text+Icon · " + words[i];
+            L.name = "Ru Text+Icon · " + words[i];
             var r = L.sourceRectAtTime(t0, false);
             widths.push(r.width);
             lefts.push(r.left);
@@ -189,7 +189,7 @@
         var texts = [], strs = [s1, s2], rects = [], top = 0;
         for (i = 0; i < 2; i++) {
             var T = makeText(comp, strs[i], { size: o.size, color: o.textColor, font: font, just: "left" });
-            T.name = "MK Star Swipe · Sentence " + (i + 1);
+            T.name = "Ru Star Swipe · Sentence " + (i + 1);
             var r = T.sourceRectAtTime(t0, false);
             rects.push(r); top = Math.min(top, r.top); texts.push(T);
         }
@@ -209,7 +209,7 @@
 
         // the mover: its centre is the star's centre, so the wipe edge, the trail and the star all travel with it
         var nul = comp.layers.addNull();
-        nul.name = "MK Star Swipe · Move";
+        nul.name = "Ru Star Swipe · Move";
         var nw = 100, nh = 100;
         try { nw = nul.source.width; nh = nul.source.height; } catch (eN) {}
         setXY(nul.transform.anchorPoint, nw / 2, nh / 2);
@@ -218,7 +218,7 @@
 
         // soft-edged half-plane mattes: side -1 = everything left of the star (sentence 2), +1 = right of it (sentence 1)
         function edge(side) {
-            var M = shapeLayer(comp, "MK Star Swipe · Reveal " + (side < 0 ? "2" : "1"));
+            var M = shapeLayer(comp, "Ru Star Swipe · Reveal " + (side < 0 ? "2" : "1"));
             var gi = newGroup(M, "Reveal"), big = comp.width * 3;
             addRect(M, gi, big, comp.height * 2, 0, [side * big / 2, 0]);
             addFill(M, gi, [1, 1, 1], 100);
@@ -235,7 +235,7 @@
         var tA = t0 + o.hold, tB = tA + o.dur, trailL = null;
         if (o.trail) {
             var len = comp.width * SS.trailK, N = SS.trailSlices, sw = len / N, k, op;
-            trailL = shapeLayer(comp, "MK Star Swipe · Trail");
+            trailL = shapeLayer(comp, "Ru Star Swipe · Trail");
             // a fading tail: N thin slices whose opacity rises from 0% at the far end to 100% at the star; the blur melts them into one smooth ramp
             for (k = 0; k < N; k++) {
                 op = Math.pow((k + 0.5) / N, SS.trailPow) * 100;
@@ -250,7 +250,7 @@
         }
 
         var star = o.iconFile ? tiIconFromFile(comp, o.iconFile, iconSize) : tiSparkleLayer(comp, iconSize, o.iconColor);
-        star.name = "MK Star Swipe · Star";
+        star.name = "Ru Star Swipe · Star";
         star.parent = nul;
         setXY(star.transform.position, lx, ly);
 

@@ -162,10 +162,10 @@
         if (o.precomp) {
             var n = 1;
             for (var i = 1; i <= app.project.numItems; i++) {
-                var m = /^MK Shape Morph (\d+)$/.exec(app.project.item(i).name);
+                var m = /^Ru Shape Morph (\d+)$/.exec(app.project.item(i).name);
                 if (m) { n = Math.max(n, parseInt(m[1], 10) + 1); }
             }
-            var nc = comp.layers.precompose([src.index, tgt.index], "MK Shape Morph " + n, true);
+            var nc = comp.layers.precompose([src.index, tgt.index], "Ru Shape Morph " + n, true);
             for (var j = 1; j <= comp.numLayers; j++) { comp.layer(j).selected = (comp.layer(j).source === nc); }
         }
         if (mismatch) {

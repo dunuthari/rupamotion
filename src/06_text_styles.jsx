@@ -111,7 +111,7 @@
         var sp = L.transform.scale, base = sp.valueAtTime(t, false);
         if (allZero(base)) { base = [100, 100]; }
         tsSmooth(sp, [[t, scaled(base, o.from)], [t + o.dur, base]], o.curve);
-        tsBlur(L, "MK Hero Blur", [[t, o.blur], [t + o.dur, 0]], o.curve);
+        tsBlur(L, "Ru Hero Blur", [[t, o.blur], [t + o.dur, 0]], o.curve);
         tsFadeIn(L, t, o.fade);
     }
 
@@ -132,7 +132,7 @@
         var sp = L.transform.scale, base = sp.valueAtTime(t, false), op = L.transform.opacity, to = 100, o = TS.blurOut;
         if (allZero(base)) { base = [100, 100]; }
         tsSmooth(sp, [[t, base], [t + o.dur, scaled(base, o.to)]], [0.4, 0, 0.6, 1]);
-        tsBlur(L, "MK Blur Out", [[t, 0], [t + o.dur, o.blur]], [0.4, 0, 0.6, 1]);
+        tsBlur(L, "Ru Blur Out", [[t, 0], [t + o.dur, o.blur]], [0.4, 0, 0.6, 1]);
         try { to = op.numKeys === 0 ? op.value : op.valueAtTime(t, false); } catch (e) {}
         tsSmooth(op, [[t, to], [t + o.hold, to], [t + o.dur, 0]], [0.4, 0, 0.6, 1]);
     }
@@ -158,10 +158,10 @@
         var t = comp.time, o = TS.letter, i, failed = 0;
         for (i = 0; i < list.length; i++) {
             var L = list[i], n = textDocProp(L).value.text.length, T = Math.max(1, n - 1) * o.stagger + o.dur;
-            var sl = tsSlider(L, "MK Reveal", t, T), ok = false;
+            var sl = tsSlider(L, "Ru Reveal", t, T), ok = false;
             if (sl) {
-                ok = tsExprAnimator(L, "MK Letter Blur", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
-                    "// MK Letter Blur\nvar v=effect(\"MK Reveal\")(\"Slider\");\nvar u=(v-(textIndex-1)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\n(1-u)*100", 1);
+                ok = tsExprAnimator(L, "Ru Letter Blur", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
+                    "// Ru Letter Blur\nvar v=effect(\"Ru Reveal\")(\"Slider\");\nvar u=(v-(textIndex-1)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\n(1-u)*100", 1);
             }
             if (!ok) { failed++; tsHero(L, t, TS.blurIn); }       // fallback: the whole line blurs in
         }
@@ -174,11 +174,11 @@
         var t = comp.time, o = TS.del, i, failed = 0;
         for (i = 0; i < list.length; i++) {
             var L = list[i], n = textDocProp(L).value.text.length, T = Math.max(1, n - 1) * o.stagger + o.dur;
-            var sl = tsSlider(L, "MK Delete", t, T), ok = false;
+            var sl = tsSlider(L, "Ru Delete", t, T), ok = false;
             if (sl) {
                 // letters leave from the END: the last letter starts first
-                ok = tsExprAnimator(L, "MK Delete Out", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]]],
-                    "// MK Delete Out\nvar v=effect(\"MK Delete\")(\"Slider\");\nvar u=(v-(" + n + "-textIndex)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=u*u*(3-2*u);\nu*100", 1);
+                ok = tsExprAnimator(L, "Ru Delete Out", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]]],
+                    "// Ru Delete Out\nvar v=effect(\"Ru Delete\")(\"Slider\");\nvar u=(v-(" + n + "-textIndex)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=u*u*(3-2*u);\nu*100", 1);
             }
             if (!ok) { failed++; tsBlurOut(L, t); }
         }
@@ -205,10 +205,10 @@
         for (i = 0; i < list.length; i++) {
             var L = list[i], src = textDocProp(L).value, lay = layoutText(comp, L, t), tb = tsTables(lay, src.text);
             if (tb.n < 1) { continue; }
-            var T = tb.n * o.step + o.ramp * 2 + 0.2, sl = tsSlider(L, "MK Highlight", t, T), ok = false;
+            var T = tb.n * o.step + o.ramp * 2 + 0.2, sl = tsSlider(L, "Ru Highlight", t, T), ok = false;
             if (sl) {
-                ok = tsExprAnimator(L, "MK Word Highlight", [["ADBE Text Fill Color", TS.teal]],
-                    "// MK Word Highlight\nvar WI=" + arrExpr(tb.charWord) + ";\nvar NW=" + tb.n + ";\nvar v=effect(\"MK Highlight\")(\"Slider\");\nvar k=(textTotal===NW)?(textIndex-1):WI[textIndex-1];\n" +
+                ok = tsExprAnimator(L, "Ru Word Highlight", [["ADBE Text Fill Color", TS.teal]],
+                    "// Ru Word Highlight\nvar WI=" + arrExpr(tb.charWord) + ";\nvar NW=" + tb.n + ";\nvar v=effect(\"Ru Highlight\")(\"Slider\");\nvar k=(textTotal===NW)?(textIndex-1):WI[textIndex-1];\n" +
                     "var a=Math.max(0,Math.min(1,(v-k*" + o.step + ")/" + o.ramp + "));\nvar b=Math.max(0,Math.min(1,1-(v-(k+1)*" + o.step + ")/" + o.ramp + "));\nMath.min(a,b)*100", 3);
             }
             if (!ok) { failed++; }
@@ -226,12 +226,12 @@
             var tb = tsTables(lay, src.text), maxK = 0, w;
             for (w = 0; w < tb.n; w++) { if (tb.wordLine[w] > 0) { maxK = Math.max(maxK, tb.wordK[w]); } }
             var T = o.delay + maxK * o.stagger + o.dur + 0.1;
-            tsRemoveNamed(L.property("ADBE Effect Parade"), "MK Stack");
-            var sl = tsSlider(L, "MK Stack", t, T), ok = false;
+            tsRemoveNamed(L.property("ADBE Effect Parade"), "Ru Stack");
+            var sl = tsSlider(L, "Ru Stack", t, T), ok = false;
             if (sl) {
-                ok = tsExprAnimator(L, "MK Stack", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
-                    "// MK Stack\nvar LN=" + arrExpr(tb.wordLine) + ";\nvar KK=" + arrExpr(tb.wordK) + ";\nvar CL=" + arrExpr(tb.charLine) + ";\nvar CK=" + arrExpr(tb.charK) + ";\nvar NW=" + tb.n + ";\n" +
-                    "var v=effect(\"MK Stack\")(\"Slider\");\nvar w=(textTotal===NW);\nvar ln=w?LN[textIndex-1]:CL[textIndex-1];\nvar k=w?KK[textIndex-1]:CK[textIndex-1];\nvar out=0;\n" +
+                ok = tsExprAnimator(L, "Ru Stack", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
+                    "// Ru Stack\nvar LN=" + arrExpr(tb.wordLine) + ";\nvar KK=" + arrExpr(tb.wordK) + ";\nvar CL=" + arrExpr(tb.charLine) + ";\nvar CK=" + arrExpr(tb.charK) + ";\nvar NW=" + tb.n + ";\n" +
+                    "var v=effect(\"Ru Stack\")(\"Slider\");\nvar w=(textTotal===NW);\nvar ln=w?LN[textIndex-1]:CL[textIndex-1];\nvar k=w?KK[textIndex-1]:CK[textIndex-1];\nvar out=0;\n" +
                     "if(ln>0){var u=(v-" + o.delay + "-k*" + o.stagger + ")/" + o.dur + ";u=Math.max(0,Math.min(1,u));u=1-Math.pow(1-u,3);out=(1-u)*100;}\nout", 3);
             }
             if (!ok) { bad++; continue; }
@@ -239,7 +239,7 @@
             var s = L.transform.scale.value[0] / 100, off = (lay.lines - 1) * lay.lineStep * s / 2;
             try {
                 if (L.transform.position.numKeys === 0 && !L.parent && L.transform.position.expression === "") {
-                    L.transform.position.expression = "// MK Stack\nvar v=effect(\"MK Stack\")(\"Slider\");\nvar p=Math.max(0,Math.min(1,(v-" + o.delay + ")/" + o.glide + "));p=1-Math.pow(1-p,3);\n[value[0],value[1]+" + num2(off) + "*(1-p)]";
+                    L.transform.position.expression = "// Ru Stack\nvar v=effect(\"Ru Stack\")(\"Slider\");\nvar p=Math.max(0,Math.min(1,(v-" + o.delay + ")/" + o.glide + "));p=1-Math.pow(1-p,3);\n[value[0],value[1]+" + num2(off) + "*(1-p)]";
                 }
             } catch (eP) {}
         }

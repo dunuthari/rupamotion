@@ -33,7 +33,7 @@
         var p = makePill(comp, { label: label, size: size, fill: col("primary"), textColor: [1, 1, 1], extraLeft: sparkW + 14 });
         var pos = p.pill.transform.position.value;
 
-        var sp = shapeLayer(comp, "MK Sparkle");
+        var sp = shapeLayer(comp, "Ru Sparkle");
         var gs = newGroup(sp, "Sparkle");
         addStar(sp, gs, 1, 4, 22, 6, 0);
         addFill(sp, gs, [1, 1, 1], 100);
@@ -47,14 +47,14 @@
         sp.moveBefore(p.text);
 
         var bloom = p.pill.duplicate();
-        bloom.name = "MK Bloom · " + label;
+        bloom.name = "Ru Bloom · " + label;
         clearEffects(bloom);
         var gb = fxAdd(bloom, "ADBE Gaussian Blur 2");
         fxSet(gb, 1, 80);
         bloom.transform.opacity.expression = "60 + Math.sin(time * 2 * Math.PI * 0.5) * 20;";
         bloom.moveAfter(p.pill);
 
-        var nul = addNull(comp, "MK AI Button · " + label, [pos[0], pos[1]]);
+        var nul = addNull(comp, "Ru AI Button · " + label, [pos[0], pos[1]]);
         p.pill.parent = nul;
         bloom.parent = nul;
         setKeys(nul.transform.scale, [[t, [0, 0]], [t + d * 0.6, [108, 108]], [t + d, [100, 100]]]);
@@ -66,13 +66,13 @@
     function findCursor(comp) {
         var sel = comp.selectedLayers;
         if (sel.length > 0) { return sel[0]; }
-        for (var i = 1; i <= comp.numLayers; i++) { if (/^MK Cursor/.test(comp.layer(i).name)) { return comp.layer(i); } }
+        for (var i = 1; i <= comp.numLayers; i++) { if (/^Ru Cursor/.test(comp.layer(i).name)) { return comp.layer(i); } }
         return null;
     }
 
     function doAddCursor() {
         var comp = activeComp(); if (!comp) { return; }
-        var L = shapeLayer(comp, "MK Cursor");
+        var L = shapeLayer(comp, "Ru Cursor");
         var gi = newGroup(L, "Pointer");
         var v = [[0, 0], [0, 36], [9, 28], [15, 42], [21, 39], [15, 26], [27, 26]];
         var z = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]];
@@ -94,7 +94,7 @@
         var s = L.transform.scale.valueAtTime(t, false);
         setKeys(L.transform.scale, [[t, s], [t + 3 * fr, scaled(s, 0.85)], [t + 9 * fr, s]], { curve: CURVES.apple });
         var p = L.transform.position.valueAtTime(t, false);
-        var ring = shapeLayer(comp, "MK Click Ripple");
+        var ring = shapeLayer(comp, "Ru Click Ripple");
         var gi = newGroup(ring, "Ring");
         addEllipse(ring, gi, 40, 40);
         addStroke(ring, gi, col("primary"), 4, 100);
@@ -123,7 +123,7 @@
         var step = D * 0.78, pad = D * 0.12, totalW = D + (n - 1) * step;
         var cx = comp.width / 2, cy = comp.height / 2;
 
-        var pill = shapeLayer(comp, "MK Avatar Pill");
+        var pill = shapeLayer(comp, "Ru Avatar Pill");
         var g1 = newGroup(pill, "Inner Stroke");
         addRect(pill, g1, totalW + pad * 2 - 6, D + pad * 2 - 6, (D + pad * 2 - 6) / 2);
         addStroke(pill, g1, [1, 1, 1], 2, 45);
@@ -176,11 +176,11 @@
             app.executeCommand(app.findMenuCommandId("Convert Audio to Keyframes"));
             if (comp.numLayers === before) { alert("After Effects couldn't convert the audio to keyframes.", NAME); return; }
             var amp = comp.layer(1);
-            amp.name = "MK Audio Amplitude " + stamp(comp);
+            amp.name = "Ru Audio Amplitude " + stamp(comp);
             ampName = amp.name;
         }
         var N = o.bars, barW = 12, spacing = 20, minH = 12, maxH = o.maxH;
-        var L = shapeLayer(comp, "MK Waveform");
+        var L = shapeLayer(comp, "Ru Waveform");
         for (i = 0; i < N; i++) {
             var x = (i - (N - 1) / 2) * spacing;
             var env = Math.exp(-Math.pow((i - (N - 1) / 2) / (N / 3), 2));
@@ -210,7 +210,7 @@
         var t = comp.time, d = animDur(comp), cx = comp.width / 2, cy = comp.height / 2;
         var size = 48;
         var txt = makeText(comp, label, { size: size, color: col("primary"), font: pickFont(true), just: "center" });
-        txt.name = "MK Glass Label · " + label;
+        txt.name = "Ru Glass Label · " + label;
         var tw = textWidth(txt, t), iconW = 34, gapI = 18;
         var w = Math.round(tw + iconW + gapI + 120), h = 112;
 
@@ -226,14 +226,14 @@
             return L;
         }
 
-        var outer = ring("MK Glass · Outer", w + 96, h + 96, 22, 55);
+        var outer = ring("Ru Glass · Outer", w + 96, h + 96, 22, 55);
         softShadow(outer);
         makeFrosted(comp, outer, 36);
-        var middle = ring("MK Glass · Middle", w + 46, h + 46, 32, 65);
-        var inner = ring("MK Glass · Inner", w, h, 85, 90);
+        var middle = ring("Ru Glass · Middle", w + 46, h + 46, 32, 65);
+        var inner = ring("Ru Glass · Inner", w, h, 85, 90);
         softShadow(inner);
 
-        var icon = shapeLayer(comp, "MK Glass · Play Icon");
+        var icon = shapeLayer(comp, "Ru Glass · Play Icon");
         var gi = newGroup(icon, "Play");
         addStar(icon, gi, 2, 3, iconW / 2, 0, 90);
         addFill(icon, gi, col("primary"), 100);
@@ -243,7 +243,7 @@
         setXY(txt.transform.position, left + iconW + gapI + tw / 2, cy);
         txt.moveBefore(icon);
 
-        var nul = addNull(comp, "MK Glass Button · " + label, [cx, cy]);
+        var nul = addNull(comp, "Ru Glass Button · " + label, [cx, cy]);
         var parts = [outer, middle, inner, icon, txt];
         var mt = comp.layer(outer.index + 1);
         if (/glass matte/.test(mt.name)) { parts.push(mt); }
@@ -279,7 +279,7 @@
         if (items.length === 0) { alert("Select clips or images in the Project panel first.", NAME); return; }
 
         var W = comp.width, H = comp.height, dur = comp.duration;
-        var g = app.project.items.addComp("MK Media Grid", W, H, comp.pixelAspect, dur, comp.frameRate);
+        var g = app.project.items.addComp("Ru Media Grid", W, H, comp.pixelAspect, dur, comp.frameRate);
         g.motionBlur = true;
         var cols = o.cols, gap = o.gap, gridW = W * 1.5;
         var cellW = (gridW - gap * (cols - 1)) / cols, cellH = cellW * 9 / 16;
@@ -326,6 +326,6 @@
         root.transform.rotation.setValue(o.tilt);
 
         var gl = comp.layers.add(g);
-        gl.name = "MK Media Grid";
+        gl.name = "Ru Media Grid";
         mb(gl);
     }
