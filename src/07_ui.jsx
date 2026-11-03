@@ -75,7 +75,7 @@
     // Rounded rectangle as a path (ScriptUI has no arcs, so corners are short line segments)
     function rrPath(g, x, y, w, h, r) {
         r = Math.max(0, Math.min(r, w / 2, h / 2));
-        var seg = 6, first = true;
+        var seg = 4, first = true;
         g.newPath();
         function arc(cx, cy, a0) {
             for (var i = 0; i <= seg; i++) {
@@ -244,7 +244,6 @@
             redraw(b);
             try { fn.call(b); }
             finally {
-                try { $.sleep(80); } catch (e) {}
                 b.pressed = false;
                 redraw(b);
             }
@@ -2041,7 +2040,13 @@
     function buildUI(thisObj) {
         var win = (thisObj instanceof Panel) ? thisObj : new Window("palette", NAME, undefined, { resizeable: true });
         buildContent(win);
+        var lastSize = "";
         win.onResizing = win.onResize = function () {
+            // dragging a dock fires this many times a second: skip when the size did not change
+            var key = "";
+            try { key = this.size[0] + "x" + this.size[1]; } catch (eK) {}
+            if (key !== "" && key === lastSize) { return; }
+            lastSize = key;
             if (this.fitScroll) { this.fitScroll(); }
             this.layout.resize();
             if (this.updateScroll) { this.updateScroll(false); }
