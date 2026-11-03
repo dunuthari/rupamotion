@@ -945,3 +945,19 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`cut bar: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// Header logo: the traced glyph (two white shapes on the blue rounded square), same curve as the artwork
+{
+  const R = {};
+  const logo = walk(root).filter(n => n.type === 'group' && typeof n.onDraw === 'function' && n.preferredSize && (n.preferredSize[0] === 26 || n.preferredSize.width === 26) && (n.preferredSize[1] === 26 || n.preferredSize.height === 26))[0];
+  R['the header logo exists'] = !!logo;
+  const rec = gfx(), mv = rec.moveTo, ln = rec.lineTo, pts = [], fills = [];
+  rec.moveTo = (x, y) => { mv(x, y); pts.push(['m', x, y]); }; rec.lineTo = (x, y) => { ln(x, y); pts.push(['l', x, y]); };
+  const nb = rec.newBrush; rec.newBrush = (t, c) => { fills.push(c.join()); return nb(t, c); };
+  logo.graphics = rec; logo.size = [26, 26]; logo.onDraw();
+  const moves = pts.filter(p => p[0] === 'm').length, lines = pts.filter(p => p[0] === 'l').length;
+  R['draws the two traced shapes (82 + 48 points) on top of the rounded square'] = moves >= 2 && lines >= 82 + 48 - 2;
+  R['all glyph points stay inside the 26 px icon, and the glyph is white on the primary blue'] = pts.every(p => p[1] >= 0 && p[1] <= 26 && p[2] >= 0 && p[2] <= 26) && fills[0] !== fills[fills.length - 1];
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`logo: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
