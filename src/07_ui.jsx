@@ -239,15 +239,7 @@
     function btn(parent, label, fn, tip, variant) {
         var b = parent.add("button", undefined, label);
         styleButton(b, variant || (parent.isBtnRow ? "secondary" : "primary"));
-        b.onClick = function () {
-            b.pressed = true;
-            redraw(b);
-            try { fn.call(b); }
-            finally {
-                b.pressed = false;
-                redraw(b);
-            }
-        };
+        b.onClick = function () { fn.call(b); };
         if (tip) { b.helpTip = tip; }
         return b;
     }
@@ -1865,6 +1857,31 @@
             try { content.location = [content.location ? content.location[0] : 0, -Math.round(sbar.value)]; } catch (eP) {}
         }
         sbar.onChanging = sbar.onChange = placeContent;
+        // mouse wheel: ScriptUI has no documented wheel event, so try the names hosts use (unverified in AE); eased over a few frames
+        var wheelBusy = false;
+        function onWheel(ev) {
+            if (wheelBusy || !sbar.enabled) { return; }
+            var d = 0;
+            try { d = ev.detail || ev.wheelDelta || ev.deltaY || 0; } catch (eW) {}
+            if (!d) { return; }
+            var dir = d > 0 ? -1 : 1;
+            if (ev.wheelDelta) { dir = ev.wheelDelta > 0 ? -1 : 1; }
+            var from = sbar.value, to = Math.max(0, Math.min(sbar.maxvalue, from + dir * 90)), n, steps = 5;
+            wheelBusy = true;
+            try {
+                for (n = 1; n <= steps; n++) {
+                    var t = n / steps, e2 = 1 - Math.pow(1 - t, 3);
+                    sbar.value = from + (to - from) * e2;
+                    placeContent();
+                    try { win.update(); } catch (eU) {}
+                }
+            } catch (eL) {}
+            wheelBusy = false;
+        }
+        try { win.addEventListener("mousewheel", onWheel); } catch (eA1) {}
+        try { viewport.addEventListener("mousewheel", onWheel); } catch (eA2) {}
+        try { content.addEventListener("mousewheel", onWheel); } catch (eA3) {}
+        try { win.addEventListener("wheel", onWheel); } catch (eA4) {}
         function updateScroll(reset) {
             var ch = 0, vh = 0;
             try { ch = content.size[1]; vh = viewport.size[1]; } catch (eS) {}
@@ -1922,16 +1939,12 @@
 
         var curGroup = null;
 
-        var savedGroup = "", savedFeat = "";
         function showFeature(groupName, featName) {
             for (var k = 0; k < FEATURES.length; k++) {
                 var f = FEATURES[k], on = (f.group === groupName && f.name === featName);
                 if (on) { ensureBuilt(f); }
                 if (f.panel && f.panel.visible !== on) { f.panel.visible = on; }
             }
-            // preferences are written to disk, so only when something changed
-            if (savedGroup !== groupName) { putS("ui_group", groupName); savedGroup = groupName; }
-            if (savedFeat !== featName) { putS("ui_feature", featName); savedFeat = featName; }
             try { win.layout.layout(true); } catch (e) {}
             updateScroll(true);
         }
@@ -2026,15 +2039,19 @@
 
         // keep the viewport as tall as the window allows (never below SCROLL_MIN), the same for every tab
         win.updateScroll = updateScroll;
+        var fitting = false;
         win.fitScroll = function () {
+            // docked panels only (a floating window is sized by its content); measured overhead + dead band so it can never feed back
+            if (fitting || !(win instanceof Panel)) { return; }
+            fitting = true;
             try {
-                var other = 28 + head.size[1] + bar.size[1] + 30;
-                setViewH(Math.max(SCROLL_MIN, Math.round(win.size[1] - other)));
+                var other = (bar.location[1] + bar.size[1] + 14) - viewport.size[1];
+                var want = Math.max(SCROLL_MIN, Math.round(win.size[1] - other));
+                if (Math.abs(want - viewport.size[1]) > 6) { setViewH(want); }
             } catch (eF) {}
+            fitting = false;
         };
-        var lastG = getS("ui_group", groups[0]), ok = false;
-        for (i = 0; i < groups.length; i++) { if (groups[i] === lastG) { ok = true; } }
-        pickGroup(ok ? lastG : groups[0], getS("ui_feature", ""));
+        pickGroup(groups[0], "");
         return curGroup;
     }
 
