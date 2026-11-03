@@ -554,19 +554,26 @@
         });
     }
 
-    function doBlurFade(stagger, bounce) {
+    // fadeIn (default true): blur 40 -> 0 and opacity 0 -> 100; false: blur 0 -> 40 and opacity 100 -> 0
+    function doBlurFade(stagger, bounce, fadeIn) {
         var comp = activeComp(); if (!comp) { return; }
-        var d = animDur(comp), fr = comp.frameDuration;
+        var d = animDur(comp), fr = comp.frameDuration, isIn = (fadeIn !== false);
         eachSelected(comp, "Select at least one layer.", function (L, i) {
             var t = comp.time + i * stagger * fr;
             var e = fxAdd(L, "ADBE Gaussian Blur 2");
             if (!e) { return; }
             e.name = "MK Blur Fade";
             fxSet(e, 3, 1);
-            setKeys(L.property("ADBE Effect Parade").property("MK Blur Fade").property(1), [[t, 40], [t + d, 0]]);
+            var bp = L.property("ADBE Effect Parade").property("MK Blur Fade").property(1);
             var op = L.transform.opacity.valueAtTime(t, false) || 100;
-            setKeys(L.transform.opacity, [[t, 0], [t + d * 0.7, op]]);
-            if (bounce) { fadeBounce(L, t, d, true); }
+            if (isIn) {
+                setKeys(bp, [[t, 40], [t + d, 0]]);
+                setKeys(L.transform.opacity, [[t, 0], [t + d * 0.7, op]]);
+            } else {
+                setKeys(bp, [[t, 0], [t + d, 40]]);
+                setKeys(L.transform.opacity, [[t + d * 0.3, op], [t + d, 0]]);
+            }
+            if (bounce) { fadeBounce(L, t, d, isIn); }
             mb(L);
         });
     }

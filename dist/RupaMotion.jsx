@@ -14806,19 +14806,26 @@
         });
     }
 
-    function doBlurFade(stagger, bounce) {
+    // fadeIn (default true): blur 40 -> 0 and opacity 0 -> 100; false: blur 0 -> 40 and opacity 100 -> 0
+    function doBlurFade(stagger, bounce, fadeIn) {
         var comp = activeComp(); if (!comp) { return; }
-        var d = animDur(comp), fr = comp.frameDuration;
+        var d = animDur(comp), fr = comp.frameDuration, isIn = (fadeIn !== false);
         eachSelected(comp, "Select at least one layer.", function (L, i) {
             var t = comp.time + i * stagger * fr;
             var e = fxAdd(L, "ADBE Gaussian Blur 2");
             if (!e) { return; }
             e.name = "MK Blur Fade";
             fxSet(e, 3, 1);
-            setKeys(L.property("ADBE Effect Parade").property("MK Blur Fade").property(1), [[t, 40], [t + d, 0]]);
+            var bp = L.property("ADBE Effect Parade").property("MK Blur Fade").property(1);
             var op = L.transform.opacity.valueAtTime(t, false) || 100;
-            setKeys(L.transform.opacity, [[t, 0], [t + d * 0.7, op]]);
-            if (bounce) { fadeBounce(L, t, d, true); }
+            if (isIn) {
+                setKeys(bp, [[t, 40], [t + d, 0]]);
+                setKeys(L.transform.opacity, [[t, 0], [t + d * 0.7, op]]);
+            } else {
+                setKeys(bp, [[t, 0], [t + d, 40]]);
+                setKeys(L.transform.opacity, [[t + d * 0.3, op], [t + d, 0]]);
+            }
+            if (bounce) { fadeBounce(L, t, d, isIn); }
             mb(L);
         });
     }
@@ -15850,7 +15857,8 @@
             ["Slide Up (+Fade)", slide([0, -1], "Slide Up (+Fade)"), "Slides in, travelling up, and fades in"],
             ["Slide Down (+Fade)", slide([0, 1], "Slide Down (+Fade)"), "Slides in, travelling down, and fades in"],
             ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: 0 }); })],
-            ["Blur Fade", anim("Blur Fade", function () { doBlurFade(0, qb); })],
+            ["Blur Fade In", anim("Blur Fade In", function () { doBlurFade(0, qb, true); }), "Fades in from a blur"],
+            ["Blur Fade Out", anim("Blur Fade Out", function () { doBlurFade(0, qb, false); }), "Blurs out and fades away"],
             ["Reverse Keys", function () { run("Reverse Keys", doReverseKeys); }, "Reverses selected keyframed properties (or all on the selected layers)"],
             ["Lock Gradient", function () { run("Lock Gradient", function () { doLockGradient(gdir.selection.index); }); }, "Gradient that stays locked to the layer: it moves, scales and rotates with it"]
         ]);

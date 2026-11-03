@@ -700,7 +700,8 @@
             ["Slide Up (+Fade)", slide([0, -1], "Slide Up (+Fade)"), "Slides in, travelling up, and fades in"],
             ["Slide Down (+Fade)", slide([0, 1], "Slide Down (+Fade)"), "Slides in, travelling down, and fades in"],
             ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: 0 }); })],
-            ["Blur Fade", anim("Blur Fade", function () { doBlurFade(0, qb); })],
+            ["Blur Fade In", anim("Blur Fade In", function () { doBlurFade(0, qb, true); }), "Fades in from a blur"],
+            ["Blur Fade Out", anim("Blur Fade Out", function () { doBlurFade(0, qb, false); }), "Blurs out and fades away"],
             ["Reverse Keys", function () { run("Reverse Keys", doReverseKeys); }, "Reverses selected keyframed properties (or all on the selected layers)"],
             ["Lock Gradient", function () { run("Lock Gradient", function () { doLockGradient(gdir.selection.index); }); }, "Gradient that stays locked to the layer: it moves, scales and rotates with it"]
         ]);

@@ -891,3 +891,22 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`showreel styles: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// Quick Actions: Blur Fade In / Blur Fade Out replace the single Blur Fade button
+{
+  const R = {};
+  const names = walk(root).filter(b => b.type === 'button').map(b => b.text);
+  R['"Blur Fade" is gone, "Blur Fade In" and "Blur Fade Out" are there'] = names.indexOf('Blur Fade') < 0 && names.indexOf('Blur Fade In') >= 0 && names.indexOf('Blur Fade Out') >= 0;
+  function press(label) {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp; comp.time = 2;
+    const L = baseLayer('shape'); L.name = 'Card'; made.push(L); comp.selectedLayers = [L];
+    const bb = walk(root).filter(b => b.type === 'button' && b.text === label)[0]; bb.onClick(); app.project.activeItem = null;
+    const e = L.property('ADBE Effect Parade').children.find(c => c.name === 'MK Blur Fade');
+    return { L, blur: e && e.children[0].keys, op: L.transform.opacity.keys };
+  }
+  const i = press('Blur Fade In'), o = press('Blur Fade Out');
+  R['In: blur 40 -> 0 and opacity 0 -> 100'] = i.blur && i.blur[0].v === 40 && i.blur[1].v === 0 && i.op[0].v === 0 && i.op[i.op.length - 1].v === 100;
+  R['Out: blur 0 -> 40 and opacity 100 -> 0'] = o.blur && o.blur[0].v === 0 && o.blur[1].v === 40 && o.op[0].v === 100 && o.op[o.op.length - 1].v === 0;
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`blur fade in/out: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
