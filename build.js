@@ -7,16 +7,32 @@ const path = require("path");
 const baseName = (f) => f.replace(/\.ffx$/i, "").toLowerCase();
 const byName = (a, b) => (baseName(a) < baseName(b) ? -1 : baseName(a) > baseName(b) ? 1 : 0);
 
+// readable button labels for the shipped .ffx files (file stem -> label); other files fall back to a tidied file name
+const LABELS = {
+  "1by1": "One by One", "bounce_text": "Bounce Text", "Bouncing_Text_HQ": "Bouncing Text",
+  "Bouncy__Color_FadeOut_HQ": "Bouncy Color Fade", "character_down": "Letters Drop", "character_right": "Letters Slide",
+  "Color_FadeOut_HQ": "Color Fade Out", "gg_MotionTypeLite": "Motion Type", "SaaS_Text_Preset_3": "SaaS Style 3",
+  "SaaS_Text_Preset_4": "SaaS Style 4", "SaaS_Text_Preset_5": "SaaS Style 5", "SNAP_TEXT": "Snap", "SNAP_TEXT_2": "Snap 2",
+  "Snapping_Text_HQ": "Snapping", "word_down": "Words Drop", "word_right": "Words Slide"
+};
+
+function labelOf(file) {
+  const stem = file.replace(/\.ffx$/i, "");
+  if (LABELS[stem]) return LABELS[stem];
+  const n = stem.replace(/[-_]+/g, " ").trim();
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+
 function presetLiteral(dir) {
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ffx$/i.test(f)).sort(byName) : [];
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ffx$/i.test(f)) : [];
+  files.sort((a, b) => { const x = labelOf(a), y = labelOf(b); return x < y ? -1 : x > y ? 1 : 0; });
   const items = files.map((f) => {
-    let name = f.replace(/\.ffx$/i, "").replace(/[-_]+/g, " ").trim();
-    name = name.charAt(0).toUpperCase() + name.slice(1);
+    const name = labelOf(f);
     const b64 = fs.readFileSync(path.join(dir, f)).toString("base64");
     const lines = b64.match(/.{1,100}/g) || [""];
     return `{ name: ${JSON.stringify(name)}, data: ${lines.map((l) => JSON.stringify(l)).join(" +\n            ")} }`;
   });
-  const names = files.map((f) => { const n = f.replace(/\.ffx$/i, "").replace(/[-_]+/g, " ").trim(); return n.charAt(0).toUpperCase() + n.slice(1); });
+  const names = files.map(labelOf);
   return { literal: items.length ? "[\n        " + items.join(",\n        ") + "\n    ]" : "[]", count: items.length, names };
 }
 
@@ -54,7 +70,7 @@ function syncPreview(names, file) {
   return true;
 }
 
-module.exports = { build };
+module.exports = { build, labelOf };
 
 if (require.main === module) {
   const r = build({ syncPreview: true });

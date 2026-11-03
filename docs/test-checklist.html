@@ -52,7 +52,7 @@
   "use strict";
   var SECTIONS = [
   { id: "A", title: "A. New text effects (highest risk, test these first)", why: "I wrote these from memory and could only test them with a mock. If an alert says something \"could not be created\", mark it Fail and write the message in the note.", items: [
-    ["A1", "Typewriter, one line", "Select layer (1) (the point text). Playhead at 1:00. Click Text ▸ Motion ▸ Typewriter.", "A thin caret shows first, then letters appear one by one (about 14 a second). The text stays centred while it grows. After the last letter the caret blinks twice and disappears. A layer named “Ru Typewriter · Caret …” appears.", "Caret is in the middle of the comp or far from the text. Letters are all visible from the start. An alert appears.", 1],
+    ["A1", "Typewriter, one line", "Select layer (1) (the point text). Playhead at 1:00. Click Text ▸ Effects ▸ Reveal ▸ Typewriter.", "A thin caret shows first, then letters appear one by one (about 14 a second). The text stays centred while it grows. After the last letter the caret blinks twice and disappears. A layer named “Ru Typewriter · Caret …” appears.", "Caret is in the middle of the comp or far from the text. Letters are all visible from the start. An alert appears.", 1],
     ["A2", "Typewriter, retime with two keys", "On the Typewriter result, select the caret layer and open its Effects ▸ Typed ▸ Slider. It should have only 2 keyframes. Move the second key later.", "The letters and the caret slow down together.", "Letters and caret get out of step. The slider has more than 2 keys.", 1],
     ["A3", "Typewriter, press twice", "Press Typewriter again on the same layer.", "The old caret layer is replaced, so only one caret layer remains.", "Two caret layers. The text is stuck half hidden.", 0],
     ["A4", "Typewriter, two-line text", "Select layer (2) (two lines). Click Typewriter.", "The caret moves to the start of the second line when the first line ends.", "Caret stays on line 1 or is in the wrong place.", 1],
@@ -75,7 +75,7 @@
     ["B3", "SaaS Text Preset 3, 4, 5", "Click each one.", "Each applies with no error. (These are large; note if one takes more than 3 seconds.)", "", 0],
     ["B4", "SNAP TEXT, SNAP TEXT 2, Snapping Text HQ, Word down, Word right", "Click each one.", "Each applies with no error.", "", 0]
   ]},
-  { id: "C", title: "C. Quick actions", why: "Select the rounded rectangle (5) for these, playhead at 1:00.", items: [
+  { id: "C", title: "C. Animate ▸ Quick", why: "Select the rounded rectangle (5) for these, playhead at 1:00.", items: [
     ["C1", "Fade In and Fade Out", "Click each.", "Opacity fades in / out. With Bounce on, a small settle shows.", "", 0],
     ["C2", "Slide Left / Right / Up / Down (+Fade)", "Click each (undo between).", "It slides in from the named side and fades in.", "Wrong direction or no fade.", 0],
     ["C3", "Scale Pop", "Click.", "It pops in from small with a springy settle.", "", 0],

@@ -264,10 +264,14 @@
     // ---- nav icons (simple line drawings, ~18 px) ----
 
     var NAV_LABELS = {
-        "Layers": "Layers", "Quick Actions": "Quick", "Flow": "Flow", "Camera": "Camera", "Shapes": "Shapes",
-        "Animation": "Animate", "Transitions": "Cuts", "Text": "Text", "UI Kit": "UI Kit",
-        "Media": "Media", "Style": "Style"
+        "Layers & Timing": "Layers", "Animate": "Animate", "Text": "Text", "Transitions": "Transitions", "Build": "Build",
+        "Camera": "Camera", "Flow": "Flow", "Style": "Style"
     };
+    // tab order in the left rail, and chip order inside a tab (features not listed keep their registration order, after the listed ones)
+    var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
+    var CHIP_ORDER = ["Quick", "Move in / out", "Pop", "Shape morph", "UI list stagger", "Hold push-in",
+        "Effects", "Text + Icon", "Zoom cut", "Swipe cut", "Shape wipe",
+        "Smart shape", "Pill button", "Frosted glass", "AI glow button", "Fake cursor", "Avatar bubble", "Audio waveform", "Liquid-glass button", "Stock grid wall"];
 
     function poly(g, pts, close) {
         g.newPath();
@@ -328,6 +332,15 @@
         }
     };
 
+    NAV_ICONS["Layers & Timing"] = NAV_ICONS["Layers"];
+    NAV_ICONS["Animate"] = NAV_ICONS["Animation"];
+    NAV_ICONS["Build"] = NAV_ICONS["Shapes"];
+
+    function orderRank(list, name) {
+        for (var i = 0; i < list.length; i++) { if (list[i] === name) { return i; } }
+        return list.length;
+    }
+
     function navTile(parent, groupName, onPick) {
         if (CLASSIC) {
             var nb = parent.add("button", undefined, NAV_LABELS[groupName] || groupName);
@@ -340,7 +353,7 @@
             return nb;
         }
         var b = parent.add("button", undefined, NAV_LABELS[groupName] || groupName);
-        b.preferredSize = [60, 56];
+        b.preferredSize = [64, 56];
         b.groupName = groupName;
         b.active = false;
         b.helpTip = groupName;
@@ -704,7 +717,7 @@
 
     // ---------------- Layers ----------------
 
-    feature("Layers", "Layer operations", function (p) {
+    feature("Layers & Timing", "Layer operations", function (p) {
         grid(p, [
             ["Pre-comp", function () { run("Pre-comp", doPrecomposeSafe); }, "Group layers safely — keeps their in/out range"],
             ["Unwrap Comp", function () {
@@ -742,7 +755,7 @@
 
     // ---------------- Quick Actions ----------------
 
-    feature("Quick Actions", "Motion quick actions", function (p) {
+    feature("Animate", "Quick", function (p) {
         var qb = getS("quick_bounce", style.bounceOn) === "1";
         var bT = check(p, "Bounce effect", qb, "ON: every animation below bounces (slides, pops and fades overshoot and settle).\nOFF: clean eased motion with no bounce.\nSet how much with Bounce (%) below.");
         bT.onToggle = function () {
@@ -754,7 +767,6 @@
             "How far animations overshoot before settling.\n5 = subtle, 10 = default, 30 = very springy.");
         bPct.onChange = function () { bPct.text = String(num(bPct.text, 10, 1, 60)); putS("quick_bounce_pct", bPct.text); };
         var dist = field(p, "Slide distance (px):", "200", 5);
-        var gdir = drop(p, "Gradient direction:", ["Horizontal", "Vertical", "Diagonal"], 0);
 
         // Runs an animation action with the Quick Actions bounce state
         function anim(label, fn) {
@@ -765,21 +777,32 @@
                 doMove(dir, { mode: "in", offscreen: false, distance: num(dist.text, 200, 1, 20000), fade: true, stagger: 0 });
             });
         }
-        grid(p, [
+        var secIn = subPanel(p, "In");
+        grid(secIn, [
             ["Fade In", anim("Fade In", function () { doFade(true, 0, qb); })],
+            ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: 0 }); })],
+            ["Blur Fade In", anim("Blur Fade In", function () { doBlurFade(0, qb, true); }), "Fades in from a blur"]
+        ]);
+        var secOut = subPanel(p, "Out");
+        grid(secOut, [
             ["Fade Out", anim("Fade Out", function () { doFade(false, 0, qb); })],
+            ["Blur Fade Out", anim("Blur Fade Out", function () { doBlurFade(0, qb, false); }), "Blurs out and fades away"]
+        ]);
+        var secMove = subPanel(p, "Move");
+        grid(secMove, [
             ["Slide Left (+Fade)", slide([-1, 0], "Slide Left (+Fade)"), "Slides in, travelling left, and fades in"],
             ["Slide Right (+Fade)", slide([1, 0], "Slide Right (+Fade)"), "Slides in, travelling right, and fades in"],
             ["Slide Up (+Fade)", slide([0, -1], "Slide Up (+Fade)"), "Slides in, travelling up, and fades in"],
-            ["Slide Down (+Fade)", slide([0, 1], "Slide Down (+Fade)"), "Slides in, travelling down, and fades in"],
-            ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: 0 }); })],
-            ["Blur Fade In", anim("Blur Fade In", function () { doBlurFade(0, qb, true); }), "Fades in from a blur"],
-            ["Blur Fade Out", anim("Blur Fade Out", function () { doBlurFade(0, qb, false); }), "Blurs out and fades away"],
+            ["Slide Down (+Fade)", slide([0, 1], "Slide Down (+Fade)"), "Slides in, travelling down, and fades in"]
+        ]);
+        hint(p, "Bounce applies to In, Out and Move. Uses Duration and Curve from the Style group.");
+
+        var secTools = subPanel(p, "Tools");
+        var gdir = drop(secTools, "Gradient direction:", ["Horizontal", "Vertical", "Diagonal"], 0, "Direction for Lock Gradient.");
+        grid(secTools, [
             ["Reverse Keys", function () { run("Reverse Keys", doReverseKeys); }, "Reverses selected keyframed properties (or all on the selected layers)"],
             ["Lock Gradient", function () { run("Lock Gradient", function () { doLockGradient(gdir.selection.index); }); }, "Gradient that stays locked to the layer: it moves, scales and rotates with it"]
         ]);
-        hint(p, "Bounce applies to Fade, Slide, Scale Pop and Blur Fade.");
-        hint(p, "Uses Duration and Curve from the Style group. Anchor points are kept as you set them.");
 
         var ball = subPanel(p, "Bounce the ball effect");
         hint(ball, "Keyframed layers bounce like a ball after each key.");
@@ -997,7 +1020,7 @@
 
     // ---------------- Shapes ----------------
 
-    feature("Shapes", "Smart shape", function (p) {
+    feature("Build", "Smart shape", function (p) {
         var geo = subPanel(p, "Shape");
         var type = drop(geo, "Type:", SHAPE_TYPES, 0);
         var sizeRow = row(geo, "Width × Height:");
@@ -1041,7 +1064,7 @@
 
     // ---------------- Animation ----------------
 
-    feature("Animation", "Shape morph", function (p) {
+    feature("Animate", "Shape morph", function (p) {
         hint(p, "Select 2 shape layers, playhead at the start.");
         var from = drop(p, "Morph from:", ["Lower layer", "Upper layer"], 0, "Lower layer = the shape you drew first.");
         var colr = check(p, "Morph fill color", true);
@@ -1054,7 +1077,7 @@
         });
     });
 
-    feature("Animation", "Pop", function (p) {
+    feature("Animate", "Pop", function (p) {
         var fade = check(p, "Fade opacity too", true);
         var center = check(p, "Scale from layer center", true, "Moves the anchor point to the layer's center first.");
         hint(p, "Springs past the end size and settles. Edit freq / decay / amp in the scale expression to tune.");
@@ -1066,7 +1089,7 @@
         btn(r, "Pop Out", function () { go("out"); });
     });
 
-    feature("Animation", "Move in / out", function (p) {
+    feature("Animate", "Move in / out", function (p) {
         var mode = drop(p, "Mode:", ["In", "Out"], 0);
         var dist = drop(p, "Distance:", ["Off screen", "Custom"], 0);
         var px = field(p, "Custom (px):", "300", 5, "Used when Distance is Custom.");
@@ -1096,7 +1119,7 @@
         btn(r, "→", function () { go([1, 0]); });
     });
 
-    feature("Animation", "UI list stagger", function (p) {
+    feature("Animate", "UI list stagger", function (p) {
         hint(p, "Select imported UI rows. Animates top to bottom.");
         var off = field(p, "Slide up (px):", "40", 5);
         var stag = field(p, "Stagger (frames):", "2", 4, STAGGER_TIP);
@@ -1108,7 +1131,7 @@
         });
     });
 
-    feature("Animation", "Hold push-in", function (p) {
+    feature("Animate", "Hold push-in", function (p) {
         hint(p, "Slow scale-up on holds (100% → 105%).");
         var amt = field(p, "Amount (%):", "5", 4);
         var range = drop(p, "Range:", ["Whole layer", "Playhead to layer end"], 0);
@@ -1169,7 +1192,45 @@
 
     // ---------------- Text ----------------
 
-    feature("Text", "Motion", function (p) {
+    feature("Text", "Effects", function (p) {
+        // two columns; every button gets the same preferred width so the pair splits the row evenly
+        function btnGrid(parent, items) {
+            var row2 = null, i, tb, pad;
+            for (i = 0; i < items.length; i++) {
+                if (i % 2 === 0) { row2 = btnRow(parent); }
+                tb = btn(row2, items[i].name, items[i].go, items[i].tip);
+                tb.preferredSize.width = 120;
+            }
+            if (items.length % 2 === 1) {
+                pad = row2.add("group");          // keep the last button the same width as the others
+                pad.preferredSize = [120, 32];
+            }
+        }
+        function builtin(name, fn, tip) { return { name: name, tip: tip, go: function () { run(name, fn); } }; }
+        hint(p, "Select text layer(s), put the playhead where it should start, click an effect.");
+
+        // Reveal: how the text arrives
+        var reveal = subPanel(p, "Reveal");
+        btnGrid(reveal, [
+            builtin("Typewriter", doTypewriter, "Types the selected text layer out letter by letter at the playhead, with a caret that follows."),
+            builtin("Typewriter Block", doTypewriterBlock, "Types the selected text out word by word: a gradient block sits over the next word and the newest words glow blue, then settle back to the text colour."),
+            builtin("Letter Blur", doLetterBlur, "Text fades in letter by letter with a little blur."),
+            builtin("SaaS Text Preset 1", doSaasRoll, "Select two text layers placed in the same spot (the lower layer is visible first and rolls out, the upper layer rolls in), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word."),
+            builtin("Two-Line Stack", doTwoLineStack, "A text layer with two lines: the first line sits, then the words of the second come in below and the block re-centres.")
+        ]);
+
+        // Style: looks and exits (the hero and blur ones also work on any layer)
+        var look = subPanel(p, "Style");
+        btnGrid(look, [
+            builtin("Word Highlight", doWordHighlight, "The current word turns teal and the highlight moves word to word."),
+            builtin("Hero Zoom", doHeroZoom, "A giant, blurred layer pulls back and sharpens into place (any layer)."),
+            builtin("Hero Blur", doHeroBlur, "The layer blurs in and settles in place (any layer)."),
+            builtin("Blur Out", doBlurOut, "The layer blurs out and shrinks a little (any layer)."),
+            builtin("Delete Out", doDeleteOut, "The letters disappear from the right, with blur.")
+        ]);
+
+        // Presets: the embedded .ffx animation presets
+        var pre = subPanel(p, "Presets");
         var items = [], i;
         for (i = 0; i < TEXT_PRESETS.length; i++) {
             (function (idx) {
@@ -1177,42 +1238,7 @@
                     go: function () { run("Text preset: " + TEXT_PRESETS[idx].name, function () { doTextPreset(idx); }); } });
             })(i);
         }
-        // built-in, no settings: a two-line text rolls up through a one-line window, word by word
-        items.push({ name: "SaaS Text Preset 1", tip: "Select two text layers placed in the same spot (the lower layer is visible first and rolls out, the upper layer rolls in), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word.",
-            go: function () { run("SaaS Text Preset 1", doSaasRoll); } });
-        // built-in, no settings: styles read from a SaaS text showreel (select the layer, click the button)
-        var styles = [
-            ["Hero Zoom", doHeroZoom, "A giant, blurred layer pulls back and sharpens into place (any layer)."],
-            ["Hero Blur", doHeroBlur, "The layer blurs in and settles in place (any layer)."],
-            ["Letter Blur", doLetterBlur, "Text fades in letter by letter with a little blur."],
-            ["Two-Line Stack", doTwoLineStack, "A text layer with two lines: the first line sits, then the words of the second come in below and the block re-centres."],
-            ["Word Highlight", doWordHighlight, "The current word turns teal and the highlight moves word to word."],
-            ["Blur Out", doBlurOut, "The layer blurs out and shrinks a little (any layer)."],
-            ["Delete Out", doDeleteOut, "The letters disappear from the right, with blur."]
-        ];
-        (function () {
-            for (var si = 0; si < styles.length; si++) {
-                (function (st) { items.push({ name: st[0], tip: st[2], go: function () { run(st[0], st[1]); } }); })(styles[si]);
-            }
-        })();
-        // built-in, no settings: types the selected text layer out letter by letter, with a caret
-        items.push({ name: "Typewriter", tip: "Types the selected text layer out letter by letter at the playhead, with a caret that follows.",
-            go: function () { run("Typewriter", doTypewriter); } });
-        items.push({ name: "Typewriter Block", tip: "Types the selected text out word by word: a gradient block sits over the next word and the newest words glow blue, then settle back to the text colour.",
-            go: function () { run("Typewriter Block", doTypewriterBlock); } });
-        hint(p, "Select text layer(s), put the playhead where it should start, click an effect.");
-        // two columns; every button gets the same preferred width so the pair splits the row evenly
-        var row2 = null;
-        for (i = 0; i < items.length; i++) {
-            if (i % 2 === 0) { row2 = btnRow(p); }
-            var tb = btn(row2, items[i].name, items[i].go, items[i].tip);
-            tb.preferredSize.width = 120;
-        }
-        if (items.length % 2 === 1) {
-            // keep the last button the same width as the others
-            var pad = row2.add("group");
-            pad.preferredSize = [120, 32];
-        }
+        if (items.length === 0) { hint(pre, "No presets yet. Add .ffx files to presets/text and rebuild."); } else { btnGrid(pre, items); }
     });
 
     // Text size for the preview stage. measureString can fail or return nothing useful on some systems, and then the words
@@ -1510,7 +1536,7 @@
 
     // ---------------- UI Kit ----------------
 
-    feature("UI Kit", "Pill button", function (p) {
+    feature("Build", "Pill button", function (p) {
         var lb = field(p, "Label:", "+ New", 16);
         var kind = drop(p, "Style:", ["Primary", "White glass", "Outline"], 0);
         var pop = check(p, "Pop in at playhead", true);
@@ -1519,32 +1545,32 @@
         });
     });
 
-    feature("UI Kit", "Frosted glass", function (p) {
+    feature("Build", "Frosted glass", function (p) {
         hint(p, "Select shapes; blurs whatever is behind them.");
         var r = field(p, "Blur radius:", "30", 4);
         btn(p, "Frost selected shapes", function () { run("Frosted glass", function () { doFrost(num(r.text, 30, 1, 500)); }); });
     });
 
-    feature("UI Kit", "AI glow button", function (p) {
+    feature("Build", "AI glow button", function (p) {
         var lb = field(p, "Label:", "Creating…", 16);
         btn(p, "Create AI glow button", function () { run("AI glow button", function () { doAiButton(lb.text); }); });
     });
 
-    feature("UI Kit", "Fake cursor", function (p) {
+    feature("Build", "Fake cursor", function (p) {
         hint(p, "Add cursor → move playhead → drag cursor → repeat.");
         btn(p, "Add cursor", function () { run("Add cursor", doAddCursor); });
         btn(p, "Click at playhead", function () { run("Cursor click", doCursorClick); }, "Scale-down press plus a ripple circle.");
         btn(p, "Smooth moves", function () { run("Smooth cursor", doSmoothCursor); }, "Applies the footer curve to every cursor move.");
     });
 
-    feature("UI Kit", "Avatar bubble", function (p) {
+    feature("Build", "Avatar bubble", function (p) {
         hint(p, "Select photo layers.");
         var D = field(p, "Avatar size (px):", "120", 5);
         btn(p, "Bubble selected photos", function () { run("Avatar bubble", function () { doAvatarBubble(num(D.text, 120, 16, 2000)); }); });
         btn(p, "Press at playhead", function () { run("Press", doPress); }, "Click animation + a 'Next scene' marker.");
     });
 
-    feature("UI Kit", "Audio waveform", function (p) {
+    feature("Build", "Audio waveform", function (p) {
         var mode = drop(p, "Mode:", ["From selected audio", "Idle loop"], 0);
         var bars = field(p, "Bars:", "24", 4);
         var hmax = field(p, "Max height (px):", "140", 5);
@@ -1555,7 +1581,7 @@
         });
     });
 
-    feature("UI Kit", "Liquid-glass button", function (p) {
+    feature("Build", "Liquid-glass button", function (p) {
         var lb = field(p, "Label:", "Play", 16);
         var depth = check(p, "3D depth + camera blur", false, "Makes the rings 3D and adds a DOF camera push-in.");
         btn(p, "Create glass button", function () { run("Liquid-glass button", function () { doLiquidGlass(lb.text, depth.value); }); });
@@ -1563,7 +1589,7 @@
 
     // ---------------- Media ----------------
 
-    feature("Media", "Stock grid wall", function (p) {
+    feature("Build", "Stock grid wall", function (p) {
         hint(p, "Select clips/images in the Project panel.");
         var cols = field(p, "Columns:", "5", 4);
         var gap = field(p, "Gap (px):", "24", 4);
@@ -1760,10 +1786,23 @@
         win.margins = 14;
 
         var groups = [], i, j;
+        // stable sort: features by CHIP_ORDER (unlisted keep registration order after the listed ones)
+        for (i = 1; i < FEATURES.length; i++) {
+            var cur = FEATURES[i], rk = orderRank(CHIP_ORDER, cur.name);
+            j = i - 1;
+            while (j >= 0 && orderRank(CHIP_ORDER, FEATURES[j].name) > rk) { FEATURES[j + 1] = FEATURES[j]; j--; }
+            FEATURES[j + 1] = cur;
+        }
         for (i = 0; i < FEATURES.length; i++) {
             var found = false;
             for (j = 0; j < groups.length; j++) { if (groups[j] === FEATURES[i].group) { found = true; } }
             if (!found) { groups.push(FEATURES[i].group); }
+        }
+        for (i = 1; i < groups.length; i++) {
+            var cg = groups[i];
+            j = i - 1;
+            while (j >= 0 && orderRank(GROUP_ORDER, groups[j]) > orderRank(GROUP_ORDER, cg)) { groups[j + 1] = groups[j]; j--; }
+            groups[j + 1] = cg;
         }
 
         // ---- header ----

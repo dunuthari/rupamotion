@@ -417,7 +417,7 @@ function runSwipe(arrow, mutate) {
 {
   const path = require('path'), dir = path.join(__dirname, '..', 'presets', 'text');
   const files = fs.readdirSync(dir).filter(f => /\.ffx$/i.test(f)).sort((a, b) => { const x = a.replace(/\.ffx$/i, '').toLowerCase(), y = b.replace(/\.ffx$/i, '').toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; });
-  const label = f => { const n = f.replace(/\.ffx$/i, '').replace(/[-_]+/g, ' ').trim(); return n.charAt(0).toUpperCase() + n.slice(1); };
+  const label = require('../build.js').labelOf;
   const written = [];
   function RealFile(p) { this.path = p; this.data = ''; }
   RealFile.prototype.open = function () { return true; }; RealFile.prototype.write = function (d) { this.data += d; };
@@ -444,9 +444,9 @@ function runSwipe(arrow, mutate) {
 {
   const textTile = walk(root).filter(n => n.groupName === 'Text')[0];
   textTile.onClick();
-  const chip = walk(root).filter(n => n.variant === 'chip-on' && n.text === 'Motion')[0];
-  const cards = walk(root).filter(n => n.cardLevel === 0 && n.cardTitle === 'Motion' && n.visible);
-  console.log(`text sub-group: chip "Motion" shown ${!!chip}, card "Motion" visible ${cards.length === 1}`);
+  const chip = walk(root).filter(n => n.variant === 'chip-on' && n.text === 'Effects')[0];
+  const cards = walk(root).filter(n => n.cardLevel === 0 && n.cardTitle === 'Effects' && n.visible);
+  console.log(`text sub-group: chip "Effects" shown ${!!chip}, card "Effects" visible ${cards.length === 1}`);
 }
 
 // ---------------------------------------------------------------------------------------------

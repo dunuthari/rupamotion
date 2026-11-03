@@ -286,6 +286,9 @@
   // ---------- nav icons (same drawings as the panel) ----------
   var ICONS = {
     "Layers": '<rect x="2.5" y="4" width="13" height="10" rx="3"/><rect x="7.5" y="9" width="13" height="10" rx="3"/>',
+    "Layers & Timing": '<rect x="2.5" y="4" width="13" height="10" rx="3"/><rect x="7.5" y="9" width="13" height="10" rx="3"/>',
+    "Animate": '<path d="M7 4 19 12 7 20z"/>',
+    "Build": '<circle cx="7.5" cy="7.5" r="5.5"/><rect x="10" y="11" width="11" height="10" rx="2"/>',
     "Quick Actions": '<path d="M13 2 6 12h5l-2 9 7-10h-5z"/>',
     "Flow": '<path d="M3 20C11 20 9 4 21 4"/>',
     "Camera": '<rect x="1.5" y="6" width="14" height="12" rx="3"/><path d="M15.5 10 20.5 7v10l-5-3z"/>',
@@ -297,7 +300,7 @@
     "Media": '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
     "Style": '<circle cx="12" cy="12" r="9"/><circle class="dot" cx="9" cy="9" r="2"/><circle class="dot" cx="15" cy="9" r="2"/><circle class="dot" cx="12" cy="15" r="2"/>'
   };
-  var NAV_LABELS = { "Quick Actions": "Quick", "Animation": "Animate", "Transitions": "Cuts" };
+  var NAV_LABELS = { "Layers & Timing": "Layers" };
 
   var COLOR_LABELS = ["Primary", "Secondary", "Periwinkle", "Background", "Pink glow", "Accent (red)", "Dark text", "Gray text", "Gradient start", "Gradient end"];
 
@@ -318,18 +321,20 @@
 
   // ---------- features (mirrors MotionKit.jsx) ----------
   var FEATURES = [
-    { group: "Layers", name: "Layer operations", ui: [
+    { group: "Layers & Timing", name: "Layer operations", ui: [
       GRID([["Pre-comp", "Pre-composed the selected layers, keeping their timing."], ["Unwrap Comp", "Moved the pre-comp's layers into this comp."], ["Adjustment Layer", "Added a full-size adjustment layer above the selection."], ["Smart Null", "Added a 50×50 null and parented the selection."]]),
       C("Smart Duplicate", [F("Copies:", "1"), D("Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 1, "Linked copies share one comp; independent copies get their own."), B("Smart Duplicate", "Duplicated with numbered names.")]),
       C("Solid Layer", [COLOR("Color:", "#4285F4", true), B("Solid Layer", "Added a solid layer.")]),
       C("Follow Path", [H("Select a path layer (mask or shape) + the follower."), F("Path time (s):", "3"), T("Loop along path", true), T("Orient along path", false), B("Follow Path", "The follower now moves along the path.")])
     ]},
-    { group: "Quick Actions", name: "Motion quick actions", ui: [
+    { group: "Animate", name: "Quick", ui: [
       T("Bounce effect", true, "ON: every animation below bounces. OFF: clean eased motion."),
-      F("Bounce (%):", "10", { tip: "How far animations overshoot before settling. 5 = subtle, 10 = default, 30 = very springy." }), F("Slide distance (px):", "200"), D("Gradient direction:", ["Horizontal", "Vertical", "Diagonal"]),
-      GRID([["Fade In"], ["Fade Out"], ["Slide Left (+Fade)"], ["Slide Right (+Fade)"], ["Slide Up (+Fade)"], ["Slide Down (+Fade)"], ["Scale Pop"], ["Blur Fade In"], ["Blur Fade Out"], ["Reverse Keys"], ["Lock Gradient"]]),
-      H("Bounce applies to Fade, Slide, Scale Pop and Blur Fade."),
-      H("Uses Duration and Curve from the Style group. Anchor points are kept as you set them."),
+      F("Bounce (%):", "10", { tip: "How far animations overshoot before settling. 5 = subtle, 10 = default, 30 = very springy." }), F("Slide distance (px):", "200"),
+      C("In", [GRID([["Fade In"], ["Scale Pop"], ["Blur Fade In"]])]),
+      C("Out", [GRID([["Fade Out"], ["Blur Fade Out"]])]),
+      C("Move", [GRID([["Slide Left (+Fade)"], ["Slide Right (+Fade)"], ["Slide Up (+Fade)"], ["Slide Down (+Fade)"]])]),
+      H("Bounce applies to In, Out and Move. Uses Duration and Curve from the Style group."),
+      C("Tools", [D("Gradient direction:", ["Horizontal", "Vertical", "Diagonal"]), GRID([["Reverse Keys"], ["Lock Gradient"]])]),
       C("Bounce the ball effect", [H("Keyframed layers bounce like a ball after each key."), F("Amount (%):", "10", { tip: "How far it bounces after each keyframe. 5 = small settle, 10 = default, 30+ = big rubber-ball bounce." }), B("Bounce the ball effect", "Added the ball bounce.")])
     ]},
     { group: "Flow", name: "Easing curves", ui: [["flow"]] },
@@ -337,31 +342,34 @@
       C("3-node camera", [H("Orbit null › Dolly null › Camera"), T("Depth of field", true), F("Aperture (blur):", "60"), B("Create 3-node camera", "Added the camera rig.")]),
       C("Parallax: arrange layers in depth", [H("Select layers, then set the gap between them."), F("Distance (px):", "300"), F("Front layer Z (px):", "0"), D("In front:", ["Top layer", "Bottom layer"]), T("Keep on-screen size", true), T("Add camera rig if none", true), B("Arrange selected in depth", "Arranged the layers in depth.")])
     ]},
-    { group: "Shapes", name: "Smart shape", ui: [
+    { group: "Build", name: "Smart shape", ui: [
       C("Shape", [D("Type:", ["Squircle", "Rounded rectangle", "Pill", "Circle / Ellipse", "Triangle", "Star", "Polygon"]), SIZE("Width × Height:", "400", "400"), F("Corner radius:", "60"), F("Points / sides:", "5"), F("Star inner (%):", "45")]),
       C("Fill & stroke", [COLOR("Fill color:", "#4285F4"), F("Fill opacity (%):", "100"), T("Gradient fill (locked to shape)", false), D("Gradient direction:", ["Horizontal", "Vertical", "Diagonal"], 2), T("Stroke", false), COLOR("Stroke color:", "#1A73E8"), F("Stroke width:", "4")]),
       C("Effects", [T("Soft shadow", true), T("Frosted glass behind (new shapes)", false)]),
       ROW([["Create shape", "Created the shape.", true], ["Update selected", "Updated the selected shapes."]])
     ]},
-    { group: "Animation", name: "Shape morph", ui: [H("Select 2 shape layers, playhead at the start."), D("Morph from:", ["Lower layer", "Upper layer"]), T("Morph fill color", true), T("Hide target layer", true), T("Put morph in a new composition", true), B("Morph", "Morphed the shapes.")] },
-    { group: "Animation", name: "Pop", ui: [T("Fade opacity too", true), T("Scale from layer center", true), H("Springs past the end size and settles. Edit freq / decay / amp in the scale expression to tune."), ROW([["Pop Up"], ["Pop Out"]])] },
-    { group: "Animation", name: "Move in / out", ui: [D("Mode:", ["In", "Out"]), D("Distance:", ["Off screen", "Custom"]), F("Custom (px):", "300", { enabledWhen: 1, tip: "Used when Distance is Custom." }), T("Fade opacity too", false), F("Stagger (frames):", "0"), H("Arrow = direction of travel:"), ROW([["←", "Move left"], ["↑", "Move up"], ["↓", "Move down"], ["→", "Move right"]], "four")] },
-    { group: "Animation", name: "UI list stagger", ui: [H("Select imported UI rows. Animates top to bottom."), F("Slide up (px):", "40"), F("Stagger (frames):", "2", { tip: STAGGER_TIP }), T("Fade opacity too", true), B("Stagger selected layers", "Staggered the rows.")] },
-    { group: "Animation", name: "Hold push-in", ui: [H("Slow scale-up on holds (100% → 105%)."), F("Amount (%):", "5"), D("Range:", ["Whole layer", "Playhead to layer end"]), B("Push in selected", "Added the push-in.")] },
+    { group: "Animate", name: "Shape morph", ui: [H("Select 2 shape layers, playhead at the start."), D("Morph from:", ["Lower layer", "Upper layer"]), T("Morph fill color", true), T("Hide target layer", true), T("Put morph in a new composition", true), B("Morph", "Morphed the shapes.")] },
+    { group: "Animate", name: "Pop", ui: [T("Fade opacity too", true), T("Scale from layer center", true), H("Springs past the end size and settles. Edit freq / decay / amp in the scale expression to tune."), ROW([["Pop Up"], ["Pop Out"]])] },
+    { group: "Animate", name: "Move in / out", ui: [D("Mode:", ["In", "Out"]), D("Distance:", ["Off screen", "Custom"]), F("Custom (px):", "300", { enabledWhen: 1, tip: "Used when Distance is Custom." }), T("Fade opacity too", false), F("Stagger (frames):", "0"), H("Arrow = direction of travel:"), ROW([["←", "Move left"], ["↑", "Move up"], ["↓", "Move down"], ["→", "Move right"]], "four")] },
+    { group: "Animate", name: "UI list stagger", ui: [H("Select imported UI rows. Animates top to bottom."), F("Slide up (px):", "40"), F("Stagger (frames):", "2", { tip: STAGGER_TIP }), T("Fade opacity too", true), B("Stagger selected layers", "Staggered the rows.")] },
+    { group: "Animate", name: "Hold push-in", ui: [H("Slow scale-up on holds (100% → 105%)."), F("Amount (%):", "5"), D("Range:", ["Whole layer", "Playhead to layer end"]), B("Push in selected", "Added the push-in.")] },
     { group: "Transitions", name: "Zoom cut", ui: [H("Select 2 clips, or put the playhead on the cut."), F("Frames each side:", "6"), F("Intensity (×):", "3"), F("Blur (shutter °):", "270"), ROW([["Zoom In"], ["Zoom Out"]])] },
     { group: "Transitions", name: "Swipe cut", ui: [H("Select the outgoing + incoming clips, or put the playhead on the cut."), H("Adds 3 linked nulls: Out, In and a Move null at the cut."), F("Frames each side:", "15", { tip: "How long the whoosh lasts on each side of the cut." }), F("Distance (%):", "27", { tip: "How far the clips slide. 27% is about 520 px on a 1920 frame, so both stay on screen. 100% = a full screen." }), F("Blur (shutter °):", "300", { tip: "Raises the comp's shutter angle to at least this, for motion blur." }), ROW([["←", "Swipe left"], ["↑", "Swipe up"], ["↓", "Swipe down"], ["→", "Swipe right"]], "four")] },
     { group: "Transitions", name: "Shape wipe", ui: [H("Select 2 clips, or put the playhead on the cut."), D("Shape:", ["Circle", "Triangle"]), D("Grow from:", ["Center", "Left", "Right", "Top", "Bottom"]), T("Blue accent shape leads the reveal", true), F("Accent lead (frames):", "3"), B("Add shape wipe", "Added the shape wipe.")] },
-    { group: "Text", name: "Motion", ui: [H("Select text layer(s), put the playhead where it should start, click an effect."), /*TEXT_PRESET_BUTTONS*/ ROW([["1by1", "Applied the 1by1 preset."], ["Bounce text", "Applied the Bounce text preset."]]), ROW([["Bouncing Text HQ", "Applied the Bouncing Text HQ preset."], ["Bouncy Color FadeOut HQ", "Applied the Bouncy Color FadeOut HQ preset."]]), ROW([["Character down", "Applied the Character down preset."], ["Character right", "Applied the Character right preset."]]), ROW([["Color FadeOut HQ", "Applied the Color FadeOut HQ preset."], ["Gg MotionTypeLite", "Applied the Gg MotionTypeLite preset."]]), ROW([["SaaS Text Preset 3", "Applied the SaaS Text Preset 3 preset."], ["SaaS Text Preset 4", "Applied the SaaS Text Preset 4 preset."]]), ROW([["SaaS Text Preset 5", "Applied the SaaS Text Preset 5 preset."], ["SNAP TEXT", "Applied the SNAP TEXT preset."]]), ROW([["SNAP TEXT 2", "Applied the SNAP TEXT 2 preset."], ["Snapping Text HQ", "Applied the Snapping Text HQ preset."]]), ROW([["Word down", "Applied the Word down preset."], ["Word right", "Applied the Word right preset."]]) /*END_TEXT_PRESET_BUTTONS*/, ROW([["SaaS Text Preset 1", "Rolled the first sentence out and the second in."], ["Hero Zoom", "Zoomed the layer in from a giant blur."]]), ROW([["Hero Blur", "Blurred the layer in."], ["Letter Blur", "Revealed the text letter by letter."]]), ROW([["Two-Line Stack", "Stacked the second line under the first."], ["Word Highlight", "Highlighted the words one by one in teal."]]), ROW([["Blur Out", "Blurred the layer out."], ["Delete Out", "Deleted the letters from the right."]]), ROW([["Typewriter", "Typed out the selected text layer, with a caret."], ["Typewriter Block", "Typed out word by word with a gradient block."]])] },
+    { group: "Text", name: "Effects", ui: [H("Select text layer(s), put the playhead where it should start, click an effect."),
+      C("Reveal", [ROW([["Typewriter", "Typed out the selected text layer, with a caret."], ["Typewriter Block", "Typed out word by word with a gradient block."]]), ROW([["Letter Blur", "Revealed the text letter by letter."], ["SaaS Text Preset 1", "Rolled the first sentence out and the second in."]]), ROW([["Two-Line Stack", "Stacked the second line under the first."]])]),
+      C("Style", [ROW([["Word Highlight", "Highlighted the words one by one in teal."], ["Hero Zoom", "Zoomed the layer in from a giant blur."]]), ROW([["Hero Blur", "Blurred the layer in."], ["Blur Out", "Blurred the layer out."]]), ROW([["Delete Out", "Deleted the letters from the right."]])]),
+      C("Presets", [/*TEXT_PRESET_BUTTONS*/ ROW([["Bounce Text", "Applied the Bounce Text preset."], ["Bouncing Text", "Applied the Bouncing Text preset."]]), ROW([["Bouncy Color Fade", "Applied the Bouncy Color Fade preset."], ["Color Fade Out", "Applied the Color Fade Out preset."]]), ROW([["Letters Drop", "Applied the Letters Drop preset."], ["Letters Slide", "Applied the Letters Slide preset."]]), ROW([["Motion Type", "Applied the Motion Type preset."], ["One by One", "Applied the One by One preset."]]), ROW([["SaaS Style 3", "Applied the SaaS Style 3 preset."], ["SaaS Style 4", "Applied the SaaS Style 4 preset."]]), ROW([["SaaS Style 5", "Applied the SaaS Style 5 preset."], ["Snap", "Applied the Snap preset."]]), ROW([["Snap 2", "Applied the Snap 2 preset."], ["Snapping", "Applied the Snapping preset."]]), ROW([["Words Drop", "Applied the Words Drop preset."], ["Words Slide", "Applied the Words Slide preset."]]) /*END_TEXT_PRESET_BUTTONS*/]) ]},
     { group: "Text", name: "Text + Icon", ui: [["textIcon"]] },
     { group: "Text", name: "Star Swipe", parent: "Text + Icon", ui: [["starSwipe"]] },
-    { group: "UI Kit", name: "Pill button", ui: [F("Label:", "+ New", { wide: true }), D("Style:", ["Primary", "White glass", "Outline"]), T("Pop in at playhead", true), B("Create pill button", "Created the pill button.")] },
-    { group: "UI Kit", name: "Frosted glass", ui: [H("Select shapes; blurs whatever is behind them."), F("Blur radius:", "30"), B("Frost selected shapes", "Frosted the selected shapes.")] },
-    { group: "UI Kit", name: "AI glow button", ui: [F("Label:", "Creating…", { wide: true }), B("Create AI glow button", "Created the AI glow button.")] },
-    { group: "UI Kit", name: "Fake cursor", ui: [H("Add cursor → move playhead → drag cursor → repeat."), B("Add cursor", "Added the cursor."), B("Click at playhead", "Added a click and ripple."), B("Smooth moves", "Smoothed the cursor moves.")] },
-    { group: "UI Kit", name: "Avatar bubble", ui: [H("Select photo layers."), F("Avatar size (px):", "120"), B("Bubble selected photos", "Bubbled the photos."), B("Press at playhead", "Added a press animation.")] },
-    { group: "UI Kit", name: "Audio waveform", ui: [D("Mode:", ["From selected audio", "Idle loop"]), F("Bars:", "24"), F("Max height (px):", "140"), B("Create waveform", "Created the waveform.")] },
-    { group: "UI Kit", name: "Liquid-glass button", ui: [F("Label:", "Play", { wide: true }), T("3D depth + camera blur", false), B("Create glass button", "Created the glass button.")] },
-    { group: "Media", name: "Stock grid wall", ui: [H("Select clips/images in the Project panel."), F("Columns:", "5"), F("Gap (px):", "24"), F("Corner radius:", "24"), F("Tilt (°):", "-8"), F("Scroll speed (px/s):", "40"), D("Scroll:", ["Up", "Down"]), B("Build grid wall", "Built the grid wall.")] },
+    { group: "Build", name: "Pill button", ui: [F("Label:", "+ New", { wide: true }), D("Style:", ["Primary", "White glass", "Outline"]), T("Pop in at playhead", true), B("Create pill button", "Created the pill button.")] },
+    { group: "Build", name: "Frosted glass", ui: [H("Select shapes; blurs whatever is behind them."), F("Blur radius:", "30"), B("Frost selected shapes", "Frosted the selected shapes.")] },
+    { group: "Build", name: "AI glow button", ui: [F("Label:", "Creating…", { wide: true }), B("Create AI glow button", "Created the AI glow button.")] },
+    { group: "Build", name: "Fake cursor", ui: [H("Add cursor → move playhead → drag cursor → repeat."), B("Add cursor", "Added the cursor."), B("Click at playhead", "Added a click and ripple."), B("Smooth moves", "Smoothed the cursor moves.")] },
+    { group: "Build", name: "Avatar bubble", ui: [H("Select photo layers."), F("Avatar size (px):", "120"), B("Bubble selected photos", "Bubbled the photos."), B("Press at playhead", "Added a press animation.")] },
+    { group: "Build", name: "Audio waveform", ui: [D("Mode:", ["From selected audio", "Idle loop"]), F("Bars:", "24"), F("Max height (px):", "140"), B("Create waveform", "Created the waveform.")] },
+    { group: "Build", name: "Liquid-glass button", ui: [F("Label:", "Play", { wide: true }), T("3D depth + camera blur", false), B("Create glass button", "Created the glass button.")] },
+    { group: "Build", name: "Stock grid wall", ui: [H("Select clips/images in the Project panel."), F("Columns:", "5"), F("Gap (px):", "24"), F("Corner radius:", "24"), F("Tilt (°):", "-8"), F("Scroll speed (px/s):", "40"), D("Scroll:", ["Up", "Down"]), B("Build grid wall", "Built the grid wall.")] },
     { group: "Style", name: "Style", ui: [
       H("These settings apply to every group."),
       C("Appearance", [["theme"]]),
@@ -371,8 +379,14 @@
     ]}
   ];
 
+  var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
+  var CHIP_ORDER = ["Quick", "Move in / out", "Pop", "Shape morph", "UI list stagger", "Hold push-in", "Effects", "Text + Icon", "Zoom cut", "Swipe cut", "Shape wipe",
+    "Smart shape", "Pill button", "Frosted glass", "AI glow button", "Fake cursor", "Avatar bubble", "Audio waveform", "Liquid-glass button", "Stock grid wall"];
+  function rank(list, n) { var i = list.indexOf(n); return i < 0 ? list.length : i; }
+  FEATURES = FEATURES.map(function (f, i) { return [f, i]; }).sort(function (a, b) { return rank(CHIP_ORDER, a[0].name) - rank(CHIP_ORDER, b[0].name) || a[1] - b[1]; }).map(function (x) { return x[0]; });
   var GROUPS = [];
   FEATURES.forEach(function (f) { if (GROUPS.indexOf(f.group) < 0) GROUPS.push(f.group); });
+  GROUPS.sort(function (a, b) { return rank(GROUP_ORDER, a) - rank(GROUP_ORDER, b); });
 
   // ---------- DOM helpers ----------
   var uid = 0, lastDrop = null;
