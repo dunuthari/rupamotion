@@ -68,7 +68,7 @@ Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.js
 - Feature cards are built lazily (`ensureBuilt` in `buildContent`) the first time their chip/tab is shown; tests set `$.global.RuMotionEager = true` to build all of them.
 - Preferences are written only when the saved tab/feature actually changes; tab and chip repaints use `redraw` (no hide/show, which re-lays-out the panel).
 
-- The panel always opens on the first tab (no saved tab, so no preference writes while browsing). The content area is a fixed-height viewport (`setViewH`, min = max) with a scrollbar; mouse-wheel support (`onWheel`, events `mousewheel`/`wheel`) is best effort and unverified in AE. Docked panels re-fit the height with a dead band (`fitScroll`); floating windows keep it fixed. Buttons redraw only from mouse events (`btn` adds none).
+- The panel always opens on the first tab (no saved tab, so no preference writes while browsing). The content area is a fixed-height viewport (`setViewH`, min = max) with a scrollbar; ScriptUI never delivers the mouse wheel to panels (`onWheel` is a harmless best-effort), so scrolling is also by dragging any empty area of a card (`hookDrag`) and Up/Down/PageUp/PageDown (`keyScroll`); both unverified in AE. Docked panels re-fit the height with a dead band (`fitScroll`); floating windows keep it fixed. Buttons redraw only from mouse events (`btn` adds none).
 
 ## Design system (dark)
 page `#1C1D20` · surface `#232428` · card `#2B2D31` · hairline `#3C3E43` · text `#F1F2F4` · label `#BEC0C4` ·

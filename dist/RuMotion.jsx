@@ -17096,6 +17096,39 @@
             } catch (eL) {}
             wheelBusy = false;
         }
+        // ScriptUI never sends the wheel to a panel, so also: drag any empty part of the card to scroll, and Up/Down/PageUp/PageDown
+        var dragY = null, dragFrom = 0;
+        function dragDown(ev) { try { dragY = ev.screenY; dragFrom = sbar.value; } catch (eD) { dragY = null; } }
+        function dragMove(ev) {
+            if (dragY === null || !sbar.enabled) { return; }
+            try {
+                var v = dragFrom - (ev.screenY - dragY);
+                sbar.value = Math.max(0, Math.min(sbar.maxvalue, v));
+                placeContent();
+            } catch (eM) {}
+        }
+        function dragUp() { dragY = null; }
+        function hookDrag(node) {
+            var t = "", k, kid;
+            try { t = node.type; } catch (eT) { return; }
+            if (t === "group" || t === "panel" || t === "statictext") {
+                try { node.addEventListener("mousedown", dragDown); } catch (e1) {}
+                try { node.addEventListener("mousemove", dragMove); } catch (e2) {}
+                try { node.addEventListener("mouseup", dragUp); } catch (e3) {}
+            }
+            if (t === "group" || t === "panel") {
+                for (k = 0; k < node.children.length; k++) { kid = node.children[k]; hookDrag(kid); }
+            }
+        }
+        function keyScroll(ev) {
+            var key = "", d = 0;
+            try { key = ev.keyName; } catch (eK) {}
+            if (key === "Up") { d = -40; } else if (key === "Down") { d = 40; }
+            else if (key === "PageUp") { d = -300; } else if (key === "PageDown") { d = 300; }
+            if (d !== 0 && sbar.enabled) { sbar.value = Math.max(0, Math.min(sbar.maxvalue, sbar.value + d)); placeContent(); }
+        }
+        try { win.addEventListener("keydown", keyScroll); } catch (eKd) {}
+        try { win.addEventListener("mouseup", dragUp); } catch (eWu) {}
         try { win.addEventListener("mousewheel", onWheel); } catch (eA1) {}
         try { viewport.addEventListener("mousewheel", onWheel); } catch (eA2) {}
         try { content.addEventListener("mousewheel", onWheel); } catch (eA3) {}
@@ -17131,6 +17164,7 @@
             f.build(p);
             p.wrap.visible = false;
             f.panel = p.wrap;
+            hookDrag(p.wrap);
         }
         var eager = false;
         try { eager = ($.global.RuMotionEager === true); } catch (eE) {}
