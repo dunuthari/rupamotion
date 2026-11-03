@@ -70,6 +70,9 @@ Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.js
 
 - The panel always opens on the first tab (no saved tab, so no preference writes while browsing). The content area is a fixed-height viewport (`setViewH`, min = max) with a scrollbar; ScriptUI never delivers the mouse wheel to panels (`onWheel` is a harmless best-effort), so scrolling is also by dragging any empty area of a card (`hookDrag`) and Up/Down/PageUp/PageDown (`keyScroll`); both unverified in AE. Docked panels re-fit the height with a dead band (`fitScroll`); floating windows keep it fixed. Buttons redraw only from mouse events (`btn` adds none).
 
+## CEP panel (`cep/`)
+`npm run cep` builds `cep/RuMotion/` (manifest, `index.html`, `jsx/RuMotion.jsx`) and `cep/RuMotion-CEP.zip` (with `install.bat` / `install.command`). The HTML panel (`cep/app.js`, CSS and markup taken from `preview/index.html`) draws no logic of its own: `RuMotion.jsx` is loaded with `$.global.RuMotionBridge = true`, builds the ScriptUI panel on a window that is never shown, and `$.global.RuBridge` (`exposeBridge` in `07_ui.jsx`: `meta`, `feature(i)`, `set`, `click`, `cut`) describes each card as JSON (`brCard`) and drives the real controls. So every effect is the same code in both panels and new features appear automatically. Custom-drawn stages (Text + Icon / Star Swipe preview, Flow graph) are not controls: the CEP side redraws the Flow graph and presets itself and skips the stages. Mouse wheel works in CEP. Unverified in AE: evalFile path handling, the debug-mode install, `__adobe_cep__.getSystemPath`. The ScriptUI `dist/RuMotion.jsx` stays the single-file install.
+
 ## Design system (dark)
 page `#1C1D20` · surface `#232428` · card `#2B2D31` · hairline `#3C3E43` · text `#F1F2F4` · label `#BEC0C4` ·
 hint `#90939A` · primary `#0A6CFF` · tint `#1E3357`. Pill buttons: primary = solid blue (main action),

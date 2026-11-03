@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Ru Motion</title>
+<style>
+  /* ===== Design system tokens (same values as the After Effects panel) ===== */
+  :root {
+    color-scheme: light;
+    --page: #EFF0F2;
+    --surface: #F7F8FA;
+    --card: #FFFFFF;
+    --hairline: #E2E4E8;
+    --text: #111316;
+    --label: #5F6368;
+    --hint: #94979C;
+    --primary: #0A6CFF;
+    --primary-press: #0058D6;
+    --on-primary: #FFFFFF;
+    --tint: #E8F1FF;
+    --field: #FFFFFF;
+    --shadow: 0 2px 0 rgba(15, 23, 41, .05), 0 12px 32px -18px rgba(15, 23, 41, .25);
+    --radius-outer: 18px;
+    --radius-inner: 14px;
+    --font: "Google Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #1C1D20;
+    --surface: #232428;
+    --card: #2B2D31;
+    --hairline: #3C3E43;
+    --text: #F1F2F4;
+    --label: #BEC0C4;
+    --hint: #90939A;
+    --primary: #0A6CFF;
+    --primary-press: #3D8BFF;
+    --on-primary: #FFFFFF;
+    --tint: #1E3357;
+    --field: #1F2024;
+    --shadow: 0 2px 0 rgba(0, 0, 0, .25), 0 12px 32px -18px rgba(0, 0, 0, .6);
+  }
+
+  * { box-sizing: border-box; }
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 100vh;
+    display: grid;
+    place-items: start center;
+    padding: 32px 16px 64px;
+  }
+
+  .stage { width: 100%; max-width: 560px; }
+  .note { color: var(--hint); font-size: 12px; text-align: center; margin: 14px 0 0; }
+
+  /* ===== Panel ===== */
+  .panel {
+    background: var(--page);
+    border: 1px solid var(--hairline);
+    border-radius: 22px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .head { display: flex; align-items: center; gap: 8px; }
+  .logo {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: var(--primary); color: var(--on-primary);
+    display: grid; place-items: center; font-weight: 700; font-size: 13px;
+  }
+  .title { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .head .sub { margin-left: auto; color: var(--hint); font-size: 12px; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-outer);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card > h2 { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+  .card .card { background: var(--card); border-radius: var(--radius-inner); padding: 12px; gap: 7px; box-shadow: 0 1px 0 rgba(15, 23, 41, .04); }
+  .card .card > h3 { margin: 0 0 2px; font-size: 12px; font-weight: 700; }
+
+  /* Icon tab bar */
+  .body { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .content { display: grid; gap: 10px; min-width: 0; }
+  .nav { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+  .tab {
+    appearance: none; border: 1px solid transparent; background: transparent; width: 100%;
+    color: var(--hint); font: inherit; font-size: 10.5px;
+    border-radius: 14px; padding: 8px 2px 6px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .tab svg .dot { fill: currentColor; stroke: none; }
+  .tab[aria-selected="true"] { color: var(--text); background: var(--card); border-color: var(--hairline); font-weight: 700; }
+  .tab[aria-selected="true"] svg { stroke-width: 2; }
+
+  /* Feature chips */
+  /* fixed-height area with its own scrollbar, like the panel's viewport */
+  .content.scroll { height: 476px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
+  .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .chips[hidden] { display: none; }
+  .chip {
+    appearance: none; font: inherit; font-size: 12px; cursor: pointer;
+    height: 28px; padding: 0 10px; border-radius: 999px;
+    border: 1px solid var(--hairline); background: var(--card); color: var(--label);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chip[aria-selected="true"] { background: var(--tint); border-color: var(--tint); color: var(--primary); font-weight: 700; }
+
+  /* Form rows */
+  .row { display: grid; grid-template-columns: 116px 1fr; align-items: center; gap: 6px; min-height: 30px; }
+  .row > label, .row > .lbl { color: var(--label); font-size: 12px; }
+  .row .ctl { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  input[type="text"], select {
+    font: inherit; font-size: 12px; color: var(--text);
+    background: var(--field); border: 1px solid var(--hairline); border-radius: 10px;
+    height: 28px; padding: 0 9px; min-width: 0;
+  }
+  input[type="text"] { width: 72px; }
+  input.wide { width: 100%; }
+  select { padding-right: 6px; max-width: 100%; }
+  .hint { color: var(--hint); font-size: 11.5px; margin: 0; }
+
+  /* Toggle switch */
+  .toggle {
+    appearance: none; border: 0; background: none; padding: 0; font: inherit; font-size: 12px;
+    color: var(--text); display: flex; align-items: center; gap: 10px; cursor: pointer; text-align: left; min-height: 24px;
+  }
+  .toggle .track { width: 32px; height: 18px; border-radius: 999px; background: var(--hairline); position: relative; flex: none; transition: background .15s; }
+  .toggle .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .toggle[aria-checked="true"] .track { background: var(--primary); }
+  .toggle[aria-checked="true"] .track::after { transform: translateX(14px); }
+
+  /* Pill buttons */
+  .btn {
+    appearance: none; font: inherit; font-size: 12px; cursor: pointer;
+    height: 32px; padding: 0 14px; border-radius: 999px; width: 100%;
+    border: 1px solid var(--hairline); background: var(--card); color: var(--text);
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 700; }
+  .btn.primary:active { background: var(--primary-press); }
+  .btn { transition: background .08s, border-color .08s, transform .08s; }
+  .btn:not(.primary):active { background: var(--hairline); border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); transform: translateY(1px); }
+  .btn.primary:active { transform: translateY(1px); }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btns.four { grid-template-columns: repeat(4, 1fr); }
+  .btns.one { grid-template-columns: 1fr; }
+
+  
+  .swatch.big { width: 64px; height: 40px; cursor: pointer; padding: 0; }
+  .swatch { width: 24px; height: 20px; border-radius: 6px; border: 1px solid var(--hairline); flex: none; }
+  input[type="color"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+
+  /* Color picker (mirrors the panel's dark picker) */
+  .cp-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 50; padding: 16px; }
+  .cp { background: #1C1D20; color: #F1F2F4; border: 1px solid #3C3E43; border-radius: 12px; padding: 14px; display: flex; gap: 12px; flex-wrap: wrap; max-width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .cp h2 { flex-basis: 100%; margin: 0; font-size: 13px; font-weight: 700; }
+  .cp canvas { display: block; cursor: crosshair; border-radius: 2px; touch-action: none; }
+  .cp-side { display: flex; flex-direction: column; gap: 6px; width: 120px; }
+  .cp-cmp { height: 44px; border: 1px solid #3C3E43; display: grid; grid-template-rows: 1fr 1fr; }
+  .cp-f { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #BEC0C4; }
+  .cp-f span { width: 14px; }
+  .cp-f input { width: 100%; min-width: 0; height: 24px; background: #1F2024; color: #F1F2F4; border: 1px solid #3C3E43; border-radius: 6px; padding: 0 6px; font: inherit; }
+  .cp-btns { display: flex; gap: 6px; margin-top: 4px; }
+  .cp-btns .btn { height: 30px; padding: 0; background: #2B2D31; border-color: #3C3E43; color: #F1F2F4; }
+  .cp-btns .btn.primary { background: #0A6CFF; border-color: #0A6CFF; color: #fff; }
+
+  /* Flow easing group */
+  .flow-graph { display: block; width: 100%; max-width: 204px; margin: 0 auto; aspect-ratio: 204 / 190; touch-action: none; cursor: crosshair; border-radius: 10px; }
+  .flow-vals { display: flex; gap: 4px; align-items: center; }
+  .flow-vals input { width: 44px; min-width: 0; padding: 0 4px; text-align: center; }
+  .flow-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .flow-modes .btn { height: 28px; }
+  .flow-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .flow-tile { padding: 4px 0 3px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--card); color: var(--hint); font: 9px/1.1 var(--font); display: grid; justify-items: center; gap: 1px; cursor: pointer; min-width: 0; }
+  .flow-tile canvas { width: 100%; height: 38px; display: block; }
+  .flow-tile[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+  .flow-tile:active { transform: translateY(1px); border-color: var(--primary); }
+
+  /* Text + Icon */
+  .ti-stage { position: relative; height: 96px; border-radius: 12px; background: #0E111C; overflow: hidden; }
+  .ti-stage .w { position: absolute; top: 50%; left: 0; transform-origin: center; white-space: nowrap; font-weight: 600; font-size: 30px; line-height: 1; color: #F1F2F4; will-change: transform; }
+  .ti-stage svg { position: absolute; top: 50%; left: 0; }
+  .ti-line { font-size: 12px; color: var(--hint); min-height: 16px; }
+  .ti-file { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .ti-file .name { font-size: 12px; color: var(--label); width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ti-file .btn { width: auto; height: 26px; padding: 0 10px; flex: none; }
+  .pick { width: auto; height: 26px; padding: 0 10px; flex: none; }
+
+  input:disabled { opacity: .45; cursor: not-allowed; }
+  .row.off label, .row.off .lbl { opacity: .45; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+    background: var(--text); color: var(--page); font-size: 12px;
+    padding: 10px 16px; border-radius: 999px; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast, .toggle .track, .toggle .track::after { transition: none; }
+  }
+
+  .about-btn { width: auto; height: 26px; padding: 0 14px; margin-left: auto; font-size: 12px; }
+  .about-ov { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; place-items: center; z-index: 50; padding: 16px; }
+  .about-ov.show { display: grid; }
+  .about { width: 100%; max-width: 460px; background: #1C1D20; color: #F1F2F4; border: 1px solid #3C3E43; border-radius: 14px; padding: 22px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .about .top { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+  .about .ab-logo { width: 64px; height: 64px; border-radius: 20px; background: #0A6CFF; flex: none; }
+  .about h1 { margin: 0; font-size: 20px; }
+  .about .muted { color: #90939A; } .about .lab { color: #BEC0C4; }
+  .about .ab-card { background: #232428; border: 1px solid #3C3E43; border-radius: 10px; padding: 12px 14px; margin-top: 10px; }
+  .about .ab-card h2 { margin: 0 0 6px; font-size: 12px; font-weight: 700; }
+  .about .ab-card p { margin: 3px 0; color: #BEC0C4; }
+  .about .ab-card.main p { color: #F1F2F4; }
+  .about .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .about .credit { text-align: center; color: #90939A; margin: 14px 0 12px; font-size: 12px; }
+  .about .go { display: block; margin: 0 auto; width: 160px; background: #0A6CFF; border-color: #0A6CFF; color: #fff; font-weight: 700; }
+</style>
+<style>
+  /* CEP: the panel fills the dock, the content scrolls (mouse wheel works here) */
+  html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  .stage { max-width: none; width: 100%; height: 100vh; min-height: 0; padding: 0; margin: 0; display: block; }
+  .panel { max-width: none; width: 100%; height: 100vh; max-height: 100vh; overflow: hidden; border-radius: 0; box-shadow: none; border: 0; display: flex; flex-direction: column; padding: 12px; box-sizing: border-box; gap: 10px; }
+  .panel .head { flex: none; }
+  .panel .body { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .panel .nav { align-self: start; }
+  .panel .body { align-items: stretch; }
+  .panel .content.scroll { height: auto; align-self: stretch; min-height: 0; max-height: 100%; overflow-y: auto; align-content: start; scroll-behavior: smooth; padding-right: 6px; }
+  .panel .cutbar { flex: none; margin-top: 0 !important; }
+  .btn.busy { opacity: .6; }
+  select { max-width: 100%; }
+  input[type=text] { box-sizing: border-box; padding: 0 6px; }
+  .flow-graph { height: 190px; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <main class="panel" aria-label="Ru Motion panel">
+    <header class="head">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 100 100" aria-hidden="true" style="width:100%;height:100%;display:block"><path fill="#fff" d="M37.8 85.7 L35.6 85.7 L34 85.3 L31.8 84.1 L29.3 81.8 L26.3 77.2 L25.1 74.6 L23.9 71 L22.5 63.8 L22.3 55.4 L23.3 48.8 L25.1 42.4 L26.7 38.4 L29.1 33.6 L32.3 28.6 L34.8 25.5 L38.6 21.7 L41.4 19.5 L44.2 17.7 L47.4 16.1 L51 14.9 L53.8 14.3 L59.6 14.1 L63.8 15.1 L65.6 15.9 L68 17.5 L70.9 20.6 L73.1 24.6 L74.1 28 L74.5 30.6 L74.5 35.4 L73.3 41 L72.1 43.8 L70.7 46 L67.2 49.5 L65.2 50.7 L62 51.7 L57 51.7 L53.4 50.9 L49.6 49.3 L46.8 47.3 L45.5 45.8 L44.3 43.6 L44.1 42.8 L44.3 40.4 L44.9 39.4 L46.2 38.5 L49.4 37.7 L55.8 37.5 L57.8 37.1 L60.4 35.7 L61.7 34.2 L62.7 31.2 L62.7 28.2 L62.1 26 L61.1 24.2 L59 22.1 L56.4 20.7 L53.8 20.1 L49.6 20.3 L47 21.1 L43.6 22.9 L41.7 24.4 L37.9 28.6 L36.7 30.4 L34.3 35.6 L33.1 41 L33.1 46.6 L34.1 50.6 L35.3 53.2 L36.7 55.4 L38.5 57.6 L42.5 61.6 L45.3 65 L46.9 67.8 L47.7 71 L47.7 73.8 L47.3 76 L46.7 77.8 L45.1 80.8 L42.6 83.5 L40 85.1Z M68 85.7 L65.2 85.5 L63.4 84.5 L61.5 82.6 L59.9 80.2 L58.1 76.2 L54.3 69.4 L50.8 65.5 L48.2 63.3 L45.2 61.5 L42.3 58.6 L40.1 55.4 L38.7 52.6 L37.7 50 L36.5 45 L36.3 43.2 L36.5 37.8 L37.5 34.4 L39.1 31.6 L41.2 29.5 L42.8 28.5 L44 28.1 L46.8 28.1 L47.8 28.5 L48.7 29.4 L49.1 30.4 L49.1 32.6 L47.5 35.6 L42.7 40.6 L41.1 43.2 L40.7 44.6 L40.7 47.2 L41.9 49.8 L44.2 51.9 L48 54.1 L54.6 56.7 L62.8 59.3 L69.4 62.1 L73.4 64.7 L75.1 66.4 L76.7 68.8 L77.5 71.6 L77.5 74.4 L76.9 76.8 L75.9 79.2 L74.3 81.6 L72.2 83.7 L70 85.1Z"/></svg></div>
+      <div class="title">Ru Motion</div>
+      <button class="btn about-btn" id="aboutBtn" type="button" title="About Ru Motion">About</button>
+    </header>
+    <div class="body">
+      <nav class="card nav" id="nav" role="tablist" aria-label="Groups"></nav>
+      <div class="content scroll">
+        <div class="chips" id="chips" role="tablist" aria-label="Features" hidden></div>
+        <section class="card" id="view" aria-live="polite"></section>
+      </div>
+    </div>
+    <div class="btns cutbar" id="cutbar" style="grid-template-columns:repeat(3,1fr);margin-top:12px">
+      <button class="btn" type="button" data-cut="Cut Before" title="Select layer(s), put the playhead in them, click: cuts and removes everything BEFORE the playhead.">Cut Before</button>
+      <button class="btn" type="button" data-cut="Split" title="Select layer(s), put the playhead in them, click: splits each layer at the playhead.">Split</button>
+      <button class="btn" type="button" data-cut="Cut After" title="Select layer(s), put the playhead in them, click: cuts and removes everything AFTER the playhead.">Cut After</button>
+    </div>
+  </main>
+  
+</div>
+<div class="about-ov" id="aboutOv" role="dialog" aria-label="About Ru Motion"><div class="about">
+  <div class="top"><div class="ab-logo"><svg viewBox="0 0 100 100" aria-hidden="true" style="width:100%;height:100%;display:block"><path fill="#fff" d="M37.8 85.7 L35.6 85.7 L34 85.3 L31.8 84.1 L29.3 81.8 L26.3 77.2 L25.1 74.6 L23.9 71 L22.5 63.8 L22.3 55.4 L23.3 48.8 L25.1 42.4 L26.7 38.4 L29.1 33.6 L32.3 28.6 L34.8 25.5 L38.6 21.7 L41.4 19.5 L44.2 17.7 L47.4 16.1 L51 14.9 L53.8 14.3 L59.6 14.1 L63.8 15.1 L65.6 15.9 L68 17.5 L70.9 20.6 L73.1 24.6 L74.1 28 L74.5 30.6 L74.5 35.4 L73.3 41 L72.1 43.8 L70.7 46 L67.2 49.5 L65.2 50.7 L62 51.7 L57 51.7 L53.4 50.9 L49.6 49.3 L46.8 47.3 L45.5 45.8 L44.3 43.6 L44.1 42.8 L44.3 40.4 L44.9 39.4 L46.2 38.5 L49.4 37.7 L55.8 37.5 L57.8 37.1 L60.4 35.7 L61.7 34.2 L62.7 31.2 L62.7 28.2 L62.1 26 L61.1 24.2 L59 22.1 L56.4 20.7 L53.8 20.1 L49.6 20.3 L47 21.1 L43.6 22.9 L41.7 24.4 L37.9 28.6 L36.7 30.4 L34.3 35.6 L33.1 41 L33.1 46.6 L34.1 50.6 L35.3 53.2 L36.7 55.4 L38.5 57.6 L42.5 61.6 L45.3 65 L46.9 67.8 L47.7 71 L47.7 73.8 L47.3 76 L46.7 77.8 L45.1 80.8 L42.6 83.5 L40 85.1Z M68 85.7 L65.2 85.5 L63.4 84.5 L61.5 82.6 L59.9 80.2 L58.1 76.2 L54.3 69.4 L50.8 65.5 L48.2 63.3 L45.2 61.5 L42.3 58.6 L40.1 55.4 L38.7 52.6 L37.7 50 L36.5 45 L36.3 43.2 L36.5 37.8 L37.5 34.4 L39.1 31.6 L41.2 29.5 L42.8 28.5 L44 28.1 L46.8 28.1 L47.8 28.5 L48.7 29.4 L49.1 30.4 L49.1 32.6 L47.5 35.6 L42.7 40.6 L41.1 43.2 L40.7 44.6 L40.7 47.2 L41.9 49.8 L44.2 51.9 L48 54.1 L54.6 56.7 L62.8 59.3 L69.4 62.1 L73.4 64.7 L75.1 66.4 L76.7 68.8 L77.5 71.6 L77.5 74.4 L76.9 76.8 L75.9 79.2 L74.3 81.6 L72.2 83.7 L70 85.1Z"/></svg></div><div><h1>Ru Motion</h1><div class="muted">Version 1.0</div><div class="lab">Motion toolkit for After Effects</div></div></div>
+  <div class="ab-card main"><h2>How it works</h2><p>1&nbsp;&nbsp; Select a layer or layers in your timeline.</p><p>2&nbsp;&nbsp; Click an effect in the panel. It starts at the playhead.</p><p>3&nbsp;&nbsp; Retime the keyframes, or click again to replace it.</p></div>
+  <div class="two"><div class="ab-card"><h2>What's inside</h2><p>&bull;&nbsp; Fades, slides and pops</p><p>&bull;&nbsp; Text effects and typewriters</p><p>&bull;&nbsp; Shapes, camera and easing</p></div>
+  <div class="ab-card"><h2>Good to know</h2><p>&bull;&nbsp; Undo with Ctrl / Cmd + Z</p><p>&bull;&nbsp; Layers are named &ldquo;Ru &hellip;&rdquo;</p><p>&bull;&nbsp; Cut tools sit at the bottom</p></div></div>
+  <div class="credit">Made by Tharindu Lakshan &nbsp;&middot;&nbsp; tlakshan10106@gmail.com</div>
+  <button class="btn go" id="aboutGo" type="button">Get started</button>
+</div></div>
+<div class="toast" id="toast" role="status"></div>
+
+
+<script>
+/* Ru Motion — CEP panel front end.
+   The ExtendScript side (jsx/RuMotion.jsx, loaded in "bridge mode") builds the real panel controls on a window that is never shown
+   and describes every card as JSON. This file draws those cards as HTML and sends edits and clicks back, so every effect is the same
+   code as the ScriptUI panel. */
+(function () {
+  "use strict";
+
+  var ICONS = {
+    "Layers": '<rect x="2.5" y="4" width="13" height="10" rx="3"/><rect x="7.5" y="9" width="13" height="10" rx="3"/>',
+    "Layers & Timing": '<rect x="2.5" y="4" width="13" height="10" rx="3"/><rect x="7.5" y="9" width="13" height="10" rx="3"/>',
+    "Animate": '<path d="M7 4 19 12 7 20z"/>',
+    "Build": '<circle cx="7.5" cy="7.5" r="5.5"/><rect x="10" y="11" width="11" height="10" rx="2"/>',
+    "Quick Actions": '<path d="M13 2 6 12h5l-2 9 7-10h-5z"/>',
+    "Flow": '<path d="M3 20C11 20 9 4 21 4"/>',
+    "Camera": '<rect x="1.5" y="6" width="14" height="12" rx="3"/><path d="M15.5 10 20.5 7v10l-5-3z"/>',
+    "Shapes": '<circle cx="7.5" cy="7.5" r="5.5"/><rect x="10" y="11" width="11" height="10" rx="2"/>',
+    "Animation": '<path d="M7 4 19 12 7 20z"/>',
+    "Transitions": '<path d="M3 8h17M16 4l4 4-4 4M21 16H4M8 12l-4 4 4 4"/>',
+    "Text": '<path d="M4 5h16M12 5v15"/>',
+    "UI Kit": '<rect x="1.5" y="6" width="21" height="12" rx="6"/><circle class="dot" cx="7.5" cy="12" r="3"/>',
+    "Media": '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
+    "Style": '<circle cx="12" cy="12" r="9"/><circle class="dot" cx="9" cy="9" r="2"/><circle class="dot" cx="15" cy="9" r="2"/><circle class="dot" cx="12" cy="15" r="2"/>'
+  };
+
+  var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
+  var FLOW_PRESETS = {
+    linear: [0, 0, 1, 1], easeIn: [.42, 0, 1, 1], easeOut: [0, 0, .58, 1], ease: [.25, .1, .25, 1],
+    sineIn: [.12, 0, .39, 0], sineOut: [.61, 1, .88, 1], sine: [.37, 0, .63, 1],
+    quadIn: [.11, 0, .5, 0], quadOut: [.5, 1, .89, 1], quad: [.45, 0, .55, 1],
+    cubicIn: [.32, 0, .67, 0], cubicOut: [.33, 1, .68, 1], cubic: [.66, 0, .34, 1],
+    quartIn: [.5, 0, .75, 0], quartOut: [.25, 1, .5, 1], quart: [.76, 0, .24, 1],
+    quintIn: [.64, 0, .78, 0], quintOut: [.22, 1, .36, 1], quint: [.83, 0, .17, 1],
+    expoIn: [.7, 0, .84, 0], expoOut: [.16, 1, .3, 1], expo: [.87, 0, .13, 1],
+    circIn: [.55, 0, 1, .45], circOut: [0, .55, .45, 1], circ: [.85, 0, .15, 1],
+    backIn: [.36, 0, .66, -.56], backOut: [.34, 1.56, .64, 1], back: [.68, -.6, .32, 1.6]
+  };
+
+  var root = document.documentElement;
+  root.setAttribute("data-theme", "dark");
+
+  // ---------- helpers ----------
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (k.slice(0, 2) === "on") n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  var toastEl = document.getElementById("toast"), toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2200);
+  }
+  function store(k, d) { try { var v = localStorage.getItem("ru:" + k); return v === null ? d : v; } catch (e) { return d; } }
+  function put(k, v) { try { localStorage.setItem("ru:" + k, v); } catch (e) {} }
+
+  // ---------- talking to After Effects ----------
+  var cep = window.__adobe_cep__;
+  function esc(s) {   // a JS string literal that survives evalScript (ASCII only)
+    return '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n")
+      .replace(/[\u0080-￿]/g, function (c) { return "\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4); }) + '"';
+  }
+  function ev(script, cb) {
+    if (!cep) { cb("EvalScript error: not running inside After Effects"); return; }
+    try { cep.evalScript(script, function (r) { cb(r); }); } catch (e) { cb("EvalScript error: " + e); }
+  }
+  function extFolder() {
+    var u = decodeURI(cep.getSystemPath("extension")).replace(/^file:\/\//, "");
+    if (/^\/[A-Za-z]:/.test(u)) u = u.slice(1);
+    return u;
+  }
+  function loadHost(done) {
+    if (!cep) { done(false, "This panel only runs inside After Effects."); return; }
+    var code = "(function(){ try { if ($.global.RuBridge) { return 'ok'; } $.global.RuMotionBridge = true;" +
+      " $.evalFile(new File(" + esc(extFolder() + "/jsx/RuMotion.jsx") + ")); $.global.RuMotionBridge = false;" +
+      " return $.global.RuBridge ? 'ok' : 'The script loaded but did not start.'; } catch (e) { $.global.RuMotionBridge = false; return 'Error: ' + e + (e.line ? ' (line ' + e.line + ')' : ''); } })()";
+    ev(code, function (r) { done(r === "ok", r); });
+  }
+  function bridge(call, cb) { ev("$.global.RuBridge." + call, function (r) { cb(r); }); }
+
+  // ---------- rendering the described cards ----------
+  var ctlMap = {};   // control id -> { item, node }
+  var curFeature = -1;
+
+  function isHex(v) { return /^#[0-9a-fA-F]{6}$/.test(String(v)); }
+
+  function sendSet(item, value, after) {
+    bridge("set(" + item.id + "," + esc(value) + ")", function (r) {
+      if (r !== "ok") { toast(String(r).slice(0, 120)); }
+      refresh(); if (after) after();
+    });
+  }
+
+  function makeItem(item, ctx) {
+    var n, k;
+    if (item.k === "f") {
+      n = el("input", { type: "text", value: item.v, title: item.tip || "", "aria-label": item.label || "value" });
+      n.style.width = (String(item.v).length > 12 ? "100%" : String(item.v).length <= 5 && ctx.small ? "60px" : "72px");
+      if (isHex(item.v)) { n.style.width = "84px"; }
+      n.addEventListener("change", function () { sendSet(item, n.value); });
+      n.addEventListener("keydown", function (e) { if (e.key === "Enter") { n.blur(); } });
+      ctlMap[item.id] = { item: item, node: n };
+      if (isHex(item.v)) {
+        var sw = el("input", { type: "color", value: item.v, class: "swatch", title: "Choose a color", style: "padding:0;border:0;background:none;width:30px;height:24px;cursor:pointer" });
+        sw.addEventListener("change", function () { n.value = sw.value.toUpperCase(); sendSet(item, n.value); });
+        ctx.hex = true;
+        ctlMap[item.id].swatch = sw;
+        return [sw, n];
+      }
+      return [n];
+    }
+    if (item.k === "d") {
+      n = el("select", { title: item.tip || "", "aria-label": item.label || "choice" });
+      item.items.forEach(function (t, i) { var o = el("option", { value: String(i), text: t }); if (i === item.sel) o.selected = true; n.appendChild(o); });
+      n.addEventListener("change", function () { sendSet(item, n.value); });
+      ctlMap[item.id] = { item: item, node: n };
+      return [n];
+    }
+    if (item.k === "t") {
+      n = el("button", { class: "toggle", type: "button", role: "switch", "aria-checked": String(!!item.v), title: item.tip || "" },
+        [el("span", { class: "track", "aria-hidden": "true" }), el("span", { text: item.text })]);
+      n.addEventListener("click", function () { sendSet(item, n.getAttribute("aria-checked") !== "true"); });
+      ctlMap[item.id] = { item: item, node: n };
+      return [n];
+    }
+    // button
+    k = item.text;
+    if (ctx.flow && FLOW_PRESETS[k]) {
+      var cv = el("canvas", { width: 80, height: 76 });
+      n = el("button", { class: "flow-tile", type: "button", "aria-pressed": String(item.v === "primary"), title: k }, [cv, el("span", { text: k })]);
+      drawCurve(cv, FLOW_PRESETS[k], false);
+      n.addEventListener("click", function () { press(item, n); });
+      ctlMap[item.id] = { item: item, node: n };
+      return [n];
+    }
+    if (ctx.hexRow && /^Pick/.test(k)) { return []; }   // the colour swatch replaces the Pick… button
+    n = el("button", { class: "btn" + (item.v === "primary" ? " primary" : ""), type: "button", text: item.text, title: item.tip || "" });
+    n.addEventListener("click", function () { press(item, n); });
+    ctlMap[item.id] = { item: item, node: n };
+    return [n];
+  }
+
+  function press(item, node) {
+    node.classList.add("busy");
+    bridge("click(" + item.id + ")", function (r) {
+      node.classList.remove("busy");
+      toast(r === "ok" ? (item.text + " — done.") : String(r).slice(0, 140));
+      refresh();
+    });
+  }
+
+  function drawCurve(canvas, c, big) {
+    var d = window.devicePixelRatio || 1, w = canvas.clientWidth || canvas.width, h = canvas.clientHeight || canvas.height;
+    if (big) { canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); }
+    var g = canvas.getContext("2d"), W = canvas.width, H = canvas.height;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
+    var pad = W * 0.14, x0 = pad, x1 = W - pad, y0 = H * 0.78, y1 = H * 0.18, i, t, u, px, py;
+    var color = getComputedStyle(root).getPropertyValue("--text").trim() || "#fff";
+    g.strokeStyle = "rgba(150,150,160,.5)"; g.lineWidth = Math.max(1, W / 80);
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    g.strokeStyle = color; g.lineWidth = Math.max(2, W / 40); g.lineCap = "round"; g.beginPath();
+    for (i = 0; i <= 28; i++) {
+      t = i / 28; u = 1 - t;
+      px = 3 * u * u * t * c[0] + 3 * u * t * t * c[2] + t * t * t;
+      py = 3 * u * u * t * c[1] + 3 * u * t * t * c[3] + t * t * t;
+      if (i === 0) g.moveTo(x0 + px * (x1 - x0), y0 + py * (y1 - y0)); else g.lineTo(x0 + px * (x1 - x0), y0 + py * (y1 - y0));
+    }
+    g.stroke();
+  }
+
+  function renderKids(card, parent, ctx) {
+    card.kids.forEach(function (k) {
+      if (k.t === "hint") { parent.appendChild(el("p", { class: "hint", text: k.text })); return; }
+      if (k.t === "card") {
+        var sub = el("div", { class: "card" }, [el("h3", { text: k.card.title })]);
+        var c2 = { flow: ctx.flow };
+        renderKids(k.card, sub, c2);
+        parent.appendChild(sub);
+        return;
+      }
+      if (k.t === "btns") {
+        var g = el("div", { class: "btns" + (k.items.length === 1 ? " one" : "") });
+        if (k.items.length > 2 && k.items.length <= 4) { g.style.gridTemplateColumns = "repeat(" + k.items.length + ", 1fr)"; }
+        k.items.forEach(function (it) { makeItem(it, ctx).forEach(function (n) { g.appendChild(n); }); });
+        parent.appendChild(g);
+        return;
+      }
+      // row
+      var items = k.items, first = items[0];
+      if (items.length === 1 && first.k === "t") { parent.appendChild(makeItem(first, ctx)[0]); return; }
+      if (items.length === 1 && first.k === "b") {
+        parent.appendChild(el("div", { class: "btns one" }, makeItem(first, ctx)));
+        return;
+      }
+      var flowGrid = ctx.flow && items.length > 1 && items.every(function (it) { return it.k === "b" && FLOW_PRESETS[it.text]; });
+      if (flowGrid) {
+        var gr = el("div", { class: "flow-grid" });
+        items.forEach(function (it) { makeItem(it, ctx).forEach(function (n) { gr.appendChild(n); }); });
+        parent.appendChild(gr);
+        return;
+      }
+      var fields = items.filter(function (it) { return it.k === "f"; });
+      if (ctx.flow && fields.length === 4 && /Curve/.test(first.label || "")) {
+        var cv = el("canvas", { class: "flow-graph", "aria-label": "Easing curve" });
+        parent.appendChild(cv);
+        ctx.graph = { canvas: cv, ids: fields.map(function (f) { return f.id; }) };
+      }
+      if (items.length > 1 && items.every(function (it) { return it.k === "b"; }) && !first.label) {
+        var bg = el("div", { class: "btns" });
+        bg.style.gridTemplateColumns = "repeat(" + items.length + ", 1fr)";
+        items.forEach(function (it) { makeItem(it, ctx).forEach(function (n) { bg.appendChild(n); }); });
+        parent.appendChild(bg);
+        return;
+      }
+      var hexRow = items.some(function (it) { return it.k === "f" && isHex(it.v); });
+      var ctl = el("div", { class: "ctl" });
+      var rctx = { flow: ctx.flow, hexRow: hexRow, small: fields.length >= 3 };
+      items.forEach(function (it, i) {
+        if (i > 0 && it.label) { ctl.appendChild(el("span", { class: "lbl", text: it.label, style: "color:var(--label);font-size:12px" })); }
+        makeItem(it, rctx).forEach(function (n) { ctl.appendChild(n); });
+      });
+      if (!ctl.childNodes.length) { return; }
+      if (!first.label) {
+        [].forEach.call(ctl.querySelectorAll(".btn"), function (b) { b.style.width = "auto"; b.style.padding = "0 14px"; b.style.whiteSpace = "nowrap"; });
+        [].forEach.call(ctl.querySelectorAll("input[type=text]"), function (n) { n.style.flex = "none"; });
+        var wide = el("div", { class: "row" }, [ctl]);
+        wide.style.gridTemplateColumns = "1fr";
+        parent.appendChild(wide);
+        return;
+      }
+      parent.appendChild(el("div", { class: "row" }, [el("span", { class: "lbl", text: first.label || "" }), ctl]));
+    });
+  }
+
+  var view = document.getElementById("view"), chips = document.getElementById("chips"), nav = document.getElementById("nav");
+  var graphRef = null;
+
+  function showFeature(i) {
+    curFeature = i;
+    bridge("feature(" + i + ")", function (r) {
+      var data;
+      try { data = JSON.parse(r); } catch (e) { data = null; }
+      view.innerHTML = ""; ctlMap = {}; graphRef = null;
+      if (!data) { view.appendChild(el("p", { class: "hint", text: "Could not read this card from After Effects: " + String(r).slice(0, 160) })); return; }
+      view.appendChild(el("h2", { text: data.title }));
+      var ctx = { flow: data.title === "Easing curves" };
+      renderKids(data, view, ctx);
+      if (ctx.graph) { graphRef = ctx.graph; drawGraph(); }
+      put("feature", META.features[i].name);
+    });
+  }
+
+  function drawGraph() {
+    if (!graphRef) return;
+    var v = graphRef.ids.map(function (id) { var m = ctlMap[id]; return m ? parseFloat(m.node.value) : 0; });
+    if (v.some(isNaN)) return;
+    drawCurve(graphRef.canvas, v, true);
+  }
+
+  // after a click or an edit, pull the current values back so clamped numbers, flipped toggles and new button states show
+  var refreshing = false, again = false;
+  function refresh() {
+    if (curFeature < 0) return;
+    if (refreshing) { again = true; return; }
+    refreshing = true;
+    bridge("feature(" + curFeature + ")", function (r) {
+      refreshing = false;
+      var data; try { data = JSON.parse(r); } catch (e) { return; }
+      (function walk(card) {
+        card.kids.forEach(function (k) {
+          if (k.t === "card") { walk(k.card); return; }
+          (k.items || []).forEach(function (it) {
+            var m = ctlMap[it.id]; if (!m) return;
+            if (it.k === "f") { if (document.activeElement !== m.node) { m.node.value = it.v; } if (m.swatch && isHex(it.v)) m.swatch.value = it.v; }
+            else if (it.k === "d") { m.node.value = String(it.sel); }
+            else if (it.k === "t") { m.node.setAttribute("aria-checked", String(!!it.v)); }
+            else if (it.k === "b") {
+              if (m.node.classList.contains("flow-tile")) { m.node.setAttribute("aria-pressed", String(it.v === "primary")); }
+              else { m.node.classList.toggle("primary", it.v === "primary"); if (m.node.textContent !== it.text) m.node.textContent = it.text; }
+            }
+          });
+        });
+      })(data);
+      drawGraph();
+      if (again) { again = false; refresh(); }
+    });
+  }
+
+  // ---------- tabs and chips ----------
+  var META = null, groups = [], curGroup = "";
+  function rank(list, n) { var i = list.indexOf(n); return i < 0 ? list.length : i; }
+  function featuresOf(g) { return META.features.filter(function (f) { return f.group === g; }); }
+
+  function pick(g, featName) {
+    curGroup = g;
+    var all = featuresOf(g), list = all.filter(function (x) { return !x.parent; });
+    var f = all.filter(function (x) { return x.name === featName; })[0] || list[0];
+    var top = f.parent || f.name, kids = all.filter(function (x) { return x.parent === top; });
+    [].forEach.call(nav.children, function (t) { t.setAttribute("aria-selected", String(t.dataset.group === g)); });
+    chips.innerHTML = "";
+    chips.hidden = list.length <= 1 && g !== "Text";
+    if (!chips.hidden) {
+      list.forEach(function (x) {
+        chips.appendChild(el("button", { class: "chip", type: "button", role: "tab", text: x.name, title: x.name, "aria-selected": String(x.name === top), onclick: function () { pick(g, x.name); } }));
+      });
+      if (kids.length) {
+        var sub = el("div", { class: "chips", style: "grid-column:1/-1;margin-top:4px;padding-top:10px;border-top:1px solid var(--hairline)" });
+        [top].concat(kids.map(function (k) { return k.name; })).forEach(function (nm) {
+          sub.appendChild(el("button", { class: "chip", type: "button", role: "tab", text: nm, title: nm, "aria-selected": String(nm === f.name), onclick: function () { pick(g, nm); } }));
+        });
+        chips.appendChild(sub);
+      }
+    }
+    showFeature(f.i);
+  }
+
+  function start() {
+    var labels = { "Layers & Timing": "Layers" };
+    META.features.forEach(function (f) { if (groups.indexOf(f.group) < 0) groups.push(f.group); });
+    groups.sort(function (a, b) { return rank(GROUP_ORDER, a) - rank(GROUP_ORDER, b); });
+    groups.forEach(function (g) {
+      nav.appendChild(el("button", {
+        class: "tab", type: "button", role: "tab", "aria-selected": "false", title: g,
+        onclick: function () { pick(g, ""); }
+      }));
+      var t = nav.lastChild;
+      t.dataset.group = g;
+      t.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[g] || "") + "</svg><span>" + (labels[g] || g) + "</span>";
+    });
+    pick(groups[0], "");
+  }
+
+  [].forEach.call(document.querySelectorAll("#cutbar .btn"), function (b, n) {
+    b.addEventListener("click", function () {
+      bridge("cut(" + n + ")", function (r) { toast(r === "ok" ? b.getAttribute("data-cut") + " applied at the playhead." : String(r).slice(0, 140)); });
+    });
+  });
+
+  // ---------- About: once on the first run, then from the About button ----------
+  (function () {
+    var ov = document.getElementById("aboutOv");
+    function show() { ov.classList.add("show"); }
+    function hide() { ov.classList.remove("show"); }
+    document.getElementById("aboutBtn").addEventListener("click", show);
+    document.getElementById("aboutGo").addEventListener("click", hide);
+    ov.addEventListener("click", function (e) { if (e.target === ov) { hide(); } });
+    if (store("about_seen", "") !== "1") { put("about_seen", "1"); show(); }
+  })();
+
+  // ---------- go ----------
+  view.appendChild(el("p", { class: "hint", text: "Starting Ru Motion…" }));
+  loadHost(function (ok, msg) {
+    if (!ok) { view.innerHTML = ""; view.appendChild(el("p", { class: "hint", text: String(msg) })); return; }
+    bridge("meta()", function (r) {
+      try { META = JSON.parse(r); } catch (e) { view.innerHTML = ""; view.appendChild(el("p", { class: "hint", text: "Could not start: " + String(r).slice(0, 200) })); return; }
+      start();
+    });
+  });
+  window.addEventListener("resize", drawGraph);
+})();
+
+</script>
+</body>
+</html>

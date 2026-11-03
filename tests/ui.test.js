@@ -1001,3 +1001,23 @@ function buildTextIcon(sentence, atIndex, opts) {
   $g.global.RuMotionEager = prev;
   console.log(`lazy cards: ${first} built at start, ${after} after opening Camera -> ${first <= 2 && after === first + 1 ? 'OK' : 'WRONG'}`);
 }
+
+// CEP bridge: loaded with RuMotionBridge the panel is built but not shown; RuBridge describes every card as JSON and drives the controls
+{
+  const prevB = $g.global.RuMotionBridge, prevW = windowsMade; $g.global.RuMotionBridge = true;
+  const shown = [];
+  const rootB = Object.assign(new Panel(), el('panel', 'rootB'));
+  run(...Object.values(g), rootB);
+  $g.global.RuMotionBridge = prevB;
+  const B = $g.global.RuBridge;
+  const meta = JSON.parse(B.meta());
+  const feats = meta.features.map(f => JSON.parse(B.feature(f.i)));
+  const countKinds = {}; const tally = c => c.kids.forEach(k => { if (k.t === 'card') tally(k.card); else if (k.items) k.items.forEach(i => { countKinds[i.k] = (countKinds[i.k] || 0) + 1; }); else countKinds[k.t] = (countKinds[k.t] || 0) + 1; }); feats.forEach(tally);
+  // find the Bounce % field in Quick and write to it; press Fade In
+  let fld = null, btnFade = null;
+  (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => { if (i.k === 'f' && /Bounce \(%\)/.test(i.label)) fld = i; if (i.k === 'b' && i.text === 'Fade In') btnFade = i; }); }); })(feats[meta.features.findIndex(f => f.name === 'Quick')]);
+  const okSet = fld && B.set(fld.id, '15') === 'ok' && B.feature(meta.features.findIndex(f => f.name === 'Quick')).indexOf('"v":"15"') > 0;
+  const okClick = btnFade && B.click(btnFade.id) === 'ok';
+  console.log(`cep bridge: ${meta.features.length} features, kinds ${JSON.stringify(countKinds)}, set ${!!okSet}, click ${!!okClick}`);
+  require('fs').writeFileSync(process.env.RU_FIXTURE || '/tmp/ru_fixture.json', JSON.stringify({ meta, feats }));
+}

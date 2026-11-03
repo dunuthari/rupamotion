@@ -7,7 +7,8 @@
     "build": "node build.js",
     "lint": "eslint --no-eslintrc -c .eslintrc.json dist/RuMotion.jsx",
     "test": "node tests/ui.test.js",
-    "check": "npm run build && npm run lint && npm run test"
+    "check": "npm run build && npm run lint && npm run test",
+    "cep": "node cep/build.js"
   },
   "devDependencies": {
     "eslint": "8.57.0"

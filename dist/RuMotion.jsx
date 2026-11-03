@@ -17167,7 +17167,7 @@
             hookDrag(p.wrap);
         }
         var eager = false;
-        try { eager = ($.global.RuMotionEager === true); } catch (eE) {}
+        try { eager = ($.global.RuMotionEager === true || $.global.RuMotionBridge === true); } catch (eE) {}
         if (eager) { for (i = 0; i < FEATURES.length; i++) { ensureBuilt(FEATURES[i]); } }
 
         // ---- fixed bar at the bottom of the panel: Cut Left / Cut / Cut Right (visible in every group) ----
@@ -17307,6 +17307,128 @@
         return curGroup;
     }
 
+
+    // ---------------- CEP bridge ----------------
+    // When the script is loaded by the CEP panel ($.global.RuMotionBridge === true) the ScriptUI panel is built on a window that is
+    // never shown, and the HTML panel drives it: meta() lists the features, feature(i) describes one card as JSON (built from the real
+    // controls, so the HTML can never drift), set() writes a value into a control, click() presses a button.
+
+    function jstr(v) {
+        var t = typeof v, i, out, k, first;
+        if (v === null || v === undefined) { return "null"; }
+        if (t === "number") { return isFinite(v) ? String(v) : "null"; }
+        if (t === "boolean") { return v ? "true" : "false"; }
+        if (t === "string") {
+            out = '"';
+            for (i = 0; i < v.length; i++) {
+                var ch = v.charAt(i), cc = v.charCodeAt(i);
+                if (ch === '"') { out += '\\"'; }
+                else if (ch === "\\") { out += "\\\\"; }
+                else if (cc < 32 || cc > 126) { var hx = cc.toString(16); while (hx.length < 4) { hx = "0" + hx; } out += "\\u" + hx; }
+                else { out += ch; }
+            }
+            return out + '"';
+        }
+        if (v instanceof Array) {
+            out = "[";
+            for (i = 0; i < v.length; i++) { out += (i ? "," : "") + jstr(v[i]); }
+            return out + "]";
+        }
+        out = "{"; first = true;
+        for (k in v) {
+            if (v.hasOwnProperty(k)) { out += (first ? "" : ",") + jstr(k) + ":" + jstr(v[k]); first = false; }
+        }
+        return out + "}";
+    }
+
+    var BR = { ctl: [] };
+
+    function brId(c) {
+        if (c.ruId === undefined) { c.ruId = BR.ctl.length; BR.ctl.push(c); }
+        return c.ruId;
+    }
+
+    function brItem(c, label) {
+        var t = c.type, its = [], i;
+        if (t === "edittext") { return { k: "f", id: brId(c), label: label, v: c.text, tip: c.helpTip || "" }; }
+        if (t === "dropdownlist") {
+            for (i = 0; i < c.items.length; i++) { its.push(c.items[i].text); }
+            return { k: "d", id: brId(c), label: label, items: its, sel: c.selection ? c.selection.index : 0, tip: c.helpTip || "" };
+        }
+        if (t === "button") {
+            if (c.isSwatch) { return null; }
+            if (typeof c.value === "boolean") { return { k: "t", id: brId(c), text: c.text, v: c.value, tip: c.helpTip || "" }; }
+            return { k: "b", id: brId(c), text: c.text, v: c.variant || "secondary", tip: c.helpTip || "" };
+        }
+        return null;
+    }
+
+    // flatten a plain group (row, button row, ...) into its controls; a label statictext belongs to the next control
+    function brLeaves(g, items, st) {
+        var k, c, it;
+        for (k = 0; k < g.children.length; k++) {
+            c = g.children[k];
+            if (c.type === "statictext") { st.label = c.text; continue; }
+            if (c.type === "group") { brLeaves(c, items, st); continue; }
+            it = brItem(c, st.label);
+            if (it) { items.push(it); st.label = ""; }
+        }
+    }
+
+    function brCard(g) {
+        var out = { title: g.cardTitle || "", kids: [] }, k, c, items, st, it;
+        for (k = 0; k < g.children.length; k++) {
+            c = g.children[k];
+            if (c.type === "statictext") {
+                if (!(k === 0 && g.cardTitle && c.text === g.cardTitle)) { out.kids.push({ t: "hint", text: c.text }); }
+                continue;
+            }
+            if (c.type === "group") {
+                if (c.cardTitle !== undefined && c.cardLevel !== undefined) { out.kids.push({ t: "card", card: brCard(c) }); continue; }
+                items = []; st = { label: "" };
+                brLeaves(c, items, st);
+                if (items.length) { out.kids.push({ t: c.isBtnRow ? "btns" : "row", items: items }); }
+                continue;
+            }
+            it = brItem(c, "");
+            if (it) { out.kids.push({ t: "row", items: [it] }); }
+        }
+        return out;
+    }
+
+    function exposeBridge() {
+        var cutFns = [["Cut Before", doCutLeft], ["Split", doCutSplit], ["Cut After", doCutRight]];
+        $.global.RuBridge = {
+            meta: function () {
+                var a = [], i;
+                for (i = 0; i < FEATURES.length; i++) { a.push({ i: i, group: FEATURES[i].group, name: FEATURES[i].name, parent: FEATURES[i].parent }); }
+                return jstr({ name: NAME, features: a });
+            },
+            feature: function (i) {
+                var f = FEATURES[i], c;
+                if (!f || !f.panel) { return "null"; }
+                c = brCard(f.panel);
+                c.title = f.name;
+                return jstr(c);
+            },
+            set: function (id, value) {
+                try {
+                    var c = BR.ctl[id];
+                    if (c.type === "edittext") { c.text = String(value); if (c.onChange) { c.onChange(); } }
+                    else if (c.type === "dropdownlist") { c.selection = Number(value); if (c.onChange) { c.onChange(); } }
+                    else if (typeof c.value === "boolean") { c.value = (String(value) === "true"); if (c.onToggle) { c.onToggle(); } }
+                    return "ok";
+                } catch (e) { return "err: " + e; }
+            },
+            click: function (id) {
+                try { BR.ctl[id].onClick(); return "ok"; } catch (e) { return "err: " + e; }
+            },
+            cut: function (n) {
+                try { var c = cutFns[n]; run(c[0], c[1]); return "ok"; } catch (e) { return "err: " + e; }
+            }
+        };
+    }
+
     function buildUI(thisObj) {
         var win = (thisObj instanceof Panel) ? thisObj : new Window("palette", NAME, undefined, { resizeable: true });
         buildContent(win);
@@ -17325,6 +17447,12 @@
     }
 
     var ui = buildUI(thisObj);
+    var bridgeMode = false;
+    try { bridgeMode = ($.global.RuMotionBridge === true); } catch (eBm) {}
+    if (bridgeMode) {
+        exposeBridge();      // the CEP panel draws the interface; this window is never shown
+        return;
+    }
     if (ui instanceof Window) {
         ui.center();
         ui.show();
