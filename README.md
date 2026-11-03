@@ -1,12 +1,12 @@
-# Rupa Motion
+# Ru Motion
 
 Google Vids–style motion toolkit for Adobe After Effects (ScriptUI panel).
 
 ## Install the panel
-1. Copy `dist/RupaMotion.jsx` into the **ScriptUI Panels** folder:
+1. Copy `dist/RuMotion.jsx` into the **ScriptUI Panels** folder:
    - Windows: `C:\Program Files\Adobe\Adobe After Effects <version>\Support Files\Scripts\ScriptUI Panels\`
    - macOS: `/Applications/Adobe After Effects <version>/Scripts/ScriptUI Panels/`
-2. Restart After Effects → **Window › RupaMotion.jsx**.
+2. Restart After Effects → **Window › RuMotion.jsx**.
 
 ## Develop
 ```bash

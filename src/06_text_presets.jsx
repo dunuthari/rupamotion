@@ -2,7 +2,7 @@
     // =====================================================================
     // TEXT GROUP — animation presets (.ffx) embedded in the script
     // =====================================================================
-    // build.js fills this from presets/text/*.ffx (base64), so dist/RupaMotion.jsx stays the only file to install.
+    // build.js fills this from presets/text/*.ffx (base64), so dist/RuMotion.jsx stays the only file to install.
     var TEXT_PRESETS = /*__TEXT_PRESETS__*/ [];
 
     var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -40,7 +40,7 @@
         var preset = TEXT_PRESETS[idx], safe = preset.name.replace(/[^A-Za-z0-9_-]+/g, "_");
         var f = PRESET_FILES[idx] ? new File(PRESET_FILES[idx]) : null;
         if (!f || !f.exists) {          // decode + write once per session; later clicks only apply the file
-            f = new File(Folder.temp.fsName + "/RupaMotion_" + safe + ".ffx");
+            f = new File(Folder.temp.fsName + "/RuMotion_" + safe + ".ffx");
             f.encoding = "BINARY";
             if (!f.open("w")) { alert("Couldn't write the preset to the temp folder.", NAME); return; }
             f.write(b64decode(preset.data));

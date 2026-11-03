@@ -1,18 +1,18 @@
-# Rupa Motion — project guide for Claude Code
+# Ru Motion — project guide for Claude Code
 
-Rupa Motion (Rupa · රූප · "image, visual") is a dockable **ScriptUI panel for Adobe After Effects**
+Ru Motion (Ru · රූ · "form, image" — short for රූප / Rupa; the plugin was called Rupa Motion before) is a dockable **ScriptUI panel for Adobe After Effects**
 that builds Google Vids–style SaaS motion: shape morphs, pops, slides, cut transitions, kinetic text,
 UI-kit elements, camera parallax and a live, toggleable bounce.
 
 ## Commands
 - `npm install` — once (installs ESLint for the lint step)
-- `npm run build` — concatenates `src/*.jsx` → `dist/RupaMotion.jsx` and syntax-checks it
+- `npm run build` — concatenates `src/*.jsx` → `dist/RuMotion.jsx` and syntax-checks it
 - `npm run lint` — ESLint (ES5 parser, `no-undef`) on the built file
 - `npm run test` — mock-ScriptUI smoke test: builds the panel, runs every custom draw routine,
   clicks every tab/chip/button with no comp open, checks nothing throws
 - `npm run check` — all three. **Run this after every change.**
 
-`dist/RupaMotion.jsx` is the only file the user installs. Never hand-edit it; edit `src/` and rebuild.
+`dist/RuMotion.jsx` is the only file the user installs. Never hand-edit it; edit `src/` and rebuild.
 
 ## Source layout (one IIFE split across files, joined in name order)
 | File | Contents |
@@ -82,7 +82,7 @@ Star Swipe is registered as a child of Text + Icon: `feature(group, name, build,
 **Text + Icon panel preview**: the AE panel itself shows a picture of the finished line (`drawTiStage`, on an empty leaf group; words, icon slot and sparkle laid out with `tiLayout`/`TI`, scaled to fit, redrawn when the sentence, icon position, size, gap or colours change). Star Swipe has the same kind of stage (`drawSsStage`): the sweep frozen at 50%, with sentence 2 drawn letter by letter behind the star, sentence 1 ahead of it, the glow slices and the star (no clipping in ScriptUI, so letters are drawn individually from `approxWidth`). Both stages are static; the animated replay exists only in the browser `preview/`. `colorChooser` returns `{get, onChange}` so a card can redraw when a colour changes.
 The Text group has a sub-group chip row (`SUBGROUP_CHIPS`); the `.ffx` presets live in the **Motion** sub-group. More sub-groups can be added as extra `feature("Text", ...)`.
 The old built-in text effects were removed on purpose. Text animations are `.ffx` presets: put them in `presets/text/` and run
-`npm run build`; each becomes a button (file name = label). They are embedded in `dist/RupaMotion.jsx`, which stays the only file to install.
+`npm run build`; each becomes a button (file name = label). They are embedded in `dist/RuMotion.jsx`, which stays the only file to install.
 Shipped byte for byte, never edit them. Set 1: 1by1, bounce_text, Bouncing_Text_HQ, Bouncy__Color_FadeOut_HQ, character_down.
 Set 2: Snapping_Text_HQ, character_right, Color_FadeOut_HQ, SNAP_TEXT_2, SNAP_TEXT. Set 3: word_down, word_right. Set 4: SaaS_Text_Preset_3, SaaS_Text_Preset_4, SaaS_Text_Preset_5, gg_MotionTypeLite. (trix_bounce, gg_MotionType, SaaS_Text_Preset_1 and _2 were removed on request.) `npm run build` also rewrites the Text buttons in
 `preview/index.html` (between the `TEXT_PRESET_BUTTONS` markers), so don't edit that block by hand.

@@ -1,5 +1,5 @@
 const fs = require('fs');
-const src = fs.readFileSync(require('path').join(__dirname, '..', 'dist', 'RupaMotion.jsx'), 'utf8');
+const src = fs.readFileSync(require('path').join(__dirname, '..', 'dist', 'RuMotion.jsx'), 'utf8');
 let drawCalls = 0, strings = [];
 function gfx() {
   return {
@@ -362,7 +362,7 @@ function runSwipe(arrow, mutate) {
 // Text presets: .ffx files in a presets folder are embedded by build.js, show up as buttons, and are written back byte for byte
 {
   const os = require('os'), path = require('path'), { build } = require('../build.js');
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rupa-ffx-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ru-ffx-'));
   fs.mkdirSync(path.join(tmp, 'presets'));
   const bytes = n => Buffer.from(Array.from({ length: n }, (_, i) => (i * 37 + (i >> 3) + 11) & 255));   // every byte value, incl. 0 and 255
   const samples = { 'Fade-Up.ffx': bytes(3000), 'slide_in.ffx': bytes(1001), 'pop.ffx': bytes(1002), 'tiny.ffx': bytes(1) };

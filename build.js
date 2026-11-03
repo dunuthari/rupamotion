@@ -1,4 +1,4 @@
-// Concatenates src/*.jsx (in file-name order) into dist/RupaMotion.jsx.
+// Concatenates src/*.jsx (in file-name order) into dist/RuMotion.jsx.
 // The source files are slices of ONE ExtendScript IIFE: 01_core opens it, 07_ui closes it.
 // presets/text/*.ffx are embedded (base64) into TEXT_PRESETS, so the built file is still the only thing to install.
 const fs = require("fs");
@@ -23,7 +23,7 @@ function presetLiteral(dir) {
 function build(opts) {
   opts = opts || {};
   const srcDir = opts.srcDir || path.join(__dirname, "src");
-  const out = opts.out || path.join(__dirname, "dist", "RupaMotion.jsx");
+  const out = opts.out || path.join(__dirname, "dist", "RuMotion.jsx");
   const presetsDir = opts.presetsDir || path.join(__dirname, "presets", "text");
   const files = fs.readdirSync(srcDir).filter((f) => f.endsWith(".jsx")).sort();
   const presets = presetLiteral(presetsDir);

@@ -1699,7 +1699,7 @@
         head.alignChildren = ["left", "center"];
         head.spacing = 8;
         logo(head);
-        var title = head.add("statictext", undefined, "Rupa Motion");
+        var title = head.add("statictext", undefined, "Ru Motion");
         setFont(title, "BOLD", 15);
         if (!CLASSIC) { setFg(title, DS.text); }
         var spacer = head.add("group");

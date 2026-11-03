@@ -1,13 +1,13 @@
 /*
-    Rupa Motion v1.0 — Google Vids–style motion toolkit for After Effects
-    (Rupa · රූප · "image, visual")
+    Ru Motion v1.0 — Google Vids–style motion toolkit for After Effects
+    (Ru · රූ · "form, image" — short for රූප, Rupa)
     ---------------------------------------------------------------------
     A dockable ScriptUI panel.
 
     Install:
       Windows: C:\Program Files\Adobe\Adobe After Effects <version>\Support Files\Scripts\ScriptUI Panels\
       macOS:   /Applications/Adobe After Effects <version>/Scripts/ScriptUI Panels/
-      Restart After Effects, then open Window > RupaMotion.jsx
+      Restart After Effects, then open Window > RuMotion.jsx
 
     Groups:  Layers · Quick Actions · Flow · Camera · Shapes · Animation · Transitions · Text · UI Kit · Media · Style
 
@@ -16,7 +16,7 @@
 
 (function MotionKit(thisObj) {
 
-    var NAME = "Rupa Motion";
+    var NAME = "Ru Motion";
     var SET = "MotionKit_v1";
     var FX_B = "MK Bounce";
     var FX_BS = "MK Bounce Strength";
