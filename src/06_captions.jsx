@@ -26,7 +26,6 @@
     var CAP_OUT = [["None", "none"], ["Fade", "fade"], ["Slide down", "slidedown"], ["Blur out", "blur"], ["Pop out", "pop"]];
     var CAP_EASE = ["Expo out", "Smooth", "Linear"];
     var CAP_MODELS = ["tiny.en", "base.en", "small.en", "medium.en"];
-    var CAP_MODELS_MULTI = ["tiny", "base", "small", "medium"];   // Sinhala and every other language: the multilingual models
     var CAP_SINHALA_FONTS = ["NotoSansSinhala-Bold", "NirmalaUI-Bold", "NirmalaUI", "IskoolaPota", "SinhalaSangamMN-Bold", "SinhalaMN-Bold", "SinhalaMN"];
 
     function capLabels(list, col) {
@@ -87,11 +86,8 @@
         };
     }
 
-    // the model name for a language, from the Accuracy choice (the panel downloads it)
-    function captionModelFor(lang) {
-        var i = capIdx(CAP.model, 1);
-        return ((lang === "en" || !lang) ? CAP_MODELS : CAP_MODELS_MULTI)[i] || ((lang === "en" || !lang) ? "base.en" : "base");
-    }
+    // the English model name from the Accuracy choice (Sinhala uses its own single model file, see cep/transcribe.js)
+    function captionModelFor() { return CAP_MODELS[capIdx(CAP.model, 1)] || "base.en"; }
 
     // a font that has Sinhala letters: Noto Sans Sinhala, Windows' Nirmala UI or Iskoola Pota, the Mac's Sinhala fonts
     function sinhalaFont() {

@@ -31,10 +31,9 @@ R['wav: RIFF header, 16 kHz mono 16-bit, 4 samples'] = String.fromCharCode(...wa
   && dv.getUint32(24, true) === 16000 && dv.getUint16(22, true) === 1 && dv.getUint16(34, true) === 16 && dv.getUint32(40, true) === 8 && wav.length === 52 && dv.getInt16(44 + 6, true) === 32767;
 const i16 = T.floatToInt16(new Float32Array([0, 1, -1, 2, -2, 0.5]));
 R['float -> int16 clips at full scale'] = i16[1] === 32767 && i16[2] === -32768 && i16[3] === 32767 && i16[4] === -32768 && Math.abs(i16[5] - 16383.5) < 1;
-R['whisper arguments for Sinhala: language si, a Sinhala-script prompt, no -ml/-sow (they can cut a multi-byte letter)'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4, 'si'); const i = a.indexOf('--prompt'); return i > 0 && /^[\u0D80-\u0DFF .]+$/.test(a[i + 1]) && /[\u0D80-\u0DFF]/.test(a[i + 1]) && a[i + 1].length > 10 && a.join(' ').startsWith('-m /m/b.bin -f /t/a.wav -l si -oj -of /t/out --prompt ') && a.slice(-3).join(' ') === '-t 4 -pp' && a.indexOf('-ml') < 0 && a.indexOf('-mc') < 0; })();
+R['whisper arguments for Sinhala: language si, JSON, no -ml/-sow (they can cut a multi-byte letter), no prompt'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4, 'si'); return a.join(' ') === '-m /m/b.bin -f /t/a.wav -l si -oj -of /t/out -t 4 -pp' && a.indexOf('-ml') < 0 && a.indexOf('--prompt') < 0; })();
 R['English arguments have no prompt'] = T.whisperArgs('m', 'w', 'o', 2, 'en').indexOf('--prompt') < 0;
 R['hasSinhala tells Sinhala script from Latin letters'] = T.hasSinhala([{ text: 'Mei ni amal' }, { text: '\u0DB8\u0DB8' }]) === true && T.hasSinhala([{ text: 'Mei ni amal, amal tati eno' }]) === false;
-R['model names: English uses .en, other languages the multilingual ones, Best = medium'] = T.modelName('en', 'fast') === 'tiny.en' && T.modelName('si', 'fast') === 'tiny' && T.modelName('si', 'best') === 'medium' && T.modelName('en', 'best') === 'medium.en' && T.MODELS.medium.mb === 1530;
 const long = [{ start: 10, end: 20, text: 'aaaa bbbb cccc dddd eeee ffff gggg hhhh' }, { start: 20, end: 22, text: 'short one' }];
 const sp = T.splitLong(long, 20);
 R['splitLong: a long segment is cut at spaces into lines of at most 20 characters'] = sp.length === 3 && sp.every(s => s.text.length <= 20) && sp.map(s => s.text).join(' ') === long[0].text + ' short one' && sp[2].text === 'short one';
@@ -52,28 +51,6 @@ R['picker: falls back to an OpenBLAS x64 zip when that is all there is'] = (T.pi
 R['picker: a differently named x64 zip is accepted (e.g. whisper-v1.8-bin-x64.zip)'] = (T.pickWindowsAsset([rel('v1', ['whisper-v1.8-bin-x64.zip'])]) || {}).name === 'whisper-v1.8-bin-x64.zip';
 R['picker: nothing usable -> null, and the error text lists what was seen'] = T.pickWindowsAsset([rel('v1', ['a.zip'])]) === null && /v1: a\.zip/.test(T.describeReleases([rel('v1', ['a.zip'])])) && T.pickWindowsAsset([rel('v1', ['whisper-bin-x64.zip'], { draft: true })]) === null;
 
-
-// ---- Google Speech-to-Text helpers (Sinhala)
-const mkWav = (secs, extraChunk) => { const n = Math.round(secs * 16000), pcm = new Int16Array(n); for (let i = 0; i < n; i++) pcm[i] = (i % 40 < 20 ? 3000 : -3000); return { n, pcm }; };
-{
-  const { n, pcm } = mkWav(2);
-  const w = T.encodeWav(pcm, 16000), listed = Buffer.concat([Buffer.from(w.slice(0, 36)), Buffer.from('LIST\x04\x00\x00\x00abcd'), Buffer.from(w.slice(36))]);
-  const rd = T.readWav(Buffer.from(w));
-  R['readWav: rate, mono, sample count and values round-trip'] = rd.rate === 16000 && rd.samples.length === n && rd.samples[0] === 3000 && rd.samples[25] === -3000;
-  R['readWav: skips an extra chunk before the data'] = T.readWav(listed).samples.length === n;
-  R['readWav: refuses non-WAV and stereo'] = (() => { let a = 0; try { T.readWav(Buffer.from('nope'.repeat(20))); } catch (e) { a++; } const st = Buffer.from(w); st.writeUInt16LE(2, 22); try { T.readWav(st); } catch (e) { a++; } return a === 2; })();
-  // 130 s of noise with a quiet gap at 50 s and at 100 s: cuts land in the gaps, parts <= 55 s
-  const big = mkWav(130).pcm; for (let i = 50 * 16000; i < 50.3 * 16000; i++) big[i] = 0; for (let i = 100 * 16000; i < 100.3 * 16000; i++) big[i] = 0;
-  const parts = T.splitAtQuiet(big, 16000, 55, 35);
-  R['splitAtQuiet: 3 parts, each <= 55 s, cut inside the quiet gaps, no sample lost'] = parts.length === 3 && parts.every(p => p[1] - p[0] <= 55 * 16000) && parts[0][1] / 16000 > 50 && parts[0][1] / 16000 < 50.3 && parts[1][1] / 16000 > 100 && parts[1][1] / 16000 < 100.3 && parts[0][0] === 0 && parts[1][0] === parts[0][1] && parts[2][1] === big.length;
-  R['splitAtQuiet: a short clip is one part'] = T.splitAtQuiet(mkWav(30).pcm, 16000, 55, 35).length === 1;
-  const gw = T.parseGoogle({ results: [{ alternatives: [{ transcript: 'x', words: [{ startTime: '0.400s', endTime: '0.900s', word: '\u0DB8\u0DB8' }, { startTime: '1s', endTime: { seconds: 1, nanos: 500000000 }, word: '\u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA' }] }] }] }, 55, 110);
-  R['parseGoogle: word times are shifted by the part offset ("1s" and {seconds,nanos} both work)'] = gw.words.length === 2 && near(gw.words[0].start, 55.4) && near(gw.words[0].end, 55.9) && near(gw.words[1].start, 56) && near(gw.words[1].end, 56.5) && gw.segs.length === 0;
-  const gs = T.parseGoogle({ results: [{ alternatives: [{ transcript: ' \u0DB8\u0DB8 ' }], resultEndTime: '3.0s' }, { alternatives: [{ transcript: '\u0D9A\u0DD9' }] }] }, 10, 20);
-  R['parseGoogle: without word times it falls back to one segment per result (end from resultEndTime, else the part end)'] = gs.words.length === 0 && gs.segs.length === 2 && near(gs.segs[0].start, 10) && near(gs.segs[0].end, 13) && near(gs.segs[1].end, 20) && gs.segs[0].text === '\u0DB8\u0DB8';
-  const lines = T.groupWords([{ start: 0, end: 1, text: 'aaaaaaaaaa' }, { start: 1, end: 2, text: 'bbbbbbbbbb' }, { start: 2, end: 3, text: 'cccccccccc' }, { start: 3, end: 4, text: 'dddddddddd' }, { start: 4, end: 5, text: 'e' }, { start: 6.5, end: 7, text: 'f' }], 40, 0.7);
-  R['groupWords: lines of at most 40 characters, and a new line after a pause'] = lines.length === 3 && lines.every(l => l.text.length <= 40) && lines[0].text === 'aaaaaaaaaa bbbbbbbbbb cccccccccc' && lines[1].text === 'dddddddddd e' && lines[2].text === 'f' && near(lines[2].start, 6.5);
-}
 
 // ---- the pipeline with fakes (Linux/Mac only: the fakes are shell scripts)
 async function pipeline() {
@@ -98,22 +75,9 @@ EOF2
   fs.writeFileSync(path.join(bin, 'ffmpeg'), '#!/bin/sh\nfor last; do :; done\ncp "$3" "$last"\n'); fs.chmodSync(path.join(bin, 'ffmpeg'), 0o755);
   process.env.PATH = bin + ':' + prevPath;
   // a local server standing in for the model download
-  const gCalls = [];
-  const srv = http.createServer((req, res) => {
-    if (req.method === 'POST' && req.url === '/v1/speech:recognize') {
-      const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => {
-        const body = JSON.parse(Buffer.concat(chunks).toString()), key = req.headers['x-goog-api-key'];
-        gCalls.push({ key, cfg: body.config, bytes: Buffer.from(body.audio.content, 'base64').length, url: req.url });
-        const send = (st, o) => { res.writeHead(st, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
-        if (key === 'BADKEY') return send(400, { error: { message: 'API key not valid. Please pass a valid API key.' } });
-        if (key === 'NOBILL') return send(403, { error: { message: 'Cloud Speech-to-Text API has not been used in project 123 before or it is disabled.' } });
-        if (key === 'NOWORDS' && body.config.enableWordTimeOffsets) return send(400, { error: { message: 'Word time offsets are not supported for this language.' } });
-        const n = gCalls.filter(c => c.key === key).length;
-        if (key === 'NOWORDS') return send(200, { results: [{ alternatives: [{ transcript: '\u0DB8\u0DB8 \u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA' }], resultEndTime: '4s' }] });
-        return send(200, { results: [{ alternatives: [{ transcript: 'x', words: [{ startTime: '1s', endTime: '1.5s', word: '\u0DB8\u0DB8' + n }, { startTime: '1.6s', endTime: '2s', word: '\u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA' }] }] }] });
-      });
-      return;
-    }
+    const srv = http.createServer((req, res) => {
+    if (req.url === '/sinhala.bin') { res.writeHead(200, { 'Content-Length': 31 * 1024 * 1024 }); res.end(Buffer.alloc(31 * 1024 * 1024, 9)); return; }
+    if (req.url === '/tiny-sinhala.bin') { res.writeHead(200, { 'Content-Length': 1000 }); res.end(Buffer.alloc(1000, 9)); return; }
     if (req.url === '/ggml-tiny.en.bin' || req.url === '/ggml-tiny.bin') { res.writeHead(200, { 'Content-Length': 2000 }); res.end(Buffer.alloc(2000, 7)); } else { res.writeHead(404); res.end(); } });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const base = 'http://127.0.0.1:' + srv.address().port;
@@ -133,7 +97,7 @@ EOF2
     const msgs2 = [];
     await T.transcribe({ file: input, model: 'tiny.en', modelBase: base, onStatus: m => msgs2.push(m) }).promise;
     R['second run reuses the model'] = !msgs2.some(m => /Downloading/.test(m));
-    // Sinhala: multilingual model, language flag, long segments cut into lines, repeats dropped
+    // ---- Sinhala: one model file (ggml-sinhala.bin), language flag, long segments cut into lines, repeats dropped
     const argsFile = path.join(root, 'args.txt');
     const siJson = JSON.stringify({ transcription: [
       { offsets: { from: 0, to: 12000 }, text: ' \u0DB8\u0DB8 \u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA \u0DC0\u0DD2\u0DBA \u0DC4\u0DD0\u0D9A\u0DD2 \u0DB6\u0DC0 \u0DB4\u0DD0\u0DC0\u0DC3\u0DD3\u0DB8 \u0D9A\u0DD2\u0DBA\u0DB1 \u0D9C\u0DD0\u0DB1 \u0D9A\u0DAD\u0DCF \u0D9A\u0DBB\u0DB8\u0DD2' },
@@ -146,35 +110,22 @@ ${siJson}
 EOF3
 `);
     fs.chmodSync(engine, 0o755);
-    T.MODELS['tiny'].mb = 0.001;
-    const sSegs = await T.transcribe({ file: input, model: 'tiny', lang: 'si', modelBase: base }).promise;
+    const modelsDir = path.join(T.baseDir(), 'models'), sModel = path.join(modelsDir, 'ggml-sinhala.bin');
+    const errOf = async (fn) => { try { await fn(); return ''; } catch (e) { return e.message; } };
+    const eNone = await errOf(() => T.transcribe({ file: input, lang: 'si' }).promise);
+    R['Sinhala without a model and without a download address: a clear message with the folder and the converter'] = /not installed yet/.test(eNone) && eNone.indexOf(modelsDir) >= 0 && /convert_sinhala_model\.py/.test(eNone) && !fs.existsSync(sModel);
+    const eSmall = await errOf(() => T.transcribe({ file: input, lang: 'si', sinhalaUrl: base + '/tiny-sinhala.bin' }).promise);
+    R['a Sinhala download that is far too small is refused and removed'] = /looks incomplete/.test(eSmall) && !fs.existsSync(sModel);
+    const sMsgs = [];
+    const sSegs = await T.transcribe({ file: input, lang: 'si', sinhalaUrl: base + '/sinhala.bin', onStatus: m => sMsgs.push(m) }).promise;
     const sArgs = fs.readFileSync(argsFile, 'utf8');
-    R['Sinhala pipeline: engine called with -l si and the multilingual model, no -ml'] = /-l si /.test(sArgs) && /ggml-tiny\.bin/.test(sArgs) && sArgs.indexOf('-ml') < 0;
-    R['Sinhala pipeline: long segment split into <= 40 character lines, repeated line dropped, Sinhala text intact'] = sSegs.length >= 2 && sSegs.every(s => s.text.length <= 40) && sSegs[sSegs.length - 1].text === '\u0DB8\u0DB8' && sSegs.filter(s => s.text === '\u0DB8\u0DB8').length === 1 && /\u0DB8\u0DB8 \u0D9A\u0DD9/.test(sSegs[0].text);
-    // a user-supplied Sinhala model (ggml-sinhala.bin in the models folder) is used instead of a download
-    fs.writeFileSync(path.join(T.baseDir(), 'models', 'ggml-sinhala.bin'), 'x');
-    const msgsC = [];
-    await T.transcribe({ file: input, model: 'small', lang: 'si', modelBase: 'http://127.0.0.1:1', onStatus: m => msgsC.push(m) }).promise;
-    R['a ggml-sinhala.bin in the models folder is used instead of downloading a model'] = msgsC.some(m => /Using your model ggml-sinhala\.bin/.test(m)) && /ggml-sinhala\.bin/.test(fs.readFileSync(argsFile, 'utf8'));
-    fs.unlinkSync(path.join(T.baseDir(), 'models', 'ggml-sinhala.bin'));
-    // ---- Google Speech-to-Text: parts, offsets, key in a header, error messages
-    const long = path.join(root, 'long.wav'); fs.writeFileSync(long, T.encodeWav(mkWav(130).pcm, 16000));
-    const gEndpoint = base + '/v1/speech:recognize', gMsgs = [];
-    gCalls.length = 0;
-    const gSegs = await T.transcribeGoogle({ file: long, lang: 'si', apiKey: ' GOOD KEY '.replace(/ /g, '').replace('GOODKEY', 'GOODKEY'), endpoint: gEndpoint, onStatus: m => gMsgs.push(m) }).promise;
-    R['Google: 130 s of audio is sent as 3 parts, each under the 10 MB limit, language si-LK, 16 kHz LINEAR16, word times asked for'] = gCalls.length === 3 && gCalls.every(c => c.cfg.languageCode === 'si-LK' && c.cfg.encoding === 'LINEAR16' && c.cfg.sampleRateHertz === 16000 && c.cfg.enableWordTimeOffsets === true && c.bytes <= 55 * 32000 + 4);
-    R['Google: the key travels in the X-Goog-Api-Key header, never in the address'] = gCalls.every(c => c.key === 'GOODKEY' && c.url === '/v1/speech:recognize');
-    R['Google: lines come back in time order, shifted by each part offset, Sinhala text intact'] = gSegs.length === 3 && gSegs[0].start >= 1 && gSegs[1].start > gSegs[0].end && gSegs[2].start > gSegs[1].end && gSegs.every(s => /[\u0D80-\u0DFF]/.test(s.text)) && gSegs[0].text.indexOf('\u0DB8\u0DB81 \u0D9A') === 0 && gSegs[2].start > 100;
-    R['Google: status names each part and temp files are removed'] = gMsgs.some(m => /Sending part 2 of 3/.test(m)) && fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('rumotion-')).length === 0;
-    const msgBad = async (key) => { try { await T.transcribeGoogle({ file: input, lang: 'si', apiKey: key, endpoint: gEndpoint }).promise; return ''; } catch (e) { return e.message; } };
-    const eBad = await msgBad('BADKEY'), eBill = await msgBad('NOBILL'), eNone = await msgBad('  ');
-    R['Google: a bad key, a disabled API and a missing key give plain messages, and the key is never in them'] = /not valid/.test(eBad) && /Speech-to-Text API/.test(eBill) && /billing/.test(eBill) && /Enter your Google API key/.test(eNone) && ![eBad, eBill, eNone].some(m => /BADKEY|NOBILL/.test(m));
-    gCalls.length = 0;
-    const sNo = await T.transcribeGoogle({ file: input, lang: 'si', apiKey: 'NOWORDS', endpoint: gEndpoint }).promise;
-    R['Google: if word times are refused, it asks again without them and uses the result times'] = gCalls.length === 2 && gCalls[0].cfg.enableWordTimeOffsets === true && gCalls[1].cfg.enableWordTimeOffsets === undefined && sNo.length >= 1 && /[\u0D80-\u0DFF]/.test(sNo[0].text) && near(sNo[sNo.length - 1].end, 4);
-    const gCancel = T.transcribeGoogle({ file: long, lang: 'si', apiKey: 'GOODKEY', endpoint: gEndpoint });
-    gCancel.cancel(); let gcErr = null; try { await gCancel.promise; } catch (e) { gcErr = e; }
-    R['Google: cancel stops before sending and reports cancelled'] = !!gcErr && gcErr.cancelled === true;
+    R['Sinhala: the model is downloaded once to models/ggml-sinhala.bin with progress'] = fs.existsSync(sModel) && fs.statSync(sModel).size === 31 * 1024 * 1024 && sMsgs.some(m => /Downloading the Sinhala model/.test(m));
+    R['Sinhala: the engine is called with -l si and that model, no -ml, no prompt'] = /-l si /.test(sArgs) && sArgs.indexOf('ggml-sinhala.bin') > 0 && sArgs.indexOf('-ml') < 0 && sArgs.indexOf('--prompt') < 0;
+    R['Sinhala: the long segment is split into <= 40 character lines, the repeated line dropped, Sinhala text intact'] = sSegs.length >= 2 && sSegs.every(s => s.text.length <= 40) && sSegs[sSegs.length - 1].text === '\u0DB8\u0DB8' && sSegs.filter(s => s.text === '\u0DB8\u0DB8').length === 1 && /\u0DB8\u0DB8 \u0D9A\u0DD9/.test(sSegs[0].text);
+    const sMsgs2 = [];
+    await T.transcribe({ file: input, lang: 'si', sinhalaUrl: 'http://127.0.0.1:1/never', onStatus: m => sMsgs2.push(m) }).promise;
+    R['Sinhala: the second run uses the file on disk and never touches the network'] = sMsgs2.some(m => /Using the Sinhala model/.test(m)) && !sMsgs2.some(m => /Downloading/.test(m));
+    fs.unlinkSync(sModel);
     // a failing engine reports its message
     fs.writeFileSync(engine, '#!/bin/sh\necho "boom: bad model" >&2\nexit 7\n');
     let err = null; try { await T.transcribe({ file: input, model: 'tiny.en', modelBase: base }).promise; } catch (e) { err = e; }

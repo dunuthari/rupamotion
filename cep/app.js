@@ -84,8 +84,8 @@
   function makeItem(item, ctx) {
     var n, k;
     if (item.k === "f") {
-      n = el("input", { type: /\bkey\b/i.test(item.label || "") ? "password" : "text", value: item.v, title: item.tip || "", "aria-label": item.label || "value" });
-      n.style.width = (String(item.v).length > 12 || /\bkey\b/i.test(item.label || "") ? "100%" : String(item.v).length <= 5 && ctx.small ? "60px" : "72px");
+      n = el("input", { type: "text", value: item.v, title: item.tip || "", "aria-label": item.label || "value" });
+      n.style.width = (String(item.v).length > 12 ? "100%" : String(item.v).length <= 5 && ctx.small ? "60px" : "72px");
       if (isHex(item.v)) { n.style.width = "84px"; }
       n.addEventListener("change", function () { sendSet(item, n.value); });
       n.addEventListener("keydown", function (e) { if (e.key === "Enter") { n.blur(); } });
@@ -200,19 +200,10 @@
         });
       }
       function fail(e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); }
-      if (lang === "si") {   // Sinhala: Google Speech-to-Text with the user's key
-        bridge("captionGoogleKey()", function (kr) {
-          var key = String(kr || "").replace(/\s+/g, "");
-          if (!key || /^EvalScript/.test(key)) { finish(node, "Enter your Google API key in the Sinhala (Google) section first.", true); return; }
-          try { running = T.transcribeGoogle({ file: src.path, lang: "si", apiKey: key, onStatus: function (msg, f) { setStatus(node, msg, f); } }); } catch (e4) { fail(e4); return; }
-          running.promise.then(done, fail);
-        });
-        return;
-      }
-      bridge("captionModel(" + esc(lang) + ")", function (mr) {
-        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";
+      bridge("captionModel()", function (mr) {
+        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";   // the English model; Sinhala uses its own model file
         try {
-          running = T.transcribe({ file: src.path, model: model, lang: lang, enginePath: store("whisper_path", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
+          running = T.transcribe({ file: src.path, model: model, lang: lang, enginePath: store("whisper_path", ""), sinhalaUrl: store("sinhala_model_url", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
         } catch (e1) { fail(e1); return; }
         running.promise.then(done, fail);
       });

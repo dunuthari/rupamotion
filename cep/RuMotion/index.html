@@ -305,7 +305,7 @@
   var proc = (typeof process !== "undefined") ? process : (nodeRequire ? nodeRequire("process") : null);
 
   var api = {};
-  api.MODELS = { "tiny.en": { mb: 75 }, "base.en": { mb: 142 }, "small.en": { mb: 466 }, "medium.en": { mb: 1530 }, "tiny": { mb: 75 }, "base": { mb: 142 }, "small": { mb: 466 }, "medium": { mb: 1530 } };
+  api.MODELS = { "tiny.en": { mb: 75 }, "base.en": { mb: 142 }, "small.en": { mb: 466 }, "medium.en": { mb: 1530 } };
   api.available = function () { return !!nodeRequire && !!proc; };
 
   // ---------------------------------------------------------------- pure helpers
@@ -383,12 +383,6 @@
       out.push(segs[i]);
     }
     return out;
-  };
-
-  // the model file for a language: English uses the .en models, everything else the multilingual ones
-  api.modelName = function (lang, size) {
-    var en = { fast: "tiny.en", balanced: "base.en", accurate: "small.en", best: "medium.en" }, multi = { fast: "tiny", balanced: "base", accurate: "small", best: "medium" };
-    return (lang === "en" ? en : multi)[size] || (lang === "en" ? "base.en" : "base");
   };
 
   // 16-bit mono PCM -> WAV bytes
@@ -702,16 +696,12 @@
     });
   };
 
-  // English: lines of at most 42 characters split on words. Other languages: Whisper's own segments (splitting inside a word can cut a
-  // multi-byte letter in two), then api.splitLong makes the lines. A small model asked for Sinhala often answers in Latin letters
-  // ("Mei ni amal"); a first sentence written in Sinhala script (--prompt) steers it to the Sinhala alphabet.
-  api.PROMPTS = { si: "\u0DB8\u0DD9\u0DBA \u0DC3\u0DD2\u0D82\u0DC4\u0DBD \u0DB7\u0DCF\u0DC2\u0DCF\u0DC0\u0DD9\u0DB1\u0DCA \u0D9A\u0DB1\u0DCA\u0DB1\u0DCF \u0D9A\u0DBB\u0DB1 \u0D9A\u0DAD\u0DCF\u0DB6\u0DC4\u0D9A\u0DD2." };
+  // English: lines of at most 42 characters split on words. Other languages (Sinhala): Whisper's own segments (splitting inside a word can
+  // cut a multi-byte letter in two); api.splitLong makes the lines afterwards.
   api.whisperArgs = function (model, wav, prefix, threads, lang) {
     lang = lang || "en";
     if (lang === "en") { return ["-m", model, "-f", wav, "-l", "en", "-oj", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"]; }
-    var a = ["-m", model, "-f", wav, "-l", lang, "-oj", "-of", prefix];
-    if (api.PROMPTS[lang]) { a.push("--prompt", api.PROMPTS[lang]); }
-    return a.concat(["-t", String(threads), "-pp"]);
+    return ["-m", model, "-f", wav, "-l", lang, "-oj", "-of", prefix, "-t", String(threads), "-pp"];
   };
 
   api.hasSinhala = function (segs) {
@@ -720,13 +710,29 @@
     return false;
   };
 
-  // a model the user put there (for example a Sinhala fine-tune converted to ggml): models/ggml-<lang name>.bin
-  api.customModel = function (lang) {
-    var m = mods(), f = m.path.join(api.baseDir(), "models", lang === "si" ? "ggml-sinhala.bin" : "ggml-" + lang + ".bin");
-    return (lang !== "en" && m.fs.existsSync(f)) ? f : null;
+  // The Sinhala model is one file, models/ggml-sinhala.bin: a Sinhala-trained Whisper model converted to whisper.cpp's format
+  // (tools/convert_sinhala_model.py). If the file is there it is used; otherwise it is downloaded once from SINHALA_MODEL_URL
+  // (set when the converted file has been put online; the localStorage key ru:sinhala_model_url overrides it for testing).
+  api.SINHALA_MODEL_URL = "";
+  api.sinhalaModelPath = function () { var m = mods(); return m.path.join(api.baseDir(), "models", "ggml-sinhala.bin"); };
+  api.ensureSinhalaModel = function (status, url) {
+    var m = mods(), file = api.sinhalaModelPath(), src = url || api.SINHALA_MODEL_URL, dir = m.path.join(api.baseDir(), "models");
+    try { if (m.fs.existsSync(file) && m.fs.statSync(file).size > 30 * 1024 * 1024) { status("Using the Sinhala model…", null); return Promise.resolve(file); } } catch (e) {}
+    if (!src) {
+      return Promise.reject(new Error("The Sinhala model is not installed yet. Put the file ggml-sinhala.bin in " + dir + " (see tools/convert_sinhala_model.py), then try again."));
+    }
+    status("Downloading the Sinhala model (one time)…", 0);
+    return api.download(src, file, function (f) { status("Downloading the Sinhala model… " + Math.round(f * 100) + "%", f); }, 500 * 1024 * 1024).then(function (f) {
+      var size = 0; try { size = m.fs.statSync(f).size; } catch (e1) {}
+      if (size < 30 * 1024 * 1024) { try { m.fs.unlinkSync(f); } catch (e2) {} throw new Error("The Sinhala model download looks incomplete (" + Math.round(size / 1024) + " KB). Try again."); }
+      return f;
+    }).catch(function (e) {
+      if (!/^(The Sinhala model|Downloading the Sinhala)/.test(e.message)) { e.message = "Downloading the Sinhala model failed: " + e.message + api.netHint(e); }
+      throw e;
+    });
   };
 
-  // o: { file, model: "base.en", lang: "en"|"si", onStatus(message, fraction|null), enginePath, modelBase }
+  // o: { file, model: "base.en" (English), lang: "en"|"si", onStatus(message, fraction|null), enginePath, modelBase, sinhalaUrl }
   // returns { promise -> segments [{start,end,text}] in source-file seconds, cancel() }
   api.transcribe = function (o) {
     var m = mods(), cancelled = false, child = null, status = o.onStatus || function () {}, tmp, wav, prefix;
@@ -738,9 +744,8 @@
     function stopCheck() { if (cancelled) { var e = new Error("Cancelled."); e.cancelled = true; throw e; } }
     var promise = api.ensureEngine(status, o.enginePath).then(function (engine) {
       stopCheck();
-      var custom = api.customModel(o.lang || "en");
-      if (custom) { status("Using your model " + custom.split(/[\\/]/).pop() + "…", null); }
-      return (custom ? Promise.resolve(custom) : api.ensureModel(o.model || "base.en", status, o.modelBase)).then(function (model) {
+      var getModel = (o.lang === "si") ? api.ensureSinhalaModel(status, o.sinhalaUrl) : api.ensureModel(o.model || "base.en", status, o.modelBase);
+      return getModel.then(function (model) {
         stopCheck();
         tmp = m.path.join(m.os.tmpdir(), "rumotion-" + Date.now());
         mkdirp(tmp);
@@ -771,178 +776,6 @@
     return { promise: promise, cancel: function () { cancelled = true; try { if (child) { child.kill(); } } catch (e) {} } };
   };
 
-
-  // ---------------------------------------------------------------- Google Cloud Speech-to-Text (Sinhala)
-  // Whisper cannot write Sinhala reliably, so Sinhala goes to Google's Speech-to-Text (language si-LK), which answers in the Sinhala
-  // alphabet. The audio is cut into parts of at most 55 s (the limit of one request), each cut at the quietest moment, sent with the
-  // user's own API key, and the words with their times are put back together into caption lines.
-
-  api.GOOGLE_URL = "https://speech.googleapis.com/v1/speech:recognize";
-  api.GOOGLE_LANG = { si: "si-LK", en: "en-US" };
-
-  api.readWav = function (buf) {
-    var pos = 12, rate = 16000, ch = 1, bits = 16, data = null, id, size, n, samples, i;
-    if (buf.length < 44 || buf.toString("ascii", 0, 4) !== "RIFF" || buf.toString("ascii", 8, 12) !== "WAVE") { throw new Error("The audio could not be read (it is not a WAV file)."); }
-    while (pos + 8 <= buf.length) {
-      id = buf.toString("ascii", pos, pos + 4); size = buf.readUInt32LE(pos + 4);
-      if (id === "fmt ") { ch = buf.readUInt16LE(pos + 10); rate = buf.readUInt32LE(pos + 12); bits = buf.readUInt16LE(pos + 22); }
-      else if (id === "data") { data = buf.slice(pos + 8, Math.min(buf.length, pos + 8 + size)); break; }
-      pos += 8 + size + (size % 2);
-    }
-    if (!data) { throw new Error("The audio could not be read (no sound data)."); }
-    if (bits !== 16 || ch !== 1) { throw new Error("The audio must be 16-bit mono."); }
-    n = Math.floor(data.length / 2); samples = new Int16Array(n);
-    for (i = 0; i < n; i++) { samples[i] = data.readInt16LE(i * 2); }
-    return { rate: rate, samples: samples };
-  };
-
-  // parts of at most maxSec seconds; each cut falls on the quietest 0.1 s between minSec and maxSec so words are not cut in half
-  api.splitAtQuiet = function (samples, rate, maxSec, minSec) {
-    var max = Math.round(maxSec * rate), min = Math.round(minSec * rate), frame = Math.round(rate * 0.1), out = [], start = 0, best, bestE, p, k, e;
-    while (samples.length - start > max) {
-      best = start + max; bestE = Infinity;
-      for (p = start + min; p + frame <= start + max; p += frame) {
-        e = 0; for (k = 0; k < frame; k += 8) { e += Math.abs(samples[p + k]); }
-        if (e <= bestE) { bestE = e; best = p + Math.floor(frame / 2); }   // ties go to the latest frame: fewer, longer parts
-      }
-      out.push([start, best]); start = best;
-    }
-    out.push([start, samples.length]);
-    return out;
-  };
-
-  function dur(v) {   // "1.200s" or { seconds, nanos }
-    if (v && typeof v === "object") { return (+v.seconds || 0) + (+v.nanos || 0) / 1e9; }
-    return parseFloat(String(v || "0").replace("s", "")) || 0;
-  }
-
-  // words [{ start, end, text }] -> caption lines: a new line after maxChars or a pause longer than gap seconds
-  api.groupWords = function (words, maxChars, gap) {
-    var out = [], cur = null, i, w;
-    for (i = 0; i < words.length; i++) {
-      w = words[i];
-      if (cur && ((cur.text + " " + w.text).length > maxChars || w.start - cur.end > gap)) { out.push(cur); cur = null; }
-      if (!cur) { cur = { start: w.start, end: w.end, text: w.text }; }
-      else { cur.text += " " + w.text; cur.end = w.end; }
-    }
-    if (cur) { out.push(cur); }
-    return out;
-  };
-
-  // one Google response (for the part that starts at `offset` seconds) -> { words, segs }
-  api.parseGoogle = function (resp, offset, partEnd) {
-    var words = [], segs = [], results = (resp && resp.results) || [], i, j, r, a, w, last = offset, endT;
-    for (i = 0; i < results.length; i++) {
-      r = results[i]; a = r.alternatives && r.alternatives[0];
-      if (!a || !a.transcript) { continue; }
-      if (a.words && a.words.length && a.words[0].startTime !== undefined) {
-        for (j = 0; j < a.words.length; j++) {
-          w = a.words[j];
-          words.push({ start: offset + dur(w.startTime), end: offset + dur(w.endTime), text: String(w.word || "").replace(/^\s+|\s+$/g, "") });
-        }
-        last = words[words.length - 1].end;
-      } else {
-        endT = r.resultEndTime !== undefined ? offset + dur(r.resultEndTime) : (i === results.length - 1 ? partEnd : last + (partEnd - last) / (results.length - i));
-        segs.push({ start: last, end: Math.max(endT, last + 0.4), text: String(a.transcript).replace(/^\s+|\s+$/g, "") });
-        last = segs[segs.length - 1].end;
-      }
-    }
-    return { words: words.filter(function (x) { return x.text; }), segs: segs };
-  };
-
-  function friendlyGoogleError(status, json) {
-    var msg = (json && json.error && json.error.message) ? String(json.error.message) : "HTTP " + status, low = msg.toLowerCase();
-    if (status === 400 && /api key/.test(low)) { return "Google says the API key is not valid. Check that you copied the whole key."; }
-    if (status === 403 || /permission|not been used|disabled|billing/.test(low)) { return "Google refused the request: " + msg + " (turn on the Cloud Speech-to-Text API for the key's project, and billing)."; }
-    if (status === 429) { return "Google says the request limit was reached. Try again in a minute."; }
-    return "Google Speech-to-Text: " + msg;
-  }
-
-  // one POST with the key in a header (never in the address). Retries dropped connections, then asks curl.
-  function postJson(url, headers, bodyObj) {
-    var m = mods(), body = JSON.stringify(bodyObj);
-    function viaNode() {
-      return new Promise(function (resolve, reject) {
-        var URLc = (typeof URL !== "undefined") ? URL : nodeRequire("url").URL, u = new URLc(url), lib = nodeRequire(u.protocol === "http:" ? "http" : "https"), h = { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }, k;
-        for (k in headers) { h[k] = headers[k]; }
-        var req = lib.request({ method: "POST", hostname: u.hostname, port: u.port || (u.protocol === "http:" ? 80 : 443), path: u.pathname + u.search, headers: h }, function (res) {
-          var chunks = [];
-          res.on("data", function (c) { chunks.push(c); });
-          res.on("error", reject);
-          res.on("end", function () { var t = Buffer.concat(chunks).toString("utf8"), j = null; try { j = JSON.parse(t); } catch (e) {} resolve({ status: res.statusCode, json: j }); });
-        });
-        req.setTimeout(120000, function () { req.destroy(Object.assign(new Error("connection timed out"), { code: "ETIMEDOUT" })); });
-        req.on("error", reject);
-        req.end(body);
-      });
-    }
-    function viaCurl() {
-      var c = curlPath(), tmpB = m.path.join(m.os.tmpdir(), "rumotion-p-" + Date.now() + ".json"), tmpO = tmpB + ".out", args, k;
-      if (!c) { return Promise.reject(new Error("curl was not found")); }
-      m.fs.writeFileSync(tmpB, body);
-      args = ["-sS", "-X", "POST", "-H", "Content-Type: application/json"];
-      for (k in headers) { args.push("-H", k + ": " + headers[k]); }
-      args.push("--data-binary", "@" + tmpB, "-o", tmpO, "-w", "%{http_code}", url);
-      return run(c, args).then(function (tail) {
-        var t = "", j = null, st = parseInt(String(tail).trim().slice(-3), 10) || 0;
-        try { t = m.fs.readFileSync(tmpO, "utf8"); j = JSON.parse(t); } catch (e) {}
-        try { m.fs.unlinkSync(tmpB); m.fs.unlinkSync(tmpO); } catch (e2) {}
-        return { status: st, json: j };
-      }, function (e) { try { m.fs.unlinkSync(tmpB); } catch (e3) {} throw e; });
-    }
-    return retrying(viaNode, 3).catch(function (e) {
-      if (!isNetErr(e)) { throw e; }
-      return viaCurl().catch(function () { throw e; });
-    });
-  }
-  api._postJson = postJson;
-
-  // o: { file, lang: "si", apiKey, onStatus, endpoint } -> { promise -> segments in source-file seconds, cancel() }
-  api.transcribeGoogle = function (o) {
-    var m = mods(), cancelled = false, status = o.onStatus || function () {}, tmp, wav, key = String(o.apiKey || "").replace(/\s+/g, ""), lang = api.GOOGLE_LANG[o.lang || "si"] || "si-LK", url = o.endpoint || api.GOOGLE_URL;
-    function cleanup() { try { if (tmp && m.fs.existsSync(tmp)) { m.fs.readdirSync(tmp).forEach(function (f) { m.fs.unlinkSync(m.path.join(tmp, f)); }); m.fs.rmdirSync(tmp); } } catch (e) {} }
-    function stopCheck() { if (cancelled) { var e = new Error("Cancelled."); e.cancelled = true; throw e; } }
-    var promise;
-    if (!key) { promise = Promise.reject(new Error("Enter your Google API key first (Sinhala uses Google Speech-to-Text).")); }
-    else {
-      tmp = m.path.join(m.os.tmpdir(), "rumotion-" + Date.now()); mkdirp(tmp); wav = m.path.join(tmp, "audio.wav");
-      promise = api.prepareAudio(o.file, wav, status).then(function () {
-        stopCheck();
-        var a = api.readWav(m.fs.readFileSync(wav)), parts = api.splitAtQuiet(a.samples, a.rate, 55, 35), words = [], segs = [], idx = 0, useWords = true;
-        function sendPart() {
-          if (idx >= parts.length) { return Promise.resolve(); }
-          stopCheck();
-          var pr = parts[idx], offset = pr[0] / a.rate, b64 = Buffer.from(a.samples.buffer, a.samples.byteOffset + pr[0] * 2, (pr[1] - pr[0]) * 2).toString("base64");
-          status("Sending part " + (idx + 1) + " of " + parts.length + " to Google…", idx / parts.length);
-          function post(withWords) {
-            var cfg = { encoding: "LINEAR16", sampleRateHertz: a.rate, languageCode: lang };
-            if (withWords) { cfg.enableWordTimeOffsets = true; }
-            return postJson(url, { "X-Goog-Api-Key": key }, { config: cfg, audio: { content: b64 } });
-          }
-          return post(useWords).then(function (r) {
-            if (r.status === 400 && useWords && /word|offset/i.test((r.json && r.json.error && r.json.error.message) || "")) { useWords = false; return post(false); }
-            return r;
-          }).then(function (r) {
-            if (r.status !== 200) { throw new Error(friendlyGoogleError(r.status, r.json)); }
-            var p = api.parseGoogle(r.json, offset, pr[1] / a.rate);
-            words = words.concat(p.words); segs = segs.concat(p.segs); idx++;
-            return sendPart();
-          });
-        }
-        return sendPart().then(function () {
-          var lines = api.groupWords(words, 40, 0.7).concat(api.splitLong(segs, 40));
-          lines.sort(function (x, y) { return x.start - y.start; });
-          return api.cleanSegments(lines);
-        });
-      }).then(function (r) { cleanup(); return r; }, function (e) {
-        cleanup();
-        if (cancelled) { var c = new Error("Cancelled."); c.cancelled = true; throw c; }
-        if (isNetErr(e)) { e.message = "Could not reach Google Speech-to-Text: " + e.message + api.netHint(e); }
-        throw e;
-      });
-    }
-    return { promise: promise, cancel: function () { cancelled = true; } };
-  };
 
   if (root) { root.RuTranscribe = api; }
   if (typeof module !== "undefined" && module.exports) { module.exports = api; }
@@ -1051,8 +884,8 @@
   function makeItem(item, ctx) {
     var n, k;
     if (item.k === "f") {
-      n = el("input", { type: /\bkey\b/i.test(item.label || "") ? "password" : "text", value: item.v, title: item.tip || "", "aria-label": item.label || "value" });
-      n.style.width = (String(item.v).length > 12 || /\bkey\b/i.test(item.label || "") ? "100%" : String(item.v).length <= 5 && ctx.small ? "60px" : "72px");
+      n = el("input", { type: "text", value: item.v, title: item.tip || "", "aria-label": item.label || "value" });
+      n.style.width = (String(item.v).length > 12 ? "100%" : String(item.v).length <= 5 && ctx.small ? "60px" : "72px");
       if (isHex(item.v)) { n.style.width = "84px"; }
       n.addEventListener("change", function () { sendSet(item, n.value); });
       n.addEventListener("keydown", function (e) { if (e.key === "Enter") { n.blur(); } });
@@ -1167,19 +1000,10 @@
         });
       }
       function fail(e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); }
-      if (lang === "si") {   // Sinhala: Google Speech-to-Text with the user's key
-        bridge("captionGoogleKey()", function (kr) {
-          var key = String(kr || "").replace(/\s+/g, "");
-          if (!key || /^EvalScript/.test(key)) { finish(node, "Enter your Google API key in the Sinhala (Google) section first.", true); return; }
-          try { running = T.transcribeGoogle({ file: src.path, lang: "si", apiKey: key, onStatus: function (msg, f) { setStatus(node, msg, f); } }); } catch (e4) { fail(e4); return; }
-          running.promise.then(done, fail);
-        });
-        return;
-      }
-      bridge("captionModel(" + esc(lang) + ")", function (mr) {
-        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";
+      bridge("captionModel()", function (mr) {
+        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";   // the English model; Sinhala uses its own model file
         try {
-          running = T.transcribe({ file: src.path, model: model, lang: lang, enginePath: store("whisper_path", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
+          running = T.transcribe({ file: src.path, model: model, lang: lang, enginePath: store("whisper_path", ""), sinhalaUrl: store("sinhala_model_url", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
         } catch (e1) { fail(e1); return; }
         running.promise.then(done, fail);
       });
