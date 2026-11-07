@@ -1759,7 +1759,8 @@
             boxPad: capNum(CAP.boxPad, 14, 0, 200), boxRad: capNum(CAP.boxRad, 12, 0, 200),
             shadow: capOn(CAP.shadow, true), bottom: capNum(CAP.bottom, 10, 0, 90), maxW: capNum(CAP.maxW, 88, 20, 100),
             inIdx: capIdx(CAP.inT, 1), inLen: capNum(CAP.inLen, 8, 1, 120), outIdx: capIdx(CAP.outT, 1), outLen: capNum(CAP.outLen, 6, 1, 120),
-            ease: capIdx(CAP.ease, 0), dist: capNum(CAP.dist, 40, 0, 600)
+            ease: capIdx(CAP.ease, 0), dist: capNum(CAP.dist, 40, 0, 600),
+            fontControls: !!CAP.size   // the card has no Font section: the look is whatever the layers have, only the animation is applied
         };
     }
 
@@ -1959,18 +1960,33 @@
         for (i = 0; i < found.length; i++) { try { found[i].remove(); } catch (e) {} }
     }
 
-    // restyles and re-animates the given caption layers with the current card settings
-    function applyCaptionStyle(comp, layers) {
-        var cs = captionSettings(), i, L, geo, B, boxes = 0, nums = [];
+    // where a caption already is (its resting position: the middle of its time is between the In and the Out animation)
+    function capGeoOf(comp, L) {
+        var t0 = L.inPoint, t1 = L.outPoint, v = L.transform.position.valueAtTime((t0 + t1) / 2, false);
+        return { x: v[0], y: v[1], rect: null, t0: t0, t1: t1 };
+    }
+
+    // full: restyle the text too (a new transcript). Otherwise, without a Font section, only the animation is rebuilt and the layers'
+    // own look (font, size, colour, position, anything edited by hand) is left alone.
+    function applyCaptionStyle(comp, layers, full) {
+        var cs = captionSettings(), textToo = !!full || cs.fontControls, i, L, geo, B, boxes = 0, nums = [];
         for (i = 0; i < layers.length; i++) { nums.push(capNumberOf(layers[i].name)); }
-        capRemoveBoxes(comp, nums);
+        if (textToo) { capRemoveBoxes(comp, nums); }
         for (i = 0; i < layers.length; i++) {
             L = layers[i];
             capResetFx(L);
-            geo = capStyleText(comp, L, cs);
-            capShadow(L, cs);
+            if (textToo) {
+                geo = capStyleText(comp, L, cs);
+                capShadow(L, cs);
+            } else {
+                geo = capGeoOf(comp, L);
+                capClear(L.transform.position); capClear(L.transform.scale); capClear(L.transform.opacity);
+                setXY(L.transform.position, geo.x, geo.y);
+                setXY(L.transform.scale, 100, 100);
+                L.transform.opacity.setValue(100);
+            }
             capAnimate(comp, L, cs, geo, false);
-            if (cs.box) {
+            if (textToo && cs.box) {
                 B = capMakeBox(comp, L, cs, geo, nums[i]);
                 capAnimate(comp, B, cs, geo, true);
                 boxes++;
@@ -2028,7 +2044,7 @@
             layers.push(L);
             made++;
         }
-        res = applyCaptionStyle(comp, layers);
+        res = applyCaptionStyle(comp, layers, true);
         return { made: made, skipped: skipped, boxes: res.boxes };
     }
 
@@ -17179,7 +17195,7 @@
     try { CAP_PANEL = ($.global.RuMotionBridge === true); } catch (eCp) {}
     if (CAP_PANEL) {
         feature("Text", "Captions", function (p) {
-            hint(p, "1. Select an audio or video layer and click English Transcript. 2. Style the captions. 3. Apply. You can restyle at any time without transcribing again.");
+            hint(p, "1. Select an audio or video layer and click English Transcript. 2. Pick an In and Out animation. 3. Apply. You can change the animation at any time without transcribing again.");
             var tr = subPanel(p, "Transcribe");
             CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB"], 1,
                 "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
@@ -17187,26 +17203,6 @@
                 alert("English Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
             }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
             tb.ruAction = "transcribe-en";
-
-            var fp = subPanel(p, "Font");
-            CAP.family = drop(fp, "Font:", capLabels(CAP_FONTS, 0), 0, "A font that is not installed falls back to the Style tab font.");
-            CAP.weight = drop(fp, "Weight:", CAP_WEIGHTS, 2);
-            CAP.custom = field(fp, "Custom font:", "", 16, "Optional. A font's PostScript name (for example NotoSansSinhala-Bold) used instead of the choice above.");
-            CAP.size = field(fp, "Size (px):", "64", 5);
-            CAP.tracking = field(fp, "Letter spacing:", "0", 5, "Tracking in thousandths of an em. 0 = normal, 50 = a little wider.");
-            CAP.caseMode = drop(fp, "Case:", CAP_CASES, 0);
-            CAP.color = colorChooser(fp, "Text color:", "#FFFFFF", "cap_color", false);
-            CAP.stroke = check(fp, "Outline", false);
-            CAP.strokeColor = colorChooser(fp, "Outline color:", "#101010", "cap_stroke", false);
-            CAP.strokeW = field(fp, "Outline (px):", "4", 5);
-            CAP.box = check(fp, "Background box", false, "A rounded box behind each caption that moves and fades with it.");
-            CAP.boxColor = colorChooser(fp, "Box color:", "#101010", "cap_box", false);
-            CAP.boxOp = field(fp, "Box opacity (%):", "70", 5);
-            CAP.boxPad = field(fp, "Box padding (px):", "14", 5);
-            CAP.boxRad = field(fp, "Box corners (px):", "12", 5);
-            CAP.shadow = check(fp, "Soft shadow", true, "A dark drop shadow so the text reads on any picture.");
-            CAP.bottom = field(fp, "From bottom (%):", "10", 5, "Distance of the caption from the bottom edge, as a percentage of the comp height.");
-            CAP.maxW = field(fp, "Max width (%):", "88", 5, "A longer caption is split into balanced lines to stay within this share of the comp width.");
 
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);
@@ -17216,22 +17212,19 @@
             CAP.ease = drop(ap, "Curve:", CAP_EASE, 0);
             CAP.dist = field(ap, "Slide distance (px):", "40", 5, "For Slide up and Slide down.");
 
-            btn(p, "Apply to all captions", function () { run("Apply caption style", function () { doCaptionApply(false); }); },
-                "Restyles every Ru Caption layer in the comp with the settings above, and rebuilds their animation.", "primary");
+            btn(p, "Apply to all captions", function () { run("Apply caption animation", function () { doCaptionApply(false); }); },
+                "Rebuilds the In and Out animation of every Ru Caption layer in the comp. Their font, size, colour and position are not touched.", "primary");
             var resetCap = function () {
-                var dd = [[CAP.family, 0], [CAP.weight, 2], [CAP.caseMode, 0], [CAP.inT, 1], [CAP.outT, 1], [CAP.ease, 0]], ff = [[CAP.custom, ""], [CAP.size, "64"], [CAP.tracking, "0"], [CAP.strokeW, "4"],
-                    [CAP.boxOp, "70"], [CAP.boxPad, "14"], [CAP.boxRad, "12"], [CAP.bottom, "10"], [CAP.maxW, "88"], [CAP.inLen, "8"], [CAP.outLen, "6"], [CAP.dist, "40"]], tt = [[CAP.stroke, false], [CAP.box, false], [CAP.shadow, true]], i;
+                var dd = [[CAP.inT, 1], [CAP.outT, 1], [CAP.ease, 0]], ff = [[CAP.inLen, "8"], [CAP.outLen, "6"], [CAP.dist, "40"]], i;
                 for (i = 0; i < dd.length; i++) { dd[i][0].selection = dd[i][1]; }
                 for (i = 0; i < ff.length; i++) { ff[i][0].text = ff[i][1]; }
-                for (i = 0; i < tt.length; i++) { tt[i][0].value = tt[i][1]; try { redraw(tt[i][0]); } catch (eR) {} }
-                CAP.color.set("#FFFFFF"); CAP.strokeColor.set("#101010"); CAP.boxColor.set("#101010");
             };
             grid(p, [
-                ["Apply to selected", function () { run("Apply caption style", function () { doCaptionApply(true); }); }, "Restyles only the selected Ru Caption layers."],
+                ["Apply to selected", function () { run("Apply caption animation", function () { doCaptionApply(true); }); }, "Re-animates only the selected Ru Caption layers."],
                 ["Select all captions", function () { run("Select captions", doCaptionSelectAll); }, "Selects every Ru Caption layer in the comp."],
-                ["Reset style", resetCap, "Puts the style controls back to their defaults (click Apply to use them)."]
+                ["Reset animation", resetCap, "Puts the animation controls back to their defaults (click Apply to use them)."]
             ]);
-            hint(p, "First use downloads the speech engine and model (about 150 MB). After that it works offline.");
+            hint(p, "New captions are white, bold, 64 px, near the bottom with a soft shadow; restyle them in After Effects as you like. First use downloads the speech engine and model (about 150 MB), then it works offline.");
         });
     }
 

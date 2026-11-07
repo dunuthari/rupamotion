@@ -227,7 +227,7 @@ function fakeAnimProp(dims, base) {
     get numKeys() { return keys.length; },
     setValueAtTime(t, v) { const i = keys.findIndex(k => Math.abs(k.t - t) < 1e-9); const k = { t, v, in: E(), out: E(), inT: 'B', outT: 'B' }; if (i >= 0) keys[i] = k; else { keys.push(k); keys.sort((a, b) => a.t - b.t); } },
     nearestKeyIndex(t) { let best = 0; keys.forEach((k, i) => { if (Math.abs(k.t - t) < Math.abs(keys[best].t - t)) best = i; }); return best + 1; },
-    valueAtTime() { return base; }, keyTime: i => keys[i - 1].t, keyValue: i => keys[i - 1].v,
+    valueAtTime(tt) { if (!keys.length) { return this.value; } let v = keys[0].v; keys.forEach(k => { if (k.t <= tt + 1e-9) v = k.v; }); return v; }, keyTime: i => keys[i - 1].t, keyValue: i => keys[i - 1].v,
     keyInTemporalEase: i => keys[i - 1].in, keyOutTemporalEase: i => keys[i - 1].out,
     keyInInterpolationType: i => keys[i - 1].inT, keyOutInterpolationType: i => keys[i - 1].outT,
     setInterpolationTypeAtKey(i, a, b) { keys[i - 1].inT = a; keys[i - 1].outT = b; },
@@ -1074,100 +1074,72 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`captions: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
-// Captions: font, outline, box, wrapping, case and the In/Out animations restyle the existing Ru Caption layers
+// Captions: the In/Out animation is rebuilt on the existing Ru Caption layers without touching their look (there is no Font section)
 {
   const B = $g.global.RuBridge, R = {};
   const meta = JSON.parse(B.meta()), fi = meta.features.find(f => f.name === 'Captions').i;
-  const items = () => { const out = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => out.push(i)); }); })(JSON.parse(B.feature(fi))); return out; };
+  const card = () => JSON.parse(B.feature(fi));
+  const items = () => { const out = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => out.push(i)); }); })(card()); return out; };
   const byLabel = (label) => items().find(i => (i.label || i.text) === label);
   const setv = (label, v) => { const it = byLabel(label); if (!it) throw new Error('no control: ' + label); return B.set(it.id, v); };
   const press = (text) => B.click(items().find(i => i.k === 'b' && i.text === text).id);
   const near = (a, b) => Math.abs(a - b) < 1e-6;
-  press('Reset style');
+  const titles = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') { titles.push(k.card.title); w(k.card); } }); })(card());
+  R['the card has Transcribe and Animation sections and no Font section'] = titles.join() === 'Transcribe,Animation';
+  R['no font, outline, box, shadow or size controls'] = !items().some(i => /Font|Outline|Background box|Soft shadow|Size \(px\)|Box |Letter spacing|Case:|From bottom|Max width/.test(i.label || i.text || ''));
+  press('Reset animation');
   const mk = () => {
     const { comp, made } = fakeBuild(); app.project.activeItem = comp;
     const voice = comp.layers.add({}); voice.name = 'voice.wav'; voice.index = 1; voice.hasAudio = true; voice.startTime = 0; voice.inPoint = 0; voice.outPoint = 20; voice.stretch = 100;
     const it = new g.FootageItem(); it.file = { fsName: '/m/v.wav' }; it.duration = 30; voice.source = it; comp.selectedLayers = [voice];
-    B.captionBuild(JSON.stringify({ layerIndex: 1, layerName: 'voice.wav', segments: [{ start: 1, end: 3, text: 'Hello there' }, { start: 4, end: 7, text: 'General Kenobi you are a bold one' }] }));
-    return { comp, made, voice, caps: () => made.filter(L => L.kind === 'text'), boxes: () => made.filter(L => L.kind === 'shape' && !L.removed) };
+    B.captionBuild(JSON.stringify({ layerIndex: 1, layerName: 'voice.wav', segments: [{ start: 1, end: 3, text: 'Hello there' }, { start: 4, end: 7, text: 'General Kenobi' }] }));
+    return { comp, made, voice, caps: () => made.filter(L => L.kind === 'text') };
   };
-  let w = mk(), c = w.caps();
-  const fr = 0.04;
+  const w = mk(), c = w.caps(), fr = 0.04;
+  R['a new caption is white, 64 px, centred, 10% above the bottom, with a shadow'] = c[0].doc.fontSize === 64 && c[0].doc.fillColor.join() === '1,1,1' && near(c[0].transform.position.value[0], 960)
+    && near(c[0].transform.position.value[1], 1080 * 0.9 - c[0].sourceRectAtTime(1, false).height / 2) && c[0].property('ADBE Effect Parade').children.some(n => n.name === 'Ru Caption Shadow');
   let k = c[0].transform.opacity.keys;
-  R['default look: fade in 8 frames, fade out 6 frames (4 opacity keys)'] = k.length === 4 && near(k[0].t, 1) && k[0].v === 0 && near(k[1].t, 1 + 8 * fr) && k[1].v === 100 && near(k[2].t, 3 - 6 * fr) && near(k[3].t, 3) && k[3].v === 0;
+  R['default animation: fade in 8 frames, fade out 6 frames (4 opacity keys)'] = k.length === 4 && near(k[0].t, 1) && k[0].v === 0 && near(k[1].t, 1 + 8 * fr) && k[1].v === 100 && near(k[2].t, 3 - 6 * fr) && near(k[3].t, 3) && k[3].v === 0;
   R['expo curve: fast start, long settle on the in ramp'] = near(k[0].out[0].influence, 12) && near(k[1].in[0].influence, 92);
-  R['default position unchanged by a fade (no position keys)'] = c[0].transform.position.numKeys === 0;
 
+  // what the user changed by hand in AE must survive Apply
+  c[0].doc.fontSize = 100; c[0].doc.fillColor = [1, 0, 0]; c[0].transform.position.value = [500, 700];
   setv('In:', 3); setv('Out:', 2); setv('Slide distance (px):', '50'); press('Apply to all captions');
-  const pk = c[0].transform.position.keys, y0 = pk[1].v[1];
-  R['slide up / slide down: 4 position keys, 50 px below the rest position'] = pk.length === 4 && near(pk[0].v[1], y0 + 50) && near(pk[2].v[1], y0) && near(pk[3].v[1], y0 + 50) && near(pk[0].t, 1);
+  const pk = c[0].transform.position.keys;
+  R['Apply keeps the hand-made font size, colour and position'] = c[0].doc.fontSize === 100 && c[0].doc.fillColor[0] === 1 && c[0].doc.fillColor[1] === 0 && pk.length === 4 && near(pk[1].v[0], 500) && near(pk[1].v[1], 700);
+  R['slide up / slide down: 4 position keys, 50 px below the resting position (500,700)'] = pk.length === 4 && near(pk[0].v[1], 750) && near(pk[2].v[1], 700) && near(pk[3].v[1], 750) && near(pk[0].t, 1);
   setv('In:', 2); setv('Out:', 4); press('Apply to all captions');
   const sk = c[0].transform.scale.keys;
-  R['pop in / pop out: scale 70 -> 100 and 100 -> 70'] = sk.length === 4 && sk[0].v[0] === 70 && sk[1].v[0] === 100 && sk[2].v[0] === 100 && sk[3].v[0] === 70 && c[0].transform.position.numKeys === 0;
+  R['pop in / pop out: scale 70 -> 100 and 100 -> 70, position back to rest with no keys'] = sk.length === 4 && sk[0].v[0] === 70 && sk[1].v[0] === 100 && sk[2].v[0] === 100 && sk[3].v[0] === 70 && c[0].transform.position.numKeys === 0 && near(c[0].transform.position.value[0], 500);
   setv('In:', 4); setv('Out:', 3); press('Apply to all captions');
-  const fxn = c[0].property('ADBE Effect Parade').children.filter(n => n.name === 'Ru Caption Blur');
-  R['blur in / blur out: one Ru Caption Blur effect (not stacked on re-apply)'] = fxn.length === 1;
+  R['blur in / blur out: one Ru Caption Blur effect (not stacked on re-apply)'] = c[0].property('ADBE Effect Parade').children.filter(n => n.name === 'Ru Caption Blur').length === 1;
   setv('In:', 5); setv('Out:', 0); press('Apply to all captions');
   const anim = () => c[0].property('ADBE Text Properties').property('ADBE Text Animators').children.filter(n => n.name === 'Ru Caption In');
   const st = anim()[0] && anim()[0].property('ADBE Text Selectors').property(1).property('ADBE Text Percent Start');
-  R['typewriter: one text animator, range start 0 -> 100 (4x the in length, capped at 60% of the caption), blur effect gone'] = anim().length === 1 && st.keys.length === 2 && st.keys[0].v === 0 && st.keys[1].v === 100 && near(st.keys[1].t - st.keys[0].t, 1.2) && c[0].property('ADBE Effect Parade').children.filter(n => n.name === 'Ru Caption Blur').length === 0 && c[0].transform.opacity.numKeys === 0;
+  R['typewriter: one text animator, range start 0 -> 100 (4x the in length, capped at 60% of the caption), blur gone'] = anim().length === 1 && st.keys.length === 2 && st.keys[0].v === 0 && st.keys[1].v === 100 && near(st.keys[1].t - st.keys[0].t, 1.2) && c[0].property('ADBE Effect Parade').children.filter(n => n.name === 'Ru Caption Blur').length === 0 && c[0].transform.opacity.numKeys === 0;
   setv('In:', 6); press('Apply to all captions');
-  const bo = anim()[0].property('ADBE Text Selectors').property(1).property('ADBE Text Range Advanced').property('ADBE Text Range Type2').value;
-  R['word by word: based on Words (3), animator replaced not duplicated'] = anim().length === 1 && bo === 3;
+  R['word by word: based on Words (3), animator replaced not duplicated'] = anim().length === 1 && anim()[0].property('ADBE Text Selectors').property(1).property('ADBE Text Range Advanced').property('ADBE Text Range Type2').value === 3;
   setv('In:', 0); setv('Out:', 0); press('Apply to all captions');
   R['In none + Out none: no keyframes, no animator'] = c[0].transform.opacity.numKeys === 0 && anim().length === 0;
-
-  // font and text
-  setv('Font:', 2); setv('Weight:', 2); press('Apply to all captions');
-  R['Manrope Bold -> font Manrope-Bold'] = c[0].doc.font === 'Manrope-Bold';
-  setv('Custom font:', 'NotoSansSinhala-Medium'); press('Apply to all captions');
-  R['a custom font name wins'] = c[0].doc.font === 'NotoSansSinhala-Medium';
-  setv('Custom font:', ''); setv('Size (px):', '80'); setv('Letter spacing:', '30'); setv('Text color:', '#FF0000'); setv('Case:', 1); press('Apply to all captions');
-  R['size, letter spacing, colour, ALL CAPS (native flag, text untouched)'] = c[0].doc.fontSize === 80 && c[0].doc.tracking === 30 && near(c[0].doc.fillColor[0], 1) && near(c[0].doc.fillColor[1], 0) && c[0].doc.allCaps === true && c[0].doc.text === 'Hello there';
-  setv('Case:', 2); press('Apply to all captions');
-  R['lower case rewrites the text'] = c[0].doc.text === 'hello there' && c[0].doc.allCaps === false && c[0].comment === 'ru:Hello there';
-  setv('Case:', 3); press('Apply to all captions');
-  R['Title case'] = c[1].doc.text.replace(/\r/g, ' ') === 'General Kenobi You Are A Bold One';
-  setv('Case:', 0); press('Apply to all captions');
-  R['Normal restores the original text'] = c[0].doc.text === 'Hello there';
-  setv('Outline', true); setv('Outline (px):', '6'); setv('Outline color:', '#00FF00'); press('Apply to all captions');
-  R['outline: stroke on, 6 px, green, under the fill'] = c[0].doc.applyStroke === true && c[0].doc.strokeWidth === 6 && near(c[0].doc.strokeColor[1], 1) && c[0].doc.strokeOverFill === false;
-  setv('Outline', false); press('Apply to all captions');
-  R['outline off again'] = c[0].doc.applyStroke === false;
-  setv('Soft shadow', false); press('Apply to all captions');
-  R['shadow off removes the shadow effect'] = c[0].property('ADBE Effect Parade').children.filter(n => n.name === 'Ru Caption Shadow').length === 0;
-  setv('Soft shadow', true); press('Apply to all captions');
-  R['shadow on again, once'] = c[0].property('ADBE Effect Parade').children.filter(n => n.name === 'Ru Caption Shadow').length === 1;
-  setv('Max width (%):', '20'); press('Apply to all captions');
-  R['a long caption is wrapped into balanced lines (\\r) when it is wider than the max width'] = /\r/.test(c[1].doc.text) && !/\r/.test(c[0].doc.text.replace('x', '')) === !/\r/.test(c[0].doc.text);
-  setv('Max width (%):', '100');
-  setv('From bottom (%):', '20'); press('Apply to all captions');
-  const rc = c[0].sourceRectAtTime(1, false);
-  R['position follows From bottom (20% -> 80% of the height, minus half the text height)'] = near(c[0].transform.position.value[1], 1080 * 0.8 - rc.height / 2) && near(c[0].transform.position.value[0], 960);
-
-  // background boxes
-  setv('Background box', true); setv('Box opacity (%):', '55'); press('Apply to all captions');
-  let bx = w.boxes();
-  R['box on: one Ru Caption Box per caption, same times and place, below the caption'] = bx.length === 2 && bx[0].name === 'Ru Caption Box 1' && near(bx[0].inPoint, c[0].inPoint) && near(bx[0].outPoint, c[0].outPoint) && near(bx[0].transform.position.value[1], c[0].transform.position.value[1]);
-  setv('Out:', 1); setv('In:', 1); press('Apply to all captions');
-  bx = w.boxes();
-  R['re-applying replaces the boxes (still 2) and the box fades with the caption'] = bx.length === 2 && w.made.filter(L => L.kind === 'shape').length === 4 && bx[0].transform.opacity.numKeys === 4;
-  setv('Background box', false); press('Apply to all captions');
-  R['box off removes them'] = w.boxes().length === 0;
+  setv('In:', 1); setv('Out:', 1); setv('In length (frames):', '100'); press('Apply to all captions');
+  k = c[0].transform.opacity.keys;
+  R['a long animation is capped at 45% of the caption each (2 s caption: 0.9 s)'] = near(k[1].t - k[0].t, 0.9) && near(k[3].t - k[2].t, 0.24);
+  setv('Curve:', 2); setv('In length (frames):', '8'); press('Apply to all captions');
+  R['linear curve: linear interpolation on every key'] = c[0].transform.opacity.keys.every(q => q.inT === 'L' && q.outT === 'L');
 
   // scope buttons
-  setv('Size (px):', '90'); setv('Background box', false); w.comp.selectedLayers = [c[1]]; press('Apply to selected');
-  R['Apply to selected restyles only the selected caption'] = c[1].doc.fontSize === 90 && c[0].doc.fontSize === 80;
+  setv('Curve:', 0); setv('Out:', 4); w.comp.selectedLayers = [c[1]]; press('Apply to selected');
+  R['Apply to selected re-animates only the selected caption'] = c[1].transform.scale.numKeys === 2 && c[0].transform.scale.numKeys === 0;
   press('Select all captions');
   R['Select all captions selects the captions and nothing else'] = c.every(L => L.selected === true) && w.voice.selected !== true;
-  press('Reset style');
-  R['Reset style puts the controls back'] = byLabel('Size (px):').v === '64' && byLabel('In:').sel === 1 && byLabel('Outline').v === false && byLabel('Text color:').v === '#FFFFFF';
-  // a clean build uses the current settings straight away
-  setv('Size (px):', '72'); setv('In:', 3);
+  press('Reset animation');
+  R['Reset animation puts the controls back (Fade in/out, 8 and 6 frames, 40 px)'] = byLabel('In:').sel === 1 && byLabel('Out:').sel === 1 && byLabel('In length (frames):').v === '8' && byLabel('Out length (frames):').v === '6' && byLabel('Slide distance (px):').v === '40';
+  // a new transcript is built with the current animation and the standard look
+  setv('In:', 3);
   const w2 = mk();
-  R['a new transcript is built with the current font and animation (72 px, slide up)'] = w2.caps()[0].doc.fontSize === 72 && w2.caps()[0].transform.position.numKeys === 2;
-  press('Reset style');
+  R['a new transcript is built with the current animation (slide up) and the standard look'] = w2.caps()[0].transform.position.numKeys === 2 && w2.caps()[0].doc.fontSize === 64;
+  press('Reset animation');
   app.project.activeItem = null;
   const bad = Object.keys(R).filter(k2 => !R[k2]);
-  console.log(`captions style: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+  console.log(`captions animation: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

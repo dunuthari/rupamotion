@@ -81,7 +81,8 @@
             boxPad: capNum(CAP.boxPad, 14, 0, 200), boxRad: capNum(CAP.boxRad, 12, 0, 200),
             shadow: capOn(CAP.shadow, true), bottom: capNum(CAP.bottom, 10, 0, 90), maxW: capNum(CAP.maxW, 88, 20, 100),
             inIdx: capIdx(CAP.inT, 1), inLen: capNum(CAP.inLen, 8, 1, 120), outIdx: capIdx(CAP.outT, 1), outLen: capNum(CAP.outLen, 6, 1, 120),
-            ease: capIdx(CAP.ease, 0), dist: capNum(CAP.dist, 40, 0, 600)
+            ease: capIdx(CAP.ease, 0), dist: capNum(CAP.dist, 40, 0, 600),
+            fontControls: !!CAP.size   // the card has no Font section: the look is whatever the layers have, only the animation is applied
         };
     }
 
@@ -281,18 +282,33 @@
         for (i = 0; i < found.length; i++) { try { found[i].remove(); } catch (e) {} }
     }
 
-    // restyles and re-animates the given caption layers with the current card settings
-    function applyCaptionStyle(comp, layers) {
-        var cs = captionSettings(), i, L, geo, B, boxes = 0, nums = [];
+    // where a caption already is (its resting position: the middle of its time is between the In and the Out animation)
+    function capGeoOf(comp, L) {
+        var t0 = L.inPoint, t1 = L.outPoint, v = L.transform.position.valueAtTime((t0 + t1) / 2, false);
+        return { x: v[0], y: v[1], rect: null, t0: t0, t1: t1 };
+    }
+
+    // full: restyle the text too (a new transcript). Otherwise, without a Font section, only the animation is rebuilt and the layers'
+    // own look (font, size, colour, position, anything edited by hand) is left alone.
+    function applyCaptionStyle(comp, layers, full) {
+        var cs = captionSettings(), textToo = !!full || cs.fontControls, i, L, geo, B, boxes = 0, nums = [];
         for (i = 0; i < layers.length; i++) { nums.push(capNumberOf(layers[i].name)); }
-        capRemoveBoxes(comp, nums);
+        if (textToo) { capRemoveBoxes(comp, nums); }
         for (i = 0; i < layers.length; i++) {
             L = layers[i];
             capResetFx(L);
-            geo = capStyleText(comp, L, cs);
-            capShadow(L, cs);
+            if (textToo) {
+                geo = capStyleText(comp, L, cs);
+                capShadow(L, cs);
+            } else {
+                geo = capGeoOf(comp, L);
+                capClear(L.transform.position); capClear(L.transform.scale); capClear(L.transform.opacity);
+                setXY(L.transform.position, geo.x, geo.y);
+                setXY(L.transform.scale, 100, 100);
+                L.transform.opacity.setValue(100);
+            }
             capAnimate(comp, L, cs, geo, false);
-            if (cs.box) {
+            if (textToo && cs.box) {
                 B = capMakeBox(comp, L, cs, geo, nums[i]);
                 capAnimate(comp, B, cs, geo, true);
                 boxes++;
@@ -350,6 +366,6 @@
             layers.push(L);
             made++;
         }
-        res = applyCaptionStyle(comp, layers);
+        res = applyCaptionStyle(comp, layers, true);
         return { made: made, skipped: skipped, boxes: res.boxes };
     }
