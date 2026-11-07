@@ -408,11 +408,21 @@
   };
 
   // English: lines of at most 42 characters split on words. Other languages: Whisper's own segments (splitting inside a word can cut a
-  // multi-byte letter in two), no carry-over of earlier text (stops repeating loops), then api.splitLong makes the lines.
+  // multi-byte letter in two), then api.splitLong makes the lines. A small model asked for Sinhala often answers in Latin letters
+  // ("Mei ni amal"); a first sentence written in Sinhala script (--prompt) steers it to the Sinhala alphabet.
+  api.PROMPTS = { si: "\u0DB8\u0DD9\u0DBA \u0DC3\u0DD2\u0D82\u0DC4\u0DBD \u0DB7\u0DCF\u0DC2\u0DCF\u0DC0\u0DD9\u0DB1\u0DCA \u0D9A\u0DB1\u0DCA\u0DB1\u0DCF \u0D9A\u0DBB\u0DB1 \u0D9A\u0DAD\u0DCF\u0DB6\u0DC4\u0D9A\u0DD2." };
   api.whisperArgs = function (model, wav, prefix, threads, lang) {
     lang = lang || "en";
     if (lang === "en") { return ["-m", model, "-f", wav, "-l", "en", "-oj", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"]; }
-    return ["-m", model, "-f", wav, "-l", lang, "-oj", "-of", prefix, "-mc", "0", "-t", String(threads), "-pp"];
+    var a = ["-m", model, "-f", wav, "-l", lang, "-oj", "-of", prefix];
+    if (api.PROMPTS[lang]) { a.push("--prompt", api.PROMPTS[lang]); }
+    return a.concat(["-t", String(threads), "-pp"]);
+  };
+
+  api.hasSinhala = function (segs) {
+    var i;
+    for (i = 0; i < segs.length; i++) { if (/[\u0D80-\u0DFF]/.test(segs[i].text)) { return true; } }
+    return false;
   };
 
   // a model the user put there (for example a Sinhala fine-tune converted to ggml): models/ggml-<lang name>.bin

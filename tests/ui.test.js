@@ -1164,6 +1164,10 @@ function buildTextIcon(sentence, atIndex, opts) {
   const a = mk('si', [{ start: 1, end: 3, text: SI }]), b = mk('en', [{ start: 1, end: 3, text: EN }]);
   R['Sinhala captions get a Sinhala font (Noto Sans Sinhala first), the text is kept as it is'] = a.caps[0].doc.font === 'NotoSansSinhala-Bold' && a.caps[0].doc.text === SI && a.caps[0].comment === 'ru:' + SI;
   R['English captions keep the Style font'] = b.caps[0].doc.font !== 'NotoSansSinhala-Bold';
+  const lat = mk('si', [{ start: 1, end: 3, text: 'Mei ni amal, amal tati eno' }]);
+  R['Sinhala written in Latin letters keeps the normal font (no Sinhala font for Latin text)'] = lat.caps[0].doc.font !== 'NotoSansSinhala-Bold';
+  const en2 = mk('en', [{ start: 1, end: 3, text: SI }]);
+  R['the font follows the text: Sinhala letters get the Sinhala font even from the English button'] = en2.caps[0].doc.font === 'NotoSansSinhala-Bold';
   setv('In:', 5); setv('Out:', 0);
   const c = mk('si', [{ start: 1, end: 3, text: SI }]);
   const type2 = L => L.property('ADBE Text Properties').property('ADBE Text Animators').children.filter(n => n.name === 'Ru Caption In')[0].property('ADBE Text Selectors').property(1).property('ADBE Text Range Advanced').property('ADBE Text Range Type2').value;

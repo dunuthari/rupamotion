@@ -1782,8 +1782,11 @@
         return unknown ? CAP_SINHALA_FONTS[0] : pickFont(true);
     }
 
-    function capFont(cs) {
+    function capFont(cs, txt) {
         if (cs.fontName) { return cs.fontName; }
+        // a caption that contains Sinhala letters gets a Sinhala font whatever button made it (a Latin font would show empty boxes);
+        // Latin text (English, or Sinhala written in Latin letters) keeps the normal font
+        if (txt && /[\u0D80-\u0DFF]/.test(txt)) { return sinhalaFont(); }
         var f = CAP_FONTS[cs.family] || CAP_FONTS[0], name;
         if (cs.custom) { return cs.custom; }
         if (!f[1]) { return pickFont(cs.weight >= 1); }
@@ -1848,7 +1851,7 @@
     function capStyleText(comp, L, cs) {
         var t0 = L.inPoint, t1 = L.outPoint, sp = textDocProp(L), d = sp.value, txt = capCase(capOrig(L), cs.caseMode), rect, k, maxPx = comp.width * cs.maxW / 100, x, y;
         d.fontSize = cs.size;
-        try { d.font = capFont(cs); } catch (e0) {}
+        try { d.font = capFont(cs, txt); } catch (e0) {}
         d.applyFill = true;
         d.fillColor = hexToRgb(cs.color);
         try { d.tracking = cs.tracking; } catch (e1) {}
@@ -2065,7 +2068,7 @@
             layers.push(L);
             made++;
         }
-        res = applyCaptionStyle(comp, layers, true, data.lang === "si" ? sinhalaFont() : null);
+        res = applyCaptionStyle(comp, layers, true);
         return { made: made, skipped: skipped, boxes: res.boxes };
     }
 
@@ -17228,7 +17231,7 @@
                 alert("Sinhala Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
             }, "Select an audio or video layer with Sinhala speech. Creates one caption layer per line, in a Sinhala font. Check every line: Sinhala recognition is far less accurate than English.", "primary");
             sb.ruAction = "transcribe-si";
-            hint(tr, "Sinhala: use Accurate or Best, and check every line (it makes many mistakes). Sinhala also needs After Effects > Preferences > Type > Text Engine: South Asian and Middle Eastern.");
+            hint(tr, "Sinhala: use Accurate or Best. Fast and Balanced often write Sinhala in Latin letters (\"Mei ni amal\") instead of the Sinhala alphabet. Check every line. Sinhala also needs After Effects > Preferences > Type > Text Engine: South Asian and Middle Eastern.");
 
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);

@@ -199,7 +199,12 @@
             var d;
             try { d = JSON.parse(res); } catch (e2) { d = { error: String(res).slice(0, 120) }; }
             if (d.error) { finish(node, d.error, true); return; }
-            finish(node, "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + "." + (lang === "si" ? " Check every line: Sinhala recognition makes many mistakes." : " Look for layers named Ru Caption."), false);
+            var base = "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + ".";
+            if (lang === "si" && !(T.hasSinhala && T.hasSinhala(segs))) {
+              finish(node, base + " The model wrote the Sinhala in Latin letters, not the Sinhala alphabet. Choose Accurate or Best in Accuracy and run Sinhala Transcript again (delete these captions first).", true);
+            } else {
+              finish(node, base + (lang === "si" ? " Check every line: Sinhala recognition makes many mistakes." : " Look for layers named Ru Caption."), false);
+            }
           });
         }, function (e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); });
       });

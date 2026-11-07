@@ -1618,7 +1618,7 @@
                 alert("Sinhala Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
             }, "Select an audio or video layer with Sinhala speech. Creates one caption layer per line, in a Sinhala font. Check every line: Sinhala recognition is far less accurate than English.", "primary");
             sb.ruAction = "transcribe-si";
-            hint(tr, "Sinhala: use Accurate or Best, and check every line (it makes many mistakes). Sinhala also needs After Effects > Preferences > Type > Text Engine: South Asian and Middle Eastern.");
+            hint(tr, "Sinhala: use Accurate or Best. Fast and Balanced often write Sinhala in Latin letters (\"Mei ni amal\") instead of the Sinhala alphabet. Check every line. Sinhala also needs After Effects > Preferences > Type > Text Engine: South Asian and Middle Eastern.");
 
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);

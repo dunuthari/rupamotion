@@ -31,7 +31,9 @@ R['wav: RIFF header, 16 kHz mono 16-bit, 4 samples'] = String.fromCharCode(...wa
   && dv.getUint32(24, true) === 16000 && dv.getUint16(22, true) === 1 && dv.getUint16(34, true) === 16 && dv.getUint32(40, true) === 8 && wav.length === 52 && dv.getInt16(44 + 6, true) === 32767;
 const i16 = T.floatToInt16(new Float32Array([0, 1, -1, 2, -2, 0.5]));
 R['float -> int16 clips at full scale'] = i16[1] === 32767 && i16[2] === -32768 && i16[3] === 32767 && i16[4] === -32768 && Math.abs(i16[5] - 16383.5) < 1;
-R['whisper arguments for Sinhala: language si, no -ml/-sow (they can cut a multi-byte letter), no earlier-text context'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4, 'si'); return a.join(' ') === '-m /m/b.bin -f /t/a.wav -l si -oj -of /t/out -mc 0 -t 4 -pp' && a.indexOf('-ml') < 0; })();
+R['whisper arguments for Sinhala: language si, a Sinhala-script prompt, no -ml/-sow (they can cut a multi-byte letter)'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4, 'si'); const i = a.indexOf('--prompt'); return i > 0 && /^[\u0D80-\u0DFF .]+$/.test(a[i + 1]) && /[\u0D80-\u0DFF]/.test(a[i + 1]) && a[i + 1].length > 10 && a.join(' ').startsWith('-m /m/b.bin -f /t/a.wav -l si -oj -of /t/out --prompt ') && a.slice(-3).join(' ') === '-t 4 -pp' && a.indexOf('-ml') < 0 && a.indexOf('-mc') < 0; })();
+R['English arguments have no prompt'] = T.whisperArgs('m', 'w', 'o', 2, 'en').indexOf('--prompt') < 0;
+R['hasSinhala tells Sinhala script from Latin letters'] = T.hasSinhala([{ text: 'Mei ni amal' }, { text: '\u0DB8\u0DB8' }]) === true && T.hasSinhala([{ text: 'Mei ni amal, amal tati eno' }]) === false;
 R['model names: English uses .en, other languages the multilingual ones, Best = medium'] = T.modelName('en', 'fast') === 'tiny.en' && T.modelName('si', 'fast') === 'tiny' && T.modelName('si', 'best') === 'medium' && T.modelName('en', 'best') === 'medium.en' && T.MODELS.medium.mb === 1530;
 const long = [{ start: 10, end: 20, text: 'aaaa bbbb cccc dddd eeee ffff gggg hhhh' }, { start: 20, end: 22, text: 'short one' }];
 const sp = T.splitLong(long, 20);
