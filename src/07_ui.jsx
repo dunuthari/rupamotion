@@ -261,7 +261,7 @@
     // tab order in the left rail, and chip order inside a tab (features not listed keep their registration order, after the listed ones)
     var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
     var CHIP_ORDER = ["Quick", "Move in / out", "Pop", "Shape morph", "UI list stagger", "Hold push-in",
-        "Effects", "Text + Icon", "Zoom cut", "Swipe cut", "Shape wipe",
+        "Effects", "Text + Icon", "Captions", "Zoom cut", "Swipe cut", "Shape wipe",
         "Smart shape", "Pill button", "Frosted glass", "AI glow button", "Fake cursor", "Avatar bubble", "Audio waveform", "Liquid-glass button", "Stock grid wall"];
 
     function poly(g, pts, close) {
@@ -1600,6 +1600,28 @@
 
     // ---------------- Style ----------------
 
+    // Captions: transcribed by the CEP panel (needs Node and a speech engine), so the card exists only there
+    var CAP_PANEL = false;
+    try { CAP_PANEL = ($.global.RuMotionBridge === true); } catch (eCp) {}
+    if (CAP_PANEL) {
+        feature("Text", "Captions", function (p) {
+            hint(p, "Select an audio or video layer, then click English Transcript. The speech is turned into text on your computer.");
+            var tr = subPanel(p, "Transcribe");
+            CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB"], 1,
+                "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
+            var tb = btn(tr, "English Transcript", function () {
+                alert("English Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
+            }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
+            tb.ruAction = "transcribe-en";
+            var cst = subPanel(p, "Caption style");
+            CAP.size = field(cst, "Font size (px):", "64", 5);
+            CAP.bottom = field(cst, "From bottom (%):", "10", 5, "Distance of the caption from the bottom edge, as a percentage of the comp height.");
+            CAP.color = colorChooser(cst, "Text color:", "#FFFFFF", "cap_color", false);
+            CAP.shadow = check(cst, "Soft shadow", true, "A dark drop shadow so the text reads on any picture.");
+            hint(p, "First use downloads the speech engine and model (about 150 MB). After that it works offline. Fonts come from the Style tab.");
+        });
+    }
+
     feature("Style", "Style", function (p) {
         hint(p, "These settings apply to every group.");
         var mo = subPanel(p, "Motion");
@@ -2140,7 +2162,7 @@
         if (t === "button") {
             if (c.isSwatch) { return null; }
             if (typeof c.value === "boolean") { return { k: "t", id: brId(c), text: c.text, v: c.value, tip: c.helpTip || "" }; }
-            return { k: "b", id: brId(c), text: c.text, v: c.variant || "secondary", tip: c.helpTip || "" };
+            return { k: "b", id: brId(c), text: c.text, v: c.variant || "secondary", tip: c.helpTip || "", a: c.ruAction || "" };
         }
         return null;
     }
@@ -2204,6 +2226,16 @@
             },
             click: function (id) {
                 try { BR.ctl[id].onClick(); return "ok"; } catch (e) { return "err: " + e; }
+            },
+            captionSource: function () { try { return jstr(captionSource()); } catch (e) { return jstr({ error: String(e) }); } },
+            captionModel: function () { try { return captionSettings().model; } catch (e) { return "base.en"; } },
+            captionBuild: function (json) {
+                try {
+                    var data = jparse(json), res;
+                    app.beginUndoGroup(NAME + ": English Transcript");
+                    try { res = buildCaptions(data); } finally { app.endUndoGroup(); }
+                    return jstr(res);
+                } catch (e) { return jstr({ error: String(e) + (e.line ? " (line " + e.line + ")" : "") }); }
             },
             cut: function (n) {
                 try { var c = cutFns[n]; run(c[0], c[1]); return "ok"; } catch (e) { return "err: " + e; }

@@ -91,7 +91,7 @@
       n.addEventListener("keydown", function (e) { if (e.key === "Enter") { n.blur(); } });
       ctlMap[item.id] = { item: item, node: n };
       if (isHex(item.v)) {
-        var sw = el("input", { type: "color", value: item.v, class: "swatch", title: "Choose a color", style: "padding:0;border:0;background:none;width:30px;height:24px;cursor:pointer" });
+        var sw = el("input", { type: "color", value: item.v, class: "swatch", title: "Choose a color", style: "position:static;opacity:1;pointer-events:auto;padding:0;border:1px solid var(--hairline);border-radius:6px;background:none;width:32px;height:26px;cursor:pointer;flex:none" });
         sw.addEventListener("change", function () { n.value = sw.value.toUpperCase(); sendSet(item, n.value); });
         ctx.hex = true;
         ctlMap[item.id].swatch = sw;
@@ -114,6 +114,13 @@
       return [n];
     }
     // button
+    if (item.a) {   // an action the panel runs itself (transcription), with a status line under the button
+      n = el("button", { class: "btn primary", type: "button", text: item.text, title: item.tip || "" });
+      n._status = el("div", { class: "cap-status", hidden: "" }, [el("div", { class: "bar" }, [el("i")]), el("p", { class: "hint", text: "" })]);
+      n.addEventListener("click", function () { runAction(item, n); });
+      ctlMap[item.id] = { item: item, node: n };
+      return [n];
+    }
     k = item.text;
     if (ctx.flow && FLOW_PRESETS[k]) {
       var cv = el("canvas", { width: 80, height: 76 });
@@ -136,6 +143,56 @@
       node.classList.remove("busy");
       toast(r === "ok" ? (item.text + " — done.") : String(r).slice(0, 140));
       refresh();
+    });
+  }
+
+  // ---------- transcription (runs in this panel; After Effects only supplies the layer and receives the captions) ----------
+  var running = null;
+  function setStatus(node, msg, frac, kind) {
+    var st = node._status, bar;
+    if (!st) { return; }
+    bar = st.firstChild;
+    st.hidden = false;
+    bar.classList.toggle("ind", frac === null);
+    bar.firstChild.style.width = (frac === null || frac === undefined) ? "" : Math.round(frac * 100) + "%";
+    st.lastChild.textContent = msg;
+    st.classList.toggle("err", kind === "err");
+  }
+  function finish(node, msg, isErr) {
+    running = null;
+    node.textContent = "English Transcript";
+    node.classList.add("primary");
+    setStatus(node, msg, isErr ? 0 : 1, isErr ? "err" : "");
+    toast(isErr ? "Transcript: " + msg.slice(0, 80) : msg);
+  }
+  function runAction(item, node) {
+    if (item.a !== "transcribe-en") { return; }
+    if (running) { running.cancel(); return; }   // while it works, the button is Cancel
+    var T = window.RuTranscribe;
+    if (!T || !T.available()) { setStatus(node, "This panel cannot use Node.js yet. Run the latest installer and restart After Effects.", 0, "err"); return; }
+    node.textContent = "Cancel";
+    node.classList.remove("primary");
+    setStatus(node, "Looking at the selected layer…", null);
+    bridge("captionSource()", function (r) {
+      var src;
+      try { src = JSON.parse(r); } catch (e) { src = { error: "Could not read the selected layer: " + String(r).slice(0, 120) }; }
+      if (src.error) { finish(node, src.error, true); return; }
+      bridge("captionModel()", function (mr) {
+        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";
+        try {
+          running = T.transcribe({ file: src.path, model: model, enginePath: store("whisper_path", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
+        } catch (e1) { finish(node, e1.message || String(e1), true); return; }
+        running.promise.then(function (segs) {
+          if (!segs.length) { finish(node, "No speech was found in that layer.", true); return; }
+          setStatus(node, "Adding " + segs.length + " captions…", null);
+          bridge("captionBuild(" + esc(JSON.stringify({ layerIndex: src.index, layerName: src.name, segments: segs })) + ")", function (res) {
+            var d;
+            try { d = JSON.parse(res); } catch (e2) { d = { error: String(res).slice(0, 120) }; }
+            if (d.error) { finish(node, d.error, true); return; }
+            finish(node, "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + ". Look for layers named Ru Caption.", false);
+          });
+        }, function (e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); });
+      });
     });
   }
 
@@ -179,7 +236,9 @@
       var items = k.items, first = items[0];
       if (items.length === 1 && first.k === "t") { parent.appendChild(makeItem(first, ctx)[0]); return; }
       if (items.length === 1 && first.k === "b") {
-        parent.appendChild(el("div", { class: "btns one" }, makeItem(first, ctx)));
+        var one = makeItem(first, ctx);
+        parent.appendChild(el("div", { class: "btns one" }, one));
+        if (one[0] && one[0]._status) { parent.appendChild(one[0]._status); }
         return;
       }
       var flowGrid = ctx.flow && items.length > 1 && items.every(function (it) { return it.k === "b" && FLOW_PRESETS[it.text]; });

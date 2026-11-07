@@ -15,6 +15,7 @@ let body = preview.slice(preview.indexOf("<body>") + 6, preview.indexOf("<script
 body = body.replace(/<p class="note">[\s\S]*?<\/p>/, "");
 const icons = preview.match(/var ICONS = \{[\s\S]*?\n  \};/)[0];
 const app = fs.readFileSync(path.join(__dirname, "app.js"), "utf8").replace("/*__ICONS__*/", () => icons);
+const transcribe = fs.readFileSync(path.join(__dirname, "transcribe.js"), "utf8");
 
 const extra = `<style>
   /* CEP: the panel fills the dock, the content scrolls (mouse wheel works here) */
@@ -31,6 +32,13 @@ const extra = `<style>
   select { max-width: 100%; }
   input[type=text] { box-sizing: border-box; padding: 0 6px; }
   .flow-graph { height: 190px; }
+  .cap-status { display: grid; gap: 6px; }
+  .cap-status .bar { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
+  .cap-status .bar i { display: block; height: 100%; width: 0; background: var(--primary); transition: width .2s; }
+  .cap-status .bar.ind i { width: 35%; animation: capind 1.1s ease-in-out infinite alternate; }
+  @keyframes capind { from { margin-left: 0; } to { margin-left: 65%; } }
+  .cap-status.err .hint { color: #FF6B6B; }
+  .cap-status[hidden] { display: none; }
 </style>`;
 
 const html = `<!DOCTYPE html>
@@ -43,6 +51,9 @@ ${extra}
 </head>
 <body>
 ${body}
+<script>
+${transcribe}
+</script>
 <script>
 ${app}
 </script>
@@ -77,6 +88,10 @@ fs.writeFileSync(path.join(out, "CSXS", "manifest.xml"), `<?xml version="1.0" en
       <DispatchInfo>
         <Resources>
           <MainPath>./index.html</MainPath>
+          <CEFCommandLine>
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
+          </CEFCommandLine>
         </Resources>
         <Lifecycle>
           <AutoVisible>true</AutoVisible>

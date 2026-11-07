@@ -1021,3 +1021,55 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`cep bridge: ${meta.features.length} features, kinds ${JSON.stringify(countKinds)}, set ${!!okSet}, click ${!!okClick}`);
   require('fs').writeFileSync(process.env.RU_FIXTURE || '/tmp/ru_fixture.json', JSON.stringify({ meta, feats }));
 }
+
+// Captions (CEP bridge): the selected layer is described for the transcriber, and a transcript becomes one text layer per line,
+// mapped through the layer's start time and clipped to its in/out points
+{
+  const B = $g.global.RuBridge, R = {};
+  const meta = JSON.parse(B.meta());
+  R['Captions card exists in the bridge (Text tab, after Text + Icon)'] = meta.features.some(f => f.group === 'Text' && f.name === 'Captions');
+  const card = JSON.parse(B.feature(meta.features.find(f => f.name === 'Captions').i));
+  const flat = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => flat.push(i)); }); })(card);
+  const tbtn = flat.find(i => i.k === 'b' && i.text === 'English Transcript');
+  R['"English Transcript" is a primary button flagged for the panel (a = transcribe-en)'] = !!tbtn && tbtn.v === 'primary' && tbtn.a === 'transcribe-en';
+  R['model dropdown has 3 choices, Balanced selected'] = flat.some(i => i.k === 'd' && i.items.length === 3 && i.sel === 1);
+  R['model name follows the dropdown'] = B.captionModel() === 'base.en';
+
+  app.project.activeItem = null;
+  R['no comp -> clear error'] = /composition/i.test(JSON.parse(B.captionSource()).error);
+  const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+  const voice = comp.layers.add({}); voice.name = 'voice.wav'; voice.index = 1; voice.hasAudio = true;
+  voice.startTime = 2; voice.inPoint = 2; voice.outPoint = 12; voice.stretch = 100;
+  comp.selectedLayers = [];
+  R['nothing selected -> error'] = /Select one/.test(JSON.parse(B.captionSource()).error);
+  comp.selectedLayers = [voice];
+  R['a layer with no source file -> error'] = /audio or video file/.test(JSON.parse(B.captionSource()).error);
+  const item = new g.FootageItem(); item.file = { fsName: '/media/voice.wav' }; item.duration = 30; voice.source = item;
+  const info = JSON.parse(B.captionSource());
+  R['source info: path, index, start, in/out, stretch'] = info.path === '/media/voice.wav' && info.index === 1 && info.startTime === 2 && info.inPoint === 2 && info.outPoint === 12 && info.stretch === 100;
+
+  const segs = [{ start: 0, end: 2, text: 'Hello there' }, { start: 2.5, end: 4, text: 'General Kenobi' }, { start: 9, end: 11, text: 'runs past the end' }, { start: 10.5, end: 12, text: 'fully outside' }, { start: 3, end: 3.01, text: 'too short' }];
+  const res = JSON.parse(B.captionBuild(JSON.stringify({ layerIndex: 1, layerName: 'voice.wav', segments: segs })));
+  const caps = made.filter(L => L.kind === 'text');
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  R['3 captions made, 2 skipped'] = res.made === 3 && res.skipped === 2 && caps.length === 3;
+  R['named Ru Caption 1..3'] = caps.map(L => L.name).join() === 'Ru Caption 1,Ru Caption 2,Ru Caption 3';
+  R['times = layer start + source time (2..4, 4.5..6)'] = near(caps[0].inPoint, 2) && near(caps[0].outPoint, 4) && near(caps[1].inPoint, 4.5) && near(caps[1].outPoint, 6) && near(caps[0].startTime, 2);
+  R['a caption running past the layer end is clipped to it (11..12)'] = near(caps[2].inPoint, 11) && near(caps[2].outPoint, 12);
+  R['text, size 64, centred horizontally'] = caps[0].doc.text === 'Hello there' && caps[0].doc.fontSize === 64 && near(caps[0].transform.position.value[0], 960);
+  const r0 = caps[0].sourceRectAtTime(2, false);
+  R['sits 10% above the bottom'] = near(caps[0].transform.position.value[1], 1080 * 0.9 - r0.height / 2);
+  R['soft shadow added'] = !!caps[0].nodes['ADBE Effect Parade'];
+  const res2 = JSON.parse(B.captionBuild(JSON.stringify({ layerIndex: 1, layerName: 'other.wav', segments: segs })));
+  R['wrong layer name -> error, nothing added'] = /moved/.test(res2.error) && made.filter(L => L.kind === 'text').length === 3;
+  // stretch 200% halves speed in the other direction: source time 1 s lasts 2 s on the timeline
+  voice.stretch = 50;
+  const before = made.filter(L => L.kind === 'text').length;
+  B.captionBuild(JSON.stringify({ layerIndex: 1, layerName: 'voice.wav', segments: [{ start: 2, end: 4, text: 'fast' }] }));
+  const fast = made.filter(L => L.kind === 'text')[before];
+  R['stretch 50% (twice as fast) halves the source seconds: 3..4'] = !!fast && near(fast.inPoint, 3) && near(fast.outPoint, 4);
+  R['garbage JSON is refused'] = /could not be read/.test(JSON.parse(B.captionBuild('{"layerIndex": 1, evil()}')).error);
+  app.project.activeItem = null;
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`captions: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}

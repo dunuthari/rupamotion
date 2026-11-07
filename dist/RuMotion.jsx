@@ -1678,6 +1678,99 @@
     }
 
     // =====================================================================
+    // CAPTIONS (Text > Captions, CEP panel only): one text layer per caption line, made from a transcript
+    // =====================================================================
+    // The speech-to-text itself runs in the CEP panel (cep/transcribe.js: whisper.cpp on the user's computer). This file only
+    //   - describes the selected audio/video layer for the panel (captionSource),
+    //   - turns the transcript the panel sends back into text layers (buildCaptions).
+    // Transcript times are seconds from the start of the SOURCE FILE; they are mapped onto the comp with the layer's start time and
+    // stretch, and clipped to the layer's in/out points, so a trimmed or moved clip still gets captions in the right place.
+
+    var CAP = {};   // the Captions card controls (filled in 07_ui.jsx): model, size, bottom, color, shadow
+
+    // strict JSON reader for ES3 (the text comes from our own panel; the check is the one json2 uses)
+    function jparse(s) {
+        var t = String(s);
+        var probe = t.replace(/\\(?:["\\\/bfnrtu])/g, "@")
+            .replace(/"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g, "]")
+            .replace(/(?:^|:|,)(?:\s*\[)+/g, "");
+        if (!/^[\],:{}\s]*$/.test(probe)) { throw new Error("The transcript could not be read."); }
+        return eval("(" + t + ")");
+    }
+
+    function captionSource() {
+        var comp = app.project.activeItem, sel, L, src = null;
+        if (!(comp && comp instanceof CompItem)) { return { error: "Open a composition first (click inside its timeline)." }; }
+        sel = comp.selectedLayers;
+        if (sel.length !== 1) { return { error: "Select one audio or video layer first." }; }
+        L = sel[0];
+        try { src = L.source; } catch (e) { src = null; }
+        if (!src || !(src instanceof FootageItem) || !src.file) {
+            return { error: "Select a layer that comes from an audio or video file (not a pre-comp, solid or text)." };
+        }
+        try { if (L.hasAudio === false) { return { error: "That layer has no audio." }; } } catch (e1) {}
+        return {
+            path: src.file.fsName, name: L.name, index: L.index,
+            startTime: L.startTime, inPoint: L.inPoint, outPoint: L.outPoint, stretch: L.stretch,
+            sourceDuration: src.duration, comp: comp.name
+        };
+    }
+
+    function captionSettings() {
+        var d = { model: "base.en", size: 64, bottom: 10, color: "#FFFFFF", shadow: true }, models = ["tiny.en", "base.en", "small.en"];
+        try { if (CAP.model && CAP.model.selection) { d.model = models[CAP.model.selection.index] || d.model; } } catch (e) {}
+        try { if (CAP.size) { d.size = num(CAP.size.text, 64, 8, 400); } } catch (e1) {}
+        try { if (CAP.bottom) { d.bottom = num(CAP.bottom.text, 10, 0, 90); } } catch (e2) {}
+        try { if (CAP.color) { d.color = rgbToHex(CAP.color.get()); } } catch (e3) {}
+        try { if (CAP.shadow) { d.shadow = !!CAP.shadow.value; } } catch (e4) {}
+        return d;
+    }
+
+    // data: { layerIndex, layerName, segments: [{ start, end, text }] }  (seconds in the source file)
+    function buildCaptions(data) {
+        var comp = app.project.activeItem, src, cs = captionSettings(), made = 0, skipped = 0, i, seg, L, k, t0, t1, lo, hi, rect, x, y, col;
+        if (!(comp && comp instanceof CompItem)) { return { error: "Open a composition first." }; }
+        src = comp.layer(data.layerIndex);
+        if (!src || src.name !== data.layerName) { return { error: "The layer moved while transcribing. Select it again and run the transcript again." }; }
+        k = Math.abs(src.stretch) / 100; if (!(k > 0)) { k = 1; }
+        lo = Math.max(0, src.inPoint); hi = Math.min(comp.duration, src.outPoint);
+        col = hexToRgb(cs.color);
+        for (i = 0; i < data.segments.length; i++) {
+            seg = data.segments[i];
+            t0 = src.startTime + seg.start * k;
+            t1 = src.startTime + seg.end * k;
+            if (t0 < lo) { t0 = lo; }
+            if (t1 > hi) { t1 = hi; }
+            if (!(t1 - t0 >= comp.frameDuration) || !trim(seg.text)) { skipped++; continue; }
+            L = makeText(comp, trim(seg.text), { size: cs.size, color: col, font: pickFont(true), just: "center" });
+            L.name = "Ru Caption " + (made + 1);
+            L.startTime = t0;
+            L.inPoint = t0;
+            L.outPoint = t1;
+            try { rect = L.sourceRectAtTime(t0, false); } catch (e0) { rect = null; }
+            x = comp.width / 2;
+            y = comp.height * (1 - cs.bottom / 100);
+            if (rect) {
+                anchorTo(L, "center", t0);
+                y -= rect.height / 2;
+            }
+            setXY(L.transform.position, x, y);
+            if (cs.shadow) {
+                try {
+                    var e = fxAdd(L, "ADBE Drop Shadow");
+                    fxSet(e, 1, [0, 0, 0, 1]);
+                    fxSet(e, 2, 170);
+                    fxSet(e, 3, 180);
+                    fxSet(e, 4, 3);
+                    fxSet(e, 5, 14);
+                } catch (e2) {}
+            }
+            made++;
+        }
+        return { made: made, skipped: skipped };
+    }
+
+    // =====================================================================
     // FIXED BAR — Cut Before / Split / Cut After (always visible at the bottom of the panel)
     // =====================================================================
     // Acts on the selected layers at the playhead (only layers the playhead is inside):
@@ -15479,7 +15572,7 @@
     // tab order in the left rail, and chip order inside a tab (features not listed keep their registration order, after the listed ones)
     var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
     var CHIP_ORDER = ["Quick", "Move in / out", "Pop", "Shape morph", "UI list stagger", "Hold push-in",
-        "Effects", "Text + Icon", "Zoom cut", "Swipe cut", "Shape wipe",
+        "Effects", "Text + Icon", "Captions", "Zoom cut", "Swipe cut", "Shape wipe",
         "Smart shape", "Pill button", "Frosted glass", "AI glow button", "Fake cursor", "Avatar bubble", "Audio waveform", "Liquid-glass button", "Stock grid wall"];
 
     function poly(g, pts, close) {
@@ -16818,6 +16911,28 @@
 
     // ---------------- Style ----------------
 
+    // Captions: transcribed by the CEP panel (needs Node and a speech engine), so the card exists only there
+    var CAP_PANEL = false;
+    try { CAP_PANEL = ($.global.RuMotionBridge === true); } catch (eCp) {}
+    if (CAP_PANEL) {
+        feature("Text", "Captions", function (p) {
+            hint(p, "Select an audio or video layer, then click English Transcript. The speech is turned into text on your computer.");
+            var tr = subPanel(p, "Transcribe");
+            CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB"], 1,
+                "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
+            var tb = btn(tr, "English Transcript", function () {
+                alert("English Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
+            }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
+            tb.ruAction = "transcribe-en";
+            var cst = subPanel(p, "Caption style");
+            CAP.size = field(cst, "Font size (px):", "64", 5);
+            CAP.bottom = field(cst, "From bottom (%):", "10", 5, "Distance of the caption from the bottom edge, as a percentage of the comp height.");
+            CAP.color = colorChooser(cst, "Text color:", "#FFFFFF", "cap_color", false);
+            CAP.shadow = check(cst, "Soft shadow", true, "A dark drop shadow so the text reads on any picture.");
+            hint(p, "First use downloads the speech engine and model (about 150 MB). After that it works offline. Fonts come from the Style tab.");
+        });
+    }
+
     feature("Style", "Style", function (p) {
         hint(p, "These settings apply to every group.");
         var mo = subPanel(p, "Motion");
@@ -17358,7 +17473,7 @@
         if (t === "button") {
             if (c.isSwatch) { return null; }
             if (typeof c.value === "boolean") { return { k: "t", id: brId(c), text: c.text, v: c.value, tip: c.helpTip || "" }; }
-            return { k: "b", id: brId(c), text: c.text, v: c.variant || "secondary", tip: c.helpTip || "" };
+            return { k: "b", id: brId(c), text: c.text, v: c.variant || "secondary", tip: c.helpTip || "", a: c.ruAction || "" };
         }
         return null;
     }
@@ -17422,6 +17537,16 @@
             },
             click: function (id) {
                 try { BR.ctl[id].onClick(); return "ok"; } catch (e) { return "err: " + e; }
+            },
+            captionSource: function () { try { return jstr(captionSource()); } catch (e) { return jstr({ error: String(e) }); } },
+            captionModel: function () { try { return captionSettings().model; } catch (e) { return "base.en"; } },
+            captionBuild: function (json) {
+                try {
+                    var data = jparse(json), res;
+                    app.beginUndoGroup(NAME + ": English Transcript");
+                    try { res = buildCaptions(data); } finally { app.endUndoGroup(); }
+                    return jstr(res);
+                } catch (e) { return jstr({ error: String(e) + (e.line ? " (line " + e.line + ")" : "") }); }
             },
             cut: function (n) {
                 try { var c = cutFns[n]; run(c[0], c[1]); return "ok"; } catch (e) { return "err: " + e; }
