@@ -1,6 +1,6 @@
 Ru Motion - CEP panel
 =====================
-Windows: double-click install.bat.   Mac: double-click install.command (if it is blocked, right-click > Open).
+Windows: double-click RuMotion-Setup.exe (or install.bat).   Mac: double-click install.command (if it is blocked, right-click > Open).
 Then restart After Effects and open  Window > Extensions > Ru Motion.
 
 By hand:

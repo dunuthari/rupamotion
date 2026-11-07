@@ -2,13 +2,14 @@
   "name": "ru-motion",
   "version": "1.0.0",
   "private": true,
-  "description": "Ru Motion — Google Vids–style motion toolkit (ScriptUI panel) for Adobe After Effects",
+  "description": "Ru Motion \u2014 Google Vids\u2013style motion toolkit (ScriptUI panel) for Adobe After Effects",
   "scripts": {
     "build": "node build.js",
     "lint": "eslint --no-eslintrc -c .eslintrc.json dist/RuMotion.jsx",
     "test": "node tests/ui.test.js",
     "check": "npm run build && npm run lint && npm run test && node tests/transcribe.test.js",
-    "cep": "node cep/build.js"
+    "cep": "node cep/build.js",
+    "installer": "npm run cep && bash installer/build.sh"
   },
   "devDependencies": {
     "eslint": "8.57.0"
