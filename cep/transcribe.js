@@ -10,7 +10,7 @@
   var proc = (typeof process !== "undefined") ? process : (nodeRequire ? nodeRequire("process") : null);
 
   var api = {};
-  api.MODELS = { "tiny.en": { mb: 75 }, "base.en": { mb: 142 }, "small.en": { mb: 466 } };
+  api.MODELS = { "tiny.en": { mb: 75 }, "base.en": { mb: 142 }, "small.en": { mb: 466 }, "medium.en": { mb: 1530 }, "tiny": { mb: 75 }, "base": { mb: 142 }, "small": { mb: 466 }, "medium": { mb: 1530 } };
   api.available = function () { return !!nodeRequire && !!proc; };
 
   // ---------------------------------------------------------------- pure helpers
@@ -50,6 +50,50 @@
     return out.filter(function (x) { return x.end > x.start; }).map(function (x) {
       return { start: Math.round(x.start * 1000) / 1000, end: Math.round(x.end * 1000) / 1000, text: x.text };
     });
+  };
+
+
+  // Whisper's own segments can be 10 to 30 seconds of text. Cut them at spaces into caption-sized lines (at most maxChars each, similar
+  // lengths) and share the segment's time between the pieces in proportion to their length.
+  api.splitLong = function (segs, maxChars) {
+    var out = [], i, j, s, words, lines, cur, k, target, total, t, len, piece;
+    for (i = 0; i < segs.length; i++) {
+      s = segs[i];
+      if (s.text.length <= maxChars) { out.push(s); continue; }
+      k = Math.ceil(s.text.length / maxChars);
+      target = Math.ceil(s.text.length / k);
+      words = s.text.split(" "); lines = []; cur = "";
+      for (j = 0; j < words.length; j++) {
+        if (cur && (cur + " " + words[j]).length > target && lines.length < k - 1) { lines.push(cur); cur = words[j]; }
+        else { cur = cur ? cur + " " + words[j] : words[j]; }
+      }
+      if (cur) { lines.push(cur); }
+      total = 0; for (j = 0; j < lines.length; j++) { total += lines[j].length; }
+      t = s.start;
+      for (j = 0; j < lines.length; j++) {
+        len = (s.end - s.start) * lines[j].length / total;
+        piece = { start: Math.round(t * 1000) / 1000, end: Math.round((j === lines.length - 1 ? s.end : t + len) * 1000) / 1000, text: lines[j] };
+        out.push(piece);
+        t += len;
+      }
+    }
+    return out;
+  };
+
+  // low-resource languages make Whisper loop on one line; an identical line right after itself is dropped
+  api.dropRepeats = function (segs) {
+    var out = [], i;
+    for (i = 0; i < segs.length; i++) {
+      if (out.length && out[out.length - 1].text === segs[i].text) { continue; }
+      out.push(segs[i]);
+    }
+    return out;
+  };
+
+  // the model file for a language: English uses the .en models, everything else the multilingual ones
+  api.modelName = function (lang, size) {
+    var en = { fast: "tiny.en", balanced: "base.en", accurate: "small.en", best: "medium.en" }, multi = { fast: "tiny", balanced: "base", accurate: "small", best: "medium" };
+    return (lang === "en" ? en : multi)[size] || (lang === "en" ? "base.en" : "base");
   };
 
   // 16-bit mono PCM -> WAV bytes
@@ -363,11 +407,21 @@
     });
   };
 
-  api.whisperArgs = function (model, wav, prefix, threads) {
-    return ["-m", model, "-f", wav, "-l", "en", "-oj", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"];
+  // English: lines of at most 42 characters split on words. Other languages: Whisper's own segments (splitting inside a word can cut a
+  // multi-byte letter in two), no carry-over of earlier text (stops repeating loops), then api.splitLong makes the lines.
+  api.whisperArgs = function (model, wav, prefix, threads, lang) {
+    lang = lang || "en";
+    if (lang === "en") { return ["-m", model, "-f", wav, "-l", "en", "-oj", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"]; }
+    return ["-m", model, "-f", wav, "-l", lang, "-oj", "-of", prefix, "-mc", "0", "-t", String(threads), "-pp"];
   };
 
-  // o: { file, model: "base.en", onStatus(message, fraction|null), enginePath, modelBase }
+  // a model the user put there (for example a Sinhala fine-tune converted to ggml): models/ggml-<lang name>.bin
+  api.customModel = function (lang) {
+    var m = mods(), f = m.path.join(api.baseDir(), "models", lang === "si" ? "ggml-sinhala.bin" : "ggml-" + lang + ".bin");
+    return (lang !== "en" && m.fs.existsSync(f)) ? f : null;
+  };
+
+  // o: { file, model: "base.en", lang: "en"|"si", onStatus(message, fraction|null), enginePath, modelBase }
   // returns { promise -> segments [{start,end,text}] in source-file seconds, cancel() }
   api.transcribe = function (o) {
     var m = mods(), cancelled = false, child = null, status = o.onStatus || function () {}, tmp, wav, prefix;
@@ -379,7 +433,9 @@
     function stopCheck() { if (cancelled) { var e = new Error("Cancelled."); e.cancelled = true; throw e; } }
     var promise = api.ensureEngine(status, o.enginePath).then(function (engine) {
       stopCheck();
-      return api.ensureModel(o.model || "base.en", status, o.modelBase).then(function (model) {
+      var custom = api.customModel(o.lang || "en");
+      if (custom) { status("Using your model " + custom.split(/[\\/]/).pop() + "…", null); }
+      return (custom ? Promise.resolve(custom) : api.ensureModel(o.model || "base.en", status, o.modelBase)).then(function (model) {
         stopCheck();
         tmp = m.path.join(m.os.tmpdir(), "rumotion-" + Date.now());
         mkdirp(tmp);
@@ -389,7 +445,7 @@
           stopCheck();
           status("Transcribing…", 0);
           var threads = Math.max(2, Math.min(8, m.os.cpus().length - 1));
-          return run(engine, api.whisperArgs(model, wav, prefix, threads), function (l) {
+          return run(engine, api.whisperArgs(model, wav, prefix, threads, o.lang), function (l) {
             var p = /progress\s*=\s*(\d+)\s*%/.exec(l);
             if (p) { status("Transcribing… " + p[1] + "%", (+p[1]) / 100); }
           }, { onChild: function (c) { child = c; } });
@@ -399,6 +455,7 @@
       var jsonFile = prefix + ".json";
       if (!m.fs.existsSync(jsonFile)) { throw new Error("The speech engine finished but wrote no transcript."); }
       var segs = api.cleanSegments(api.parseWhisperJson(m.fs.readFileSync(jsonFile, "utf8")));
+      if (o.lang && o.lang !== "en") { segs = api.splitLong(api.dropRepeats(segs), 40); }
       cleanup();
       return segs;
     }).catch(function (e) {

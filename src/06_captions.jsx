@@ -22,12 +22,12 @@
         ["Noto Sans Sinhala", ["NotoSansSinhala-Regular", "NotoSansSinhala-Medium", "NotoSansSinhala-Bold"]],
         ["Arial", ["ArialMT", "ArialMT", "Arial-BoldMT"]]
     ];
-    var CAP_WEIGHTS = ["Regular", "Medium", "Bold"];
-    var CAP_CASES = ["Normal", "UPPER", "lower", "Title"];
     var CAP_IN = [["None", "none"], ["Fade", "fade"], ["Pop", "pop"], ["Slide up", "slideup"], ["Blur in", "blur"], ["Typewriter", "type"], ["Word by word", "words"]];
     var CAP_OUT = [["None", "none"], ["Fade", "fade"], ["Slide down", "slidedown"], ["Blur out", "blur"], ["Pop out", "pop"]];
     var CAP_EASE = ["Expo out", "Smooth", "Linear"];
-    var CAP_MODELS = ["tiny.en", "base.en", "small.en"];
+    var CAP_MODELS = ["tiny.en", "base.en", "small.en", "medium.en"];
+    var CAP_MODELS_MULTI = ["tiny", "base", "small", "medium"];   // Sinhala and every other language: the multilingual models
+    var CAP_SINHALA_FONTS = ["NotoSansSinhala-Bold", "NirmalaUI-Bold", "NirmalaUI", "IskoolaPota", "SinhalaSangamMN-Bold", "SinhalaMN-Bold", "SinhalaMN"];
 
     function capLabels(list, col) {
         var out = [], i;
@@ -72,6 +72,7 @@
 
     function captionSettings() {
         return {
+            modelIdx: capIdx(CAP.model, 1),
             model: CAP_MODELS[capIdx(CAP.model, 1)] || "base.en",
             family: capIdx(CAP.family, 0), weight: capIdx(CAP.weight, 2), custom: capText(CAP.custom, ""),
             size: capNum(CAP.size, 64, 8, 400), tracking: capNum(CAP.tracking, 0, -100, 1000), caseMode: capIdx(CAP.caseMode, 0),
@@ -86,7 +87,25 @@
         };
     }
 
+    // the model name for a language, from the Accuracy choice (the panel downloads it)
+    function captionModelFor(lang) {
+        var i = capIdx(CAP.model, 1);
+        return ((lang === "en" || !lang) ? CAP_MODELS : CAP_MODELS_MULTI)[i] || ((lang === "en" || !lang) ? "base.en" : "base");
+    }
+
+    // a font that has Sinhala letters: Noto Sans Sinhala, Windows' Nirmala UI or Iskoola Pota, the Mac's Sinhala fonts
+    function sinhalaFont() {
+        var i, r, unknown = false;
+        for (i = 0; i < CAP_SINHALA_FONTS.length; i++) {
+            r = fontInstalled(CAP_SINHALA_FONTS[i]);
+            if (r === true) { return CAP_SINHALA_FONTS[i]; }
+            if (r === null) { unknown = true; }
+        }
+        return unknown ? CAP_SINHALA_FONTS[0] : pickFont(true);
+    }
+
     function capFont(cs) {
+        if (cs.fontName) { return cs.fontName; }
         var f = CAP_FONTS[cs.family] || CAP_FONTS[0], name;
         if (cs.custom) { return cs.custom; }
         if (!f[1]) { return pickFont(cs.weight >= 1); }
@@ -245,7 +264,8 @@
                 sg = an.property("ADBE Text Selectors");
                 if (sg.numProperties === 0) { sg.addProperty("ADBE Text Selector"); }
                 sel = sg.property(1);
-                try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Type2").setValue(inT === "words" ? 3 : 1); } catch (e2) {}
+                // Sinhala letters join into clusters, so a "letter by letter" reveal would cut them apart: Sinhala always reveals by words
+                try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Type2").setValue((inT === "words" || /[\u0D80-\u0DFF]/.test(capOrig(L))) ? 3 : 1); } catch (e2) {}
                 setKeys(sel.property("ADBE Text Percent Start"), [[a, 0], [a + typeD, 100]], { linear: true });
             } catch (e3) {}
         }
@@ -290,9 +310,10 @@
 
     // full: restyle the text too (a new transcript). Otherwise, without a Font section, only the animation is rebuilt and the layers'
     // own look (font, size, colour, position, anything edited by hand) is left alone.
-    function applyCaptionStyle(comp, layers, full) {
+    function applyCaptionStyle(comp, layers, full, fontName) {
         var cs = captionSettings(), textToo = !!full || cs.fontControls, i, L, geo, B, boxes = 0, nums = [];
         for (i = 0; i < layers.length; i++) { nums.push(capNumberOf(layers[i].name)); }
+        if (fontName) { cs.fontName = fontName; }
         if (textToo) { capRemoveBoxes(comp, nums); }
         for (i = 0; i < layers.length; i++) {
             L = layers[i];
@@ -341,7 +362,7 @@
         if (!n) { alert("There are no captions in this composition yet.", NAME); }
     }
 
-    // data: { layerIndex, layerName, segments: [{ start, end, text }] }  (seconds in the source file)
+    // data: { layerIndex, layerName, lang: "en"|"si", segments: [{ start, end, text }] }  (seconds in the source file)
     function buildCaptions(data) {
         var comp = app.project.activeItem, src, made = 0, skipped = 0, i, seg, L, k, t0, t1, lo, hi, layers = [], res, col;
         if (!(comp && comp instanceof CompItem)) { return { error: "Open a composition first." }; }
@@ -366,6 +387,6 @@
             layers.push(L);
             made++;
         }
-        res = applyCaptionStyle(comp, layers, true);
+        res = applyCaptionStyle(comp, layers, true, data.lang === "si" ? sinhalaFont() : null);
         return { made: made, skipped: skipped, boxes: res.boxes };
     }

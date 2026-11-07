@@ -117,7 +117,9 @@
     if (item.a) {   // an action the panel runs itself (transcription), with a status line under the button
       n = el("button", { class: "btn primary", type: "button", text: item.text, title: item.tip || "" });
       n._status = el("div", { class: "cap-status", hidden: "" }, [el("div", { class: "bar" }, [el("i")]), el("p", { class: "hint", text: "" })]);
+      n._label = item.text;
       n.addEventListener("click", function () { runAction(item, n); });
+      actionNodes.push(n);
       ctlMap[item.id] = { item: item, node: n };
       return [n];
     }
@@ -147,7 +149,7 @@
   }
 
   // ---------- transcription (runs in this panel; After Effects only supplies the layer and receives the captions) ----------
-  var running = null;
+  var running = null, actionNodes = [];
   function setStatus(node, msg, frac, kind) {
     var st = node._status, bar;
     if (!st) { return; }
@@ -158,38 +160,46 @@
     st.lastChild.textContent = msg;
     st.classList.toggle("err", kind === "err");
   }
+  function lockOthers(except, on) {   // only one transcript at a time: the other transcript buttons wait
+    actionNodes.forEach(function (n) { if (n !== except && n.isConnected !== false) { n.disabled = on; n.style.opacity = on ? ".45" : ""; } });
+  }
   function finish(node, msg, isErr) {
     running = null;
-    node.textContent = "English Transcript";
+    node.textContent = node._label;
     node.classList.add("primary");
+    lockOthers(node, false);
     setStatus(node, msg, isErr ? 0 : 1, isErr ? "err" : "");
     toast(isErr ? "Transcript: " + msg.slice(0, 80) : msg);
   }
   function runAction(item, node) {
-    if (item.a !== "transcribe-en") { return; }
+    var m = /^transcribe-(en|si)$/.exec(item.a || "");
+    if (!m) { return; }
+    var lang = m[1];
     if (running) { running.cancel(); return; }   // while it works, the button is Cancel
     var T = window.RuTranscribe;
     if (!T || !T.available()) { setStatus(node, "This panel cannot use Node.js yet. Run the latest installer and restart After Effects.", 0, "err"); return; }
+    node._label = item.text;
     node.textContent = "Cancel";
     node.classList.remove("primary");
+    lockOthers(node, true);
     setStatus(node, "Looking at the selected layer…", null);
     bridge("captionSource()", function (r) {
       var src;
       try { src = JSON.parse(r); } catch (e) { src = { error: "Could not read the selected layer: " + String(r).slice(0, 120) }; }
       if (src.error) { finish(node, src.error, true); return; }
-      bridge("captionModel()", function (mr) {
-        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";
+      bridge("captionModel(" + esc(lang) + ")", function (mr) {
+        var model = String(mr).replace(/[^a-z.]/g, "") || (lang === "en" ? "base.en" : "base");
         try {
-          running = T.transcribe({ file: src.path, model: model, enginePath: store("whisper_path", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
+          running = T.transcribe({ file: src.path, model: model, lang: lang, enginePath: store("whisper_path", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
         } catch (e1) { finish(node, e1.message || String(e1), true); return; }
         running.promise.then(function (segs) {
           if (!segs.length) { finish(node, "No speech was found in that layer.", true); return; }
           setStatus(node, "Adding " + segs.length + " captions…", null);
-          bridge("captionBuild(" + esc(JSON.stringify({ layerIndex: src.index, layerName: src.name, segments: segs })) + ")", function (res) {
+          bridge("captionBuild(" + esc(JSON.stringify({ layerIndex: src.index, layerName: src.name, lang: lang, segments: segs })) + ")", function (res) {
             var d;
             try { d = JSON.parse(res); } catch (e2) { d = { error: String(res).slice(0, 120) }; }
             if (d.error) { finish(node, d.error, true); return; }
-            finish(node, "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + ". Look for layers named Ru Caption.", false);
+            finish(node, "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + "." + (lang === "si" ? " Check every line: Sinhala recognition makes many mistakes." : " Look for layers named Ru Caption."), false);
           });
         }, function (e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); });
       });
@@ -289,7 +299,7 @@
     bridge("feature(" + i + ")", function (r) {
       var data;
       try { data = JSON.parse(r); } catch (e) { data = null; }
-      view.innerHTML = ""; ctlMap = {}; graphRef = null;
+      view.innerHTML = ""; ctlMap = {}; graphRef = null; actionNodes = [];
       if (!data) { view.appendChild(el("p", { class: "hint", text: "Could not read this card from After Effects: " + String(r).slice(0, 160) })); return; }
       view.appendChild(el("h2", { text: data.title }));
       var ctx = { flow: data.title === "Easing curves" };

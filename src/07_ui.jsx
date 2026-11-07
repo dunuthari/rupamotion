@@ -1608,12 +1608,17 @@
         feature("Text", "Captions", function (p) {
             hint(p, "1. Select an audio or video layer and click English Transcript. 2. Pick an In and Out animation. 3. Apply. You can change the animation at any time without transcribing again.");
             var tr = subPanel(p, "Transcribe");
-            CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB"], 1,
-                "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
+            CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB", "Best: 1.5 GB"], 1,
+                "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time. Sinhala needs Accurate or Best to be usable at all.");
             var tb = btn(tr, "English Transcript", function () {
                 alert("English Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
             }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
             tb.ruAction = "transcribe-en";
+            var sb = btn(tr, "Sinhala Transcript", function () {
+                alert("Sinhala Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
+            }, "Select an audio or video layer with Sinhala speech. Creates one caption layer per line, in a Sinhala font. Check every line: Sinhala recognition is far less accurate than English.", "primary");
+            sb.ruAction = "transcribe-si";
+            hint(tr, "Sinhala: use Accurate or Best, and check every line (it makes many mistakes). Sinhala also needs After Effects > Preferences > Type > Text Engine: South Asian and Middle Eastern.");
 
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);
@@ -2245,7 +2250,7 @@
                 try { BR.ctl[id].onClick(); return "ok"; } catch (e) { return "err: " + e; }
             },
             captionSource: function () { try { return jstr(captionSource()); } catch (e) { return jstr({ error: String(e) }); } },
-            captionModel: function () { try { return captionSettings().model; } catch (e) { return "base.en"; } },
+            captionModel: function (lang) { try { return captionModelFor(lang); } catch (e) { return lang === "si" ? "base" : "base.en"; } },
             captionBuild: function (json) {
                 try {
                     var data = jparse(json), res;

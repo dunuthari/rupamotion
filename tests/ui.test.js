@@ -1032,8 +1032,10 @@ function buildTextIcon(sentence, atIndex, opts) {
   const flat = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => flat.push(i)); }); })(card);
   const tbtn = flat.find(i => i.k === 'b' && i.text === 'English Transcript');
   R['"English Transcript" is a primary button flagged for the panel (a = transcribe-en)'] = !!tbtn && tbtn.v === 'primary' && tbtn.a === 'transcribe-en';
-  R['model dropdown has 3 choices, Balanced selected'] = flat.some(i => i.k === 'd' && i.items.length === 3 && i.sel === 1);
-  R['model name follows the dropdown'] = B.captionModel() === 'base.en';
+  R['model dropdown has 4 choices (Fast, Balanced, Accurate, Best), Balanced selected'] = flat.some(i => i.k === 'd' && i.items.length === 4 && i.sel === 1 && /Best/.test(i.items[3]));
+  const sbtn = flat.find(i => i.k === 'b' && i.text === 'Sinhala Transcript');
+  R['"Sinhala Transcript" button is flagged for the panel (a = transcribe-si)'] = !!sbtn && sbtn.a === 'transcribe-si';
+  R['model name follows the dropdown and the language (English .en models, Sinhala multilingual)'] = B.captionModel('en') === 'base.en' && B.captionModel('si') === 'base';
 
   app.project.activeItem = null;
   R['no comp -> clear error'] = /composition/i.test(JSON.parse(B.captionSource()).error);
@@ -1142,4 +1144,33 @@ function buildTextIcon(sentence, atIndex, opts) {
   app.project.activeItem = null;
   const bad = Object.keys(R).filter(k2 => !R[k2]);
   console.log(`captions animation: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Sinhala captions: a Sinhala font, and typewriter reveals by words
+{
+  const B = $g.global.RuBridge, R = {};
+  const meta = JSON.parse(B.meta()), fi = meta.features.find(f => f.name === 'Captions').i;
+  const items = () => { const out = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => out.push(i)); }); })(JSON.parse(B.feature(fi))); return out; };
+  const setv = (label, v) => B.set(items().find(i => (i.label || i.text) === label).id, v);
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const mk = (lang, segs) => {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+    const voice = comp.layers.add({}); voice.name = 'voice.wav'; voice.index = 1; voice.hasAudio = true; voice.startTime = 0; voice.inPoint = 0; voice.outPoint = 20; voice.stretch = 100;
+    const it = new g.FootageItem(); it.file = { fsName: '/m/v.wav' }; it.duration = 30; voice.source = it; comp.selectedLayers = [voice];
+    const res = JSON.parse(B.captionBuild(JSON.stringify({ layerIndex: 1, layerName: 'voice.wav', lang, segments: segs })));
+    return { made, res, caps: made.filter(L => L.kind === 'text') };
+  };
+  const SI = '\u0DB8\u0DB8 \u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA', EN = 'Hello there';
+  const a = mk('si', [{ start: 1, end: 3, text: SI }]), b = mk('en', [{ start: 1, end: 3, text: EN }]);
+  R['Sinhala captions get a Sinhala font (Noto Sans Sinhala first), the text is kept as it is'] = a.caps[0].doc.font === 'NotoSansSinhala-Bold' && a.caps[0].doc.text === SI && a.caps[0].comment === 'ru:' + SI;
+  R['English captions keep the Style font'] = b.caps[0].doc.font !== 'NotoSansSinhala-Bold';
+  setv('In:', 5); setv('Out:', 0);
+  const c = mk('si', [{ start: 1, end: 3, text: SI }]);
+  const type2 = L => L.property('ADBE Text Properties').property('ADBE Text Animators').children.filter(n => n.name === 'Ru Caption In')[0].property('ADBE Text Selectors').property(1).property('ADBE Text Range Advanced').property('ADBE Text Range Type2').value;
+  const d = mk('en', [{ start: 1, end: 3, text: EN }]);
+  R['typewriter on Sinhala reveals by words (3), on English by letters (1)'] = type2(c.caps[0]) === 3 && type2(d.caps[0]) === 1;
+  const reset = items().find(i => i.k === 'b' && i.text === 'Reset animation'); B.click(reset.id);
+  app.project.activeItem = null;
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`captions sinhala: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
