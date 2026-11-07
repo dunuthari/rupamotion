@@ -126,50 +126,118 @@
     return onPath(isWin() ? ["ffmpeg.exe"] : ["ffmpeg"], isMac() ? ["/opt/homebrew/bin", "/usr/local/bin"] : (isWin() ? ["C:\\ffmpeg\\bin"] : ["/usr/bin", "/usr/local/bin"]));
   };
 
-  function request(url, cb, redirects) {
-    var lib = nodeRequire(/^http:/i.test(url) ? "http" : "https"), URLc = (typeof URL !== "undefined") ? URL : nodeRequire("url").URL;
-    var req = lib.get(url, { headers: { "User-Agent": "RuMotion", "Accept": "*/*" } }, function (res) {
+  function request(url, cb, redirects, headers) {
+    var lib = nodeRequire(/^http:/i.test(url) ? "http" : "https"), URLc = (typeof URL !== "undefined") ? URL : nodeRequire("url").URL, h = { "User-Agent": "RuMotion", "Accept": "*/*" }, k;
+    for (k in (headers || {})) { h[k] = headers[k]; }
+    var req = lib.get(url, { headers: h }, function (res) {
       if ([301, 302, 303, 307, 308].indexOf(res.statusCode) >= 0 && res.headers.location && (redirects || 0) < 8) {
         res.resume();
-        request(new URLc(res.headers.location, url).toString(), cb, (redirects || 0) + 1);
+        request(new URLc(res.headers.location, url).toString(), cb, (redirects || 0) + 1, headers);
         return;
       }
       cb(null, res);
     });
+    req.setTimeout(30000, function () { req.destroy(Object.assign(new Error("connection timed out"), { code: "ETIMEDOUT" })); });
     req.on("error", function (e) { cb(e); });
   }
 
-  api.getJson = function (url) {
+  function isNetErr(e) { return !!e && /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EPIPE|EHOSTUNREACH|ENETUNREACH|socket hang up|timed out|certificate|SSL|TLS|aborted/i.test(String(e.code || "") + " " + String(e.message || "")); }
+  api._retryDelay = 1500;
+  function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function retrying(fn, tries) {   // a dropped connection is retried, anything else is not
+    return fn().catch(function (e) { return (tries > 1 && isNetErr(e)) ? delay(api._retryDelay).then(function () { return retrying(fn, tries - 1); }) : Promise.reject(e); });
+  }
+  api.isNetErr = isNetErr;
+  api.netHint = function (e) {
+    return isNetErr(e) ? " Check your internet connection, VPN or firewall (it needs github.com and huggingface.co) and try again." : "";
+  };
+
+  function curlPath() {
+    return onPath(isWin() ? ["curl.exe"] : ["curl"], isWin() ? ["C:\\Windows\\System32"] : ["/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]);
+  }
+
+  // curl uses the system's own network stack (proxy, certificates), so it often works where Node's connection is reset
+  api._curlJson = function (url) {
+    var m = mods(), c = curlPath(), tmp;
+    if (!c) { return Promise.reject(new Error("curl was not found")); }
+    tmp = m.path.join(m.os.tmpdir(), "rumotion-j-" + Date.now() + ".json");
+    return run(c, ["-sSL", "--retry", "3", "--retry-delay", "2", "--fail", "-H", "User-Agent: RuMotion-curl", "-o", tmp, url]).then(function () {
+      var t = m.fs.readFileSync(tmp, "utf8"); try { m.fs.unlinkSync(tmp); } catch (e) {}
+      return JSON.parse(t);
+    });
+  };
+
+  api._curlDownload = function (url, dest, onFrac, expectedBytes) {
+    var m = mods(), c = curlPath(), part = dest + ".part", poll;
+    if (!c) { return Promise.reject(new Error("curl was not found")); }
+    mkdirp(m.path.dirname(dest));
+    poll = setInterval(function () { try { if (onFrac && expectedBytes) { onFrac(Math.min(0.99, m.fs.statSync(part).size / expectedBytes)); } } catch (e) {} }, 500);
+    return run(c, ["-sSL", "--fail", "--retry", "5", "--retry-delay", "2", "-C", "-", "-o", part, url]).then(function () {
+      clearInterval(poll);
+      if (m.fs.existsSync(dest)) { m.fs.unlinkSync(dest); }
+      m.fs.renameSync(part, dest);
+      return dest;
+    }, function (e) { clearInterval(poll); throw e; });
+  };
+
+  function nodeJson(url) {
     return new Promise(function (resolve, reject) {
       request(url, function (err, res) {
         if (err) { reject(err); return; }
         var chunks = [];
         if (res.statusCode !== 200) { res.resume(); reject(new Error("Could not reach " + url + " (" + res.statusCode + ")")); return; }
         res.on("data", function (c) { chunks.push(c); });
+        res.on("error", reject);
         res.on("end", function () { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch (e) { reject(e); } });
       });
     });
+  }
+
+  api.getJson = function (url) {
+    return retrying(function () { return nodeJson(url); }, 3).catch(function (e) {
+      if (!isNetErr(e)) { throw e; }
+      return api._curlJson(url).catch(function () { throw e; });   // report the original problem if curl fails too
+    });
   };
 
-  api.download = function (url, dest, onFrac) {
-    var m = mods();
+  // one attempt: continues a partial file with a Range request when the server allows it
+  function nodeDownload(url, dest, onFrac) {
+    var m = mods(), part = dest + ".part";
     return new Promise(function (resolve, reject) {
+      var have = 0;
+      try { have = m.fs.existsSync(part) ? m.fs.statSync(part).size : 0; } catch (e) { have = 0; }
       request(url, function (err, res) {
         if (err) { reject(err); return; }
-        if (res.statusCode !== 200) { res.resume(); reject(new Error("Download failed (" + res.statusCode + "): " + url)); return; }
-        var total = +res.headers["content-length"] || 0, got = 0, part = dest + ".part", out;
+        var resumed = res.statusCode === 206, total, got, out;
+        if (res.statusCode !== 200 && !resumed) {
+          res.resume();
+          if (res.statusCode === 416) { try { m.fs.unlinkSync(part); } catch (e1) {} reject(Object.assign(new Error("restarting the download"), { code: "ECONNRESET" })); return; }
+          reject(new Error("Download failed (" + res.statusCode + "): " + url)); return;
+        }
+        total = (+res.headers["content-length"] || 0) + (resumed ? have : 0);
+        got = resumed ? have : 0;
         mkdirp(m.path.dirname(dest));
-        out = m.fs.createWriteStream(part);
-        res.on("data", function (c) { got += c.length; if (onFrac && total) { onFrac(got / total); } });
+        out = m.fs.createWriteStream(part, { flags: resumed ? "a" : "w" });
+        res.on("data", function (c) { got += c.length; if (onFrac && total) { onFrac(Math.min(1, got / total)); } });
         res.pipe(out);
         out.on("finish", function () {
           out.close(function () {
-            try { if (m.fs.existsSync(dest)) { m.fs.unlinkSync(dest); } m.fs.renameSync(part, dest); resolve(dest); } catch (e) { reject(e); }
+            if (total && got < total) { reject(Object.assign(new Error("the connection closed early"), { code: "ECONNRESET" })); return; }
+            try { if (m.fs.existsSync(dest)) { m.fs.unlinkSync(dest); } m.fs.renameSync(part, dest); resolve(dest); } catch (e2) { reject(e2); }
           });
         });
         out.on("error", reject);
-        res.on("error", reject);
-      });
+        res.on("error", function (e3) { out.end(); reject(e3); });
+        res.on("aborted", function () { out.end(); reject(Object.assign(new Error("the connection closed early"), { code: "ECONNRESET" })); });
+      }, 0, have > 0 ? { Range: "bytes=" + have + "-" } : null);
+    });
+  }
+
+  // download with retries and resume, then curl as a last resort; expectedBytes only feeds curl's progress bar
+  api.download = function (url, dest, onFrac, expectedBytes) {
+    return retrying(function () { return nodeDownload(url, dest, onFrac); }, 4).catch(function (e) {
+      if (!isNetErr(e)) { throw e; }
+      return api._curlDownload(url, dest, onFrac, expectedBytes).catch(function () { throw e; });
     });
   };
 
@@ -227,7 +295,10 @@
         }
         zip = m.path.join(api.baseDir(), "engine.zip");
         status("Downloading the speech engine (" + pick.tag + ")…", 0);
-        return api.download(pick.url, zip, function (f) { status("Downloading the speech engine… " + Math.round(f * 100) + "%", f); });
+        return api.download(pick.url, zip, function (f) { status("Downloading the speech engine… " + Math.round(f * 100) + "%", f); }, 20 * 1024 * 1024);
+      }).catch(function (e) {
+        if (!/^(No Windows|Downloading the speech engine failed)/.test(e.message)) { e.message = "Downloading the speech engine failed: " + e.message + api.netHint(e); }
+        throw e;
       }).then(function () {
         status("Unpacking the speech engine…", null);
         mkdirp(dir);
@@ -262,7 +333,10 @@
     try { if (m.fs.existsSync(file) && m.fs.statSync(file).size > info.mb * 1024 * 1024 * 0.9) { return Promise.resolve(file); } } catch (e) {}
     status("Downloading the " + name + " model (" + info.mb + " MB)…", 0);
     return api.download((base || "https://huggingface.co/ggerganov/whisper.cpp/resolve/main") + "/ggml-" + name + ".bin", file,
-      function (f) { status("Downloading the " + name + " model… " + Math.round(f * 100) + "%", f); });
+      function (f) { status("Downloading the " + name + " model… " + Math.round(f * 100) + "%", f); }, info.mb * 1024 * 1024).catch(function (e) {
+      e.message = "Downloading the " + name + " model failed: " + e.message + api.netHint(e);
+      throw e;
+    });
   };
 
   // audio file -> 16 kHz mono WAV. ffmpeg when it is installed, otherwise the panel's own decoder.

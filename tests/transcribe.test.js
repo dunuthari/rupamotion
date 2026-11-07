@@ -104,8 +104,52 @@ EOF2
   }
 }
 
-(process.platform === 'win32' ? Promise.resolve() : pipeline()).then(() => {
+
+// ---- flaky networks: dropped connections are retried, a cut-off download resumes, curl takes over when Node keeps failing
+async function network() {
+  T._retryDelay = 10;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ru-n-'));
+  const payload = Buffer.alloc(3000, 5); for (let i = 0; i < payload.length; i++) payload[i] = i % 251;
+  let jsonHits = 0, cutHits = 0, rangeSeen = '', nodeBlocked = false;
+  const srv = http.createServer((req, res) => {
+    const ua = String(req.headers['user-agent'] || '');
+    if (nodeBlocked && ua === 'RuMotion') { req.socket.destroy(); return; }
+    if (req.url === '/flaky.json') { if (++jsonHits < 3) { req.socket.destroy(); return; } res.writeHead(200); res.end('{"ok":true}'); return; }
+    if (req.url === '/cut.bin') {
+      cutHits++;
+      if (req.headers.range) { rangeSeen = req.headers.range; const from = +/bytes=(\d+)-/.exec(req.headers.range)[1]; res.writeHead(206, { 'Content-Length': payload.length - from, 'Content-Range': 'bytes ' + from + '-' + (payload.length - 1) + '/' + payload.length }); res.end(payload.slice(from)); return; }
+      res.writeHead(200, { 'Content-Length': payload.length }); res.write(payload.slice(0, 1000)); setTimeout(() => req.socket.destroy(), 30); return;
+    }
+    if (req.url === '/file.bin') { res.writeHead(200, { 'Content-Length': payload.length }); res.end(payload); return; }
+    if (req.url === '/data.json') { res.writeHead(200); res.end('{"via":"curl"}'); return; }
+    res.writeHead(404); res.end();
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + srv.address().port;
+  try {
+    const j = await T.getJson(base + '/flaky.json');
+    R['getJson retries a reset connection (3rd try works)'] = j.ok === true && jsonHits === 3;
+    const dest = path.join(root, 'cut.bin');
+    await T.download(base + '/cut.bin', dest);
+    R['a download cut off half way resumes with a Range request and ends up byte for byte equal'] = Buffer.compare(fs.readFileSync(dest), payload) === 0 && /^bytes=\d+-$/.test(rangeSeen) && cutHits === 2 && !fs.existsSync(dest + '.part');
+    const hasCurl = T.findFfmpeg !== undefined && require('child_process').spawnSync('curl', ['--version']).status === 0;
+    if (hasCurl) {
+      nodeBlocked = true;
+      const d2 = path.join(root, 'file.bin');
+      await T.download(base + '/file.bin', d2, null, 3000);
+      R['when Node keeps getting reset, curl downloads the file'] = Buffer.compare(fs.readFileSync(d2), payload) === 0;
+      const jj = await T.getJson(base + '/data.json');
+      R['...and fetches JSON'] = jj.via === 'curl';
+      nodeBlocked = false;
+    }
+    let nerr = null; try { await T.download(base + '/missing.bin', path.join(root, 'm.bin')); } catch (e) { nerr = e; }
+    R['a 404 is reported at once (no retries)'] = !!nerr && /404/.test(nerr.message) && !T.isNetErr(nerr);
+    R['network errors get a plain hint'] = /internet connection/.test(T.netHint(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }))) && T.netHint(new Error('nope')) === '';
+  } finally { srv.close(); T._retryDelay = 1500; }
+}
+
+(process.platform === 'win32' ? Promise.resolve() : pipeline().then(network)).then(() => {
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`transcribe.js: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
   if (bad.length) process.exitCode = 1;
-}).catch(e => { console.log('transcribe.js: test crashed: ' + (e && e.stack || e)); process.exitCode = 1; });
+}).catch(e => { console.log('transcribe.js: test crashed: ' + (e && e.stack || e) + ' | done: ' + Object.keys(R).slice(-4).join(' ; ')); process.exitCode = 1; });
