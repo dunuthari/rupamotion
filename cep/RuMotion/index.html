@@ -411,7 +411,7 @@
   }
 
   api.findEngine = function (custom) {
-    var m = mods(), names = isWin() ? ["whisper-cli.exe", "main.exe"] : ["whisper-cli", "whisper-cpp"];
+    var m = mods(), names = isWin() ? ["whisper-cli.exe", "whisper-cpp.exe", "main.exe"] : ["whisper-cli", "whisper-cpp"];
     if (custom && m.fs.existsSync(custom)) { return custom; }
     return walk(m.path.join(api.baseDir(), "engine"), 5, names)
       || onPath(names, isMac() ? ["/opt/homebrew/bin", "/usr/local/bin"] : []);
@@ -486,18 +486,43 @@
   }
   api._run = run;
 
+  // the newest release that has a Windows 64-bit CPU build: whisper-bin-x64.zip first, then other x64 zips (OpenBLAS is fine, CUDA is not)
+  api.pickWindowsAsset = function (releases) {
+    var i, j, a, best, score, r;
+    if (!releases || !releases.length) { return null; }
+    for (i = 0; i < releases.length; i++) {
+      r = releases[i]; best = null;
+      if (r.draft) { continue; }
+      for (j = 0; j < (r.assets || []).length; j++) {
+        a = r.assets[j]; score = 0;
+        if (/^whisper-bin-x64\.zip$/i.test(a.name)) { score = 4; }
+        else if (/x64.*\.zip$/i.test(a.name) && !/blas|cuda|cublas|vulkan|xcframework/i.test(a.name)) { score = 3; }
+        else if (/blas.*x64.*\.zip$/i.test(a.name) && !/cublas|cuda/i.test(a.name)) { score = 2; }
+        if (score && (!best || score > best.score)) { best = { score: score, url: a.browser_download_url, name: a.name, tag: r.tag_name }; }
+      }
+      if (best) { return best; }
+    }
+    return null;
+  };
+
+  api.describeReleases = function (releases) {   // for error messages: what the newest releases contain
+    return (releases || []).slice(0, 3).map(function (r) { return r.tag_name + ": " + ((r.assets || []).map(function (a) { return a.name; }).join(", ") || "no files"); }).join("; ") || "no releases";
+  };
+
   api.ensureEngine = function (status, custom) {
     var m = mods(), found = api.findEngine(custom), dir = m.path.join(api.baseDir(), "engine"), zip;
     if (found) { return Promise.resolve(found); }
     if (isWin()) {
       status("Downloading the speech engine…", 0);
-      return api.getJson("https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest").then(function (rel) {
-        var assets = rel.assets || [], a = null, i;
-        for (i = 0; i < assets.length; i++) { if (/^whisper-bin-x64\.zip$/i.test(assets[i].name)) { a = assets[i]; } }
-        if (!a) { for (i = 0; i < assets.length; i++) { if (/bin-x64\.zip$/i.test(assets[i].name) && !/blas|cuda|cublas/i.test(assets[i].name)) { a = assets[i]; } } }
-        if (!a) { throw new Error("Could not find the Windows speech engine download. Put whisper-cli.exe in " + dir); }
+      return api.getJson("https://api.github.com/repos/ggml-org/whisper.cpp/releases?per_page=30").then(function (rels) {
+        var pick = api.pickWindowsAsset(rels);
+        if (!pick) {
+          throw new Error("No Windows speech engine download was found on the whisper.cpp releases page (" + api.describeReleases(rels) + "). "
+            + "Download whisper-bin-x64.zip from github.com/ggml-org/whisper.cpp/releases, unzip it into " + dir + " and try again.");
+        }
         zip = m.path.join(api.baseDir(), "engine.zip");
-        return api.download(a.browser_download_url, zip, function (f) { status("Downloading the speech engine… " + Math.round(f * 100) + "%", f); });
+        status("Downloading the speech engine (" + pick.tag + ")…", 0);
+        return api.download(pick.url, zip, function (f) { status("Downloading the speech engine… " + Math.round(f * 100) + "%", f); });
       }).then(function () {
         status("Unpacking the speech engine…", null);
         mkdirp(dir);

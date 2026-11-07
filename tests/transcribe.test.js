@@ -33,6 +33,16 @@ const i16 = T.floatToInt16(new Float32Array([0, 1, -1, 2, -2, 0.5]));
 R['float -> int16 clips at full scale'] = i16[1] === 32767 && i16[2] === -32768 && i16[3] === 32767 && i16[4] === -32768 && Math.abs(i16[5] - 16383.5) < 1;
 R['whisper arguments: English, JSON, 42-char lines split on words, progress'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4); return a.join(' ') === '-m /m/b.bin -f /t/a.wav -l en -oj -of /t/out -ml 42 -sow -t 4 -pp'; })();
 
+
+// ---- picking the Windows engine download from a list of releases
+const rel = (tag, names, extra) => Object.assign({ tag_name: tag, assets: names.map(n => ({ name: n, browser_download_url: 'https://x/' + tag + '/' + n })) }, extra || {});
+const rels = [rel('v9.9', []), rel('v9.8', ['whisper-v9.8-xcframework.zip', 'whisper-cublas-12.4.0-bin-x64.zip']), rel('v9.7', ['whisper-blas-bin-x64.zip', 'whisper-bin-Win32.zip', 'whisper-bin-x64.zip']), rel('v9.6', ['whisper-bin-x64.zip'])];
+const pk = T.pickWindowsAsset(rels);
+R['picker: skips releases without files and CUDA-only ones, takes whisper-bin-x64.zip of the newest usable release'] = !!pk && pk.tag === 'v9.7' && pk.name === 'whisper-bin-x64.zip' && pk.url === 'https://x/v9.7/whisper-bin-x64.zip';
+R['picker: falls back to an OpenBLAS x64 zip when that is all there is'] = (T.pickWindowsAsset([rel('v1', ['whisper-blas-bin-x64.zip'])]) || {}).name === 'whisper-blas-bin-x64.zip';
+R['picker: a differently named x64 zip is accepted (e.g. whisper-v1.8-bin-x64.zip)'] = (T.pickWindowsAsset([rel('v1', ['whisper-v1.8-bin-x64.zip'])]) || {}).name === 'whisper-v1.8-bin-x64.zip';
+R['picker: nothing usable -> null, and the error text lists what was seen'] = T.pickWindowsAsset([rel('v1', ['a.zip'])]) === null && /v1: a\.zip/.test(T.describeReleases([rel('v1', ['a.zip'])])) && T.pickWindowsAsset([rel('v1', ['whisper-bin-x64.zip'], { draft: true })]) === null;
+
 // ---- the pipeline with fakes (Linux/Mac only: the fakes are shell scripts)
 async function pipeline() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ru-t-'));
