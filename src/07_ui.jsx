@@ -703,6 +703,7 @@
             pick.onClick = choose;
         }
         paintSwatch(sw, start);
+        api.set = function (h) { hex.text = h; update(); };
         return api;
     }
 
@@ -1605,7 +1606,7 @@
     try { CAP_PANEL = ($.global.RuMotionBridge === true); } catch (eCp) {}
     if (CAP_PANEL) {
         feature("Text", "Captions", function (p) {
-            hint(p, "Select an audio or video layer, then click English Transcript. The speech is turned into text on your computer.");
+            hint(p, "1. Select an audio or video layer and click English Transcript. 2. Style the captions. 3. Apply. You can restyle at any time without transcribing again.");
             var tr = subPanel(p, "Transcribe");
             CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB"], 1,
                 "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
@@ -1613,12 +1614,51 @@
                 alert("English Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
             }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
             tb.ruAction = "transcribe-en";
-            var cst = subPanel(p, "Caption style");
-            CAP.size = field(cst, "Font size (px):", "64", 5);
-            CAP.bottom = field(cst, "From bottom (%):", "10", 5, "Distance of the caption from the bottom edge, as a percentage of the comp height.");
-            CAP.color = colorChooser(cst, "Text color:", "#FFFFFF", "cap_color", false);
-            CAP.shadow = check(cst, "Soft shadow", true, "A dark drop shadow so the text reads on any picture.");
-            hint(p, "First use downloads the speech engine and model (about 150 MB). After that it works offline. Fonts come from the Style tab.");
+
+            var fp = subPanel(p, "Font");
+            CAP.family = drop(fp, "Font:", capLabels(CAP_FONTS, 0), 0, "A font that is not installed falls back to the Style tab font.");
+            CAP.weight = drop(fp, "Weight:", CAP_WEIGHTS, 2);
+            CAP.custom = field(fp, "Custom font:", "", 16, "Optional. A font's PostScript name (for example NotoSansSinhala-Bold) used instead of the choice above.");
+            CAP.size = field(fp, "Size (px):", "64", 5);
+            CAP.tracking = field(fp, "Letter spacing:", "0", 5, "Tracking in thousandths of an em. 0 = normal, 50 = a little wider.");
+            CAP.caseMode = drop(fp, "Case:", CAP_CASES, 0);
+            CAP.color = colorChooser(fp, "Text color:", "#FFFFFF", "cap_color", false);
+            CAP.stroke = check(fp, "Outline", false);
+            CAP.strokeColor = colorChooser(fp, "Outline color:", "#101010", "cap_stroke", false);
+            CAP.strokeW = field(fp, "Outline (px):", "4", 5);
+            CAP.box = check(fp, "Background box", false, "A rounded box behind each caption that moves and fades with it.");
+            CAP.boxColor = colorChooser(fp, "Box color:", "#101010", "cap_box", false);
+            CAP.boxOp = field(fp, "Box opacity (%):", "70", 5);
+            CAP.boxPad = field(fp, "Box padding (px):", "14", 5);
+            CAP.boxRad = field(fp, "Box corners (px):", "12", 5);
+            CAP.shadow = check(fp, "Soft shadow", true, "A dark drop shadow so the text reads on any picture.");
+            CAP.bottom = field(fp, "From bottom (%):", "10", 5, "Distance of the caption from the bottom edge, as a percentage of the comp height.");
+            CAP.maxW = field(fp, "Max width (%):", "88", 5, "A longer caption is split into balanced lines to stay within this share of the comp width.");
+
+            var ap = subPanel(p, "Animation");
+            CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);
+            CAP.inLen = field(ap, "In length (frames):", "8", 5, "Typewriter and Word by word take a few times longer.");
+            CAP.outT = drop(ap, "Out:", capLabels(CAP_OUT, 0), 1);
+            CAP.outLen = field(ap, "Out length (frames):", "6", 5);
+            CAP.ease = drop(ap, "Curve:", CAP_EASE, 0);
+            CAP.dist = field(ap, "Slide distance (px):", "40", 5, "For Slide up and Slide down.");
+
+            btn(p, "Apply to all captions", function () { run("Apply caption style", function () { doCaptionApply(false); }); },
+                "Restyles every Ru Caption layer in the comp with the settings above, and rebuilds their animation.", "primary");
+            var resetCap = function () {
+                var dd = [[CAP.family, 0], [CAP.weight, 2], [CAP.caseMode, 0], [CAP.inT, 1], [CAP.outT, 1], [CAP.ease, 0]], ff = [[CAP.custom, ""], [CAP.size, "64"], [CAP.tracking, "0"], [CAP.strokeW, "4"],
+                    [CAP.boxOp, "70"], [CAP.boxPad, "14"], [CAP.boxRad, "12"], [CAP.bottom, "10"], [CAP.maxW, "88"], [CAP.inLen, "8"], [CAP.outLen, "6"], [CAP.dist, "40"]], tt = [[CAP.stroke, false], [CAP.box, false], [CAP.shadow, true]], i;
+                for (i = 0; i < dd.length; i++) { dd[i][0].selection = dd[i][1]; }
+                for (i = 0; i < ff.length; i++) { ff[i][0].text = ff[i][1]; }
+                for (i = 0; i < tt.length; i++) { tt[i][0].value = tt[i][1]; try { redraw(tt[i][0]); } catch (eR) {} }
+                CAP.color.set("#FFFFFF"); CAP.strokeColor.set("#101010"); CAP.boxColor.set("#101010");
+            };
+            grid(p, [
+                ["Apply to selected", function () { run("Apply caption style", function () { doCaptionApply(true); }); }, "Restyles only the selected Ru Caption layers."],
+                ["Select all captions", function () { run("Select captions", doCaptionSelectAll); }, "Selects every Ru Caption layer in the comp."],
+                ["Reset style", resetCap, "Puts the style controls back to their defaults (click Apply to use them)."]
+            ]);
+            hint(p, "First use downloads the speech engine and model (about 150 MB). After that it works offline.");
         });
     }
 

@@ -1678,15 +1678,40 @@
     }
 
     // =====================================================================
-    // CAPTIONS (Text > Captions, CEP panel only): one text layer per caption line, made from a transcript
+    // CAPTIONS (Text > Captions, CEP panel): one text layer per caption line, made from a transcript, then styled and animated
     // =====================================================================
-    // The speech-to-text itself runs in the CEP panel (cep/transcribe.js: whisper.cpp on the user's computer). This file only
+    // The speech-to-text itself runs in the CEP panel (cep/transcribe.js: whisper.cpp on the user's computer). This file
     //   - describes the selected audio/video layer for the panel (captionSource),
-    //   - turns the transcript the panel sends back into text layers (buildCaptions).
+    //   - turns the transcript the panel sends back into text layers (buildCaptions),
+    //   - restyles and re-animates the existing "Ru Caption N" layers at any time (applyCaptionStyle): font, outline, background box,
+    //     shadow, position, wrapping, and an In and an Out animation.
     // Transcript times are seconds from the start of the SOURCE FILE; they are mapped onto the comp with the layer's start time and
     // stretch, and clipped to the layer's in/out points, so a trimmed or moved clip still gets captions in the right place.
+    // The original text of every caption is kept in the layer's comment ("ru:" + text) so case and wrapping can be changed back.
 
-    var CAP = {};   // the Captions card controls (filled in 07_ui.jsx): model, size, bottom, color, shadow
+    var CAP = {};   // the Captions card controls (filled in 07_ui.jsx)
+
+    var CAP_FONTS = [
+        ["From the Style tab", null],
+        ["Inter", ["Inter-Regular", "Inter-Medium", "Inter-Bold"]],
+        ["Manrope", ["Manrope-Regular", "Manrope-Medium", "Manrope-Bold"]],
+        ["DM Sans", ["DMSans-Regular", "DMSans-Medium", "DMSans-Bold"]],
+        ["Outfit", ["Outfit-Regular", "Outfit-Medium", "Outfit-Bold"]],
+        ["Noto Sans Sinhala", ["NotoSansSinhala-Regular", "NotoSansSinhala-Medium", "NotoSansSinhala-Bold"]],
+        ["Arial", ["ArialMT", "ArialMT", "Arial-BoldMT"]]
+    ];
+    var CAP_WEIGHTS = ["Regular", "Medium", "Bold"];
+    var CAP_CASES = ["Normal", "UPPER", "lower", "Title"];
+    var CAP_IN = [["None", "none"], ["Fade", "fade"], ["Pop", "pop"], ["Slide up", "slideup"], ["Blur in", "blur"], ["Typewriter", "type"], ["Word by word", "words"]];
+    var CAP_OUT = [["None", "none"], ["Fade", "fade"], ["Slide down", "slidedown"], ["Blur out", "blur"], ["Pop out", "pop"]];
+    var CAP_EASE = ["Expo out", "Smooth", "Linear"];
+    var CAP_MODELS = ["tiny.en", "base.en", "small.en"];
+
+    function capLabels(list, col) {
+        var out = [], i;
+        for (i = 0; i < list.length; i++) { out.push(col === undefined ? list[i] : list[i][col]); }
+        return out;
+    }
 
     // strict JSON reader for ES3 (the text comes from our own panel; the check is the one json2 uses)
     function jparse(s) {
@@ -1716,25 +1741,277 @@
         };
     }
 
+    // ---- settings (read from the card; sensible defaults when a control is missing) ----
+    function capIdx(ctl, def) { try { if (ctl && ctl.selection) { return ctl.selection.index; } } catch (e) {} return def; }
+    function capNum(ctl, def, lo, hi) { try { if (ctl) { return num(ctl.text, def, lo, hi); } } catch (e) {} return def; }
+    function capOn(ctl, def) { try { if (ctl && typeof ctl.value === "boolean") { return ctl.value; } } catch (e) {} return def; }
+    function capHex(c, def) { try { if (c) { return rgbToHex(c.get()); } } catch (e) {} return def; }
+    function capText(ctl, def) { try { if (ctl) { return trim(ctl.text); } } catch (e) {} return def; }
+
     function captionSettings() {
-        var d = { model: "base.en", size: 64, bottom: 10, color: "#FFFFFF", shadow: true }, models = ["tiny.en", "base.en", "small.en"];
-        try { if (CAP.model && CAP.model.selection) { d.model = models[CAP.model.selection.index] || d.model; } } catch (e) {}
-        try { if (CAP.size) { d.size = num(CAP.size.text, 64, 8, 400); } } catch (e1) {}
-        try { if (CAP.bottom) { d.bottom = num(CAP.bottom.text, 10, 0, 90); } } catch (e2) {}
-        try { if (CAP.color) { d.color = rgbToHex(CAP.color.get()); } } catch (e3) {}
-        try { if (CAP.shadow) { d.shadow = !!CAP.shadow.value; } } catch (e4) {}
-        return d;
+        return {
+            model: CAP_MODELS[capIdx(CAP.model, 1)] || "base.en",
+            family: capIdx(CAP.family, 0), weight: capIdx(CAP.weight, 2), custom: capText(CAP.custom, ""),
+            size: capNum(CAP.size, 64, 8, 400), tracking: capNum(CAP.tracking, 0, -100, 1000), caseMode: capIdx(CAP.caseMode, 0),
+            color: capHex(CAP.color, "#FFFFFF"),
+            stroke: capOn(CAP.stroke, false), strokeColor: capHex(CAP.strokeColor, "#101010"), strokeW: capNum(CAP.strokeW, 4, 0, 60),
+            box: capOn(CAP.box, false), boxColor: capHex(CAP.boxColor, "#101010"), boxOp: capNum(CAP.boxOp, 70, 0, 100),
+            boxPad: capNum(CAP.boxPad, 14, 0, 200), boxRad: capNum(CAP.boxRad, 12, 0, 200),
+            shadow: capOn(CAP.shadow, true), bottom: capNum(CAP.bottom, 10, 0, 90), maxW: capNum(CAP.maxW, 88, 20, 100),
+            inIdx: capIdx(CAP.inT, 1), inLen: capNum(CAP.inLen, 8, 1, 120), outIdx: capIdx(CAP.outT, 1), outLen: capNum(CAP.outLen, 6, 1, 120),
+            ease: capIdx(CAP.ease, 0), dist: capNum(CAP.dist, 40, 0, 600)
+        };
+    }
+
+    function capFont(cs) {
+        var f = CAP_FONTS[cs.family] || CAP_FONTS[0], name;
+        if (cs.custom) { return cs.custom; }
+        if (!f[1]) { return pickFont(cs.weight >= 1); }
+        name = f[1][cs.weight] || f[1][2];
+        if (fontInstalled(name) === false) { return pickFont(cs.weight >= 1); }
+        return name;
+    }
+
+    // ---- helpers ----
+    function capNumberOf(name) {
+        var m = /^Ru Caption (\d+)$/.exec(name);
+        return m ? parseInt(m[1], 10) : -1;
+    }
+
+    function captionLayers(comp, selectedOnly) {
+        var out = [], i, L, src = selectedOnly ? comp.selectedLayers : null;
+        if (selectedOnly) {
+            for (i = 0; i < src.length; i++) { if (capNumberOf(src[i].name) >= 0) { out.push(src[i]); } }
+        } else {
+            for (i = 1; i <= comp.numLayers; i++) { L = comp.layer(i); if (L && capNumberOf(L.name) >= 0) { out.push(L); } }
+        }
+        out.sort(function (a, b) { return capNumberOf(a.name) - capNumberOf(b.name); });
+        return out;
+    }
+
+    function capOrig(L) {
+        var c = "", t;
+        try { c = L.comment; } catch (e) {}
+        if (c && c.indexOf("ru:") === 0) { return c.substring(3); }
+        t = textDocProp(L).value.text;
+        try { L.comment = "ru:" + t; } catch (e1) {}
+        return t;
+    }
+
+    function capClear(prop) {
+        var n = 0;
+        try { while (prop.numKeys > 0 && n < 300) { prop.removeKey(1); n++; } } catch (e) {}
+    }
+
+    function capRemoveNamed(parent, name) {
+        try { var p = parent.property(name); if (p) { p.remove(); } } catch (e) {}
+    }
+
+    function capCase(text, mode) {
+        if (mode === 2) { return text.toLowerCase(); }
+        if (mode === 3) { return text.toLowerCase().replace(/(^|[\s\-])([a-z])/g, function (m, a, b) { return a + b.toUpperCase(); }); }
+        return text;
+    }
+
+    // splits text into k lines of similar length, only at spaces (AE line break = \r)
+    function capWrap(text, k) {
+        var words = text.split(" "), lines = [], cur = "", target = Math.ceil(text.length / k), i;
+        for (i = 0; i < words.length; i++) {
+            if (cur && (cur + " " + words[i]).length > target && lines.length < k - 1) { lines.push(cur); cur = words[i]; }
+            else { cur = cur ? cur + " " + words[i] : words[i]; }
+        }
+        lines.push(cur);
+        return lines.join("\r");
+    }
+
+    // text look, wrapping, anchor and position of one caption; returns where it ended up
+    function capStyleText(comp, L, cs) {
+        var t0 = L.inPoint, t1 = L.outPoint, sp = textDocProp(L), d = sp.value, txt = capCase(capOrig(L), cs.caseMode), rect, k, maxPx = comp.width * cs.maxW / 100, x, y;
+        d.fontSize = cs.size;
+        try { d.font = capFont(cs); } catch (e0) {}
+        d.applyFill = true;
+        d.fillColor = hexToRgb(cs.color);
+        try { d.tracking = cs.tracking; } catch (e1) {}
+        try { d.justification = ParagraphJustification.CENTER_JUSTIFY; } catch (e2) {}
+        d.applyStroke = !!cs.stroke;
+        if (cs.stroke) {
+            d.strokeColor = hexToRgb(cs.strokeColor);
+            d.strokeWidth = cs.strokeW;
+            try { d.strokeOverFill = false; } catch (e3) {}
+        }
+        try { d.allCaps = (cs.caseMode === 1); } catch (e4) {}
+        d.text = txt;
+        sp.setValue(d);
+        rect = L.sourceRectAtTime(t0, false);
+        if (rect.width > maxPx && maxPx > 0) {
+            k = Math.min(4, Math.ceil(rect.width / maxPx));
+            if (k > 1) { d = sp.value; d.text = capWrap(txt, k); sp.setValue(d); rect = L.sourceRectAtTime(t0, false); }
+        }
+        capClear(L.transform.position); capClear(L.transform.scale); capClear(L.transform.opacity);
+        setXY(L.transform.anchorPoint, rect.left + rect.width / 2, rect.top + rect.height / 2);
+        x = comp.width / 2;
+        y = comp.height * (1 - cs.bottom / 100) - rect.height / 2;
+        setXY(L.transform.position, x, y);
+        setXY(L.transform.scale, 100, 100);
+        L.transform.opacity.setValue(100);
+        return { x: x, y: y, rect: rect, t0: t0, t1: t1 };
+    }
+
+    function capShadow(L, cs) {
+        var fx = L.property("ADBE Effect Parade"), e;
+        capRemoveNamed(fx, "Ru Caption Shadow");
+        if (!cs.shadow) { return; }
+        try {
+            e = fxAdd(L, "ADBE Drop Shadow");
+            e.name = "Ru Caption Shadow";
+            fxSet(e, 1, [0, 0, 0, 1]);
+            fxSet(e, 2, 170);
+            fxSet(e, 3, 180);
+            fxSet(e, 4, 3);
+            fxSet(e, 5, 14);
+        } catch (e2) {}
+    }
+
+    // In and Out animation as keyframes on opacity / position / scale / blur (or a text animator for Typewriter and Word by word).
+    // isBox: the background box moves and fades with its caption (it cannot type, so it fades in for those).
+    function capAnimate(comp, L, cs, geo, isBox) {
+        var fl = comp.frameDuration, dur = geo.t1 - geo.t0, maxPart = dur * 0.45, inD = Math.min(cs.inLen * fl, maxPart), outD = Math.min(cs.outLen * fl, maxPart);
+        var inT = CAP_IN[cs.inIdx] ? CAP_IN[cs.inIdx][1] : "none", outT = CAP_OUT[cs.outIdx] ? CAP_OUT[cs.outIdx][1] : "none";
+        var a = geo.t0, b = geo.t1, x = geo.x, y = geo.y, d = cs.dist, ease = cs.ease;
+        var op = [], opE = [], pos = [], posE = [], sc = [], scE = [], bl = [], blE = [], IN_E = [[33, 12], [92, 33]], OUT_E = [[33, 92], [12, 33]], typed = (inT === "type" || inT === "words"), typeD, e, an, anims, sg, sel;
+        if (isBox && typed) { inT = "fade"; typed = false; }
+        function put(list, el, pair, i) { list.push(pair); el.push(i); }
+        function keys(prop, pairs, eases) {
+            if (!pairs.length) { return; }
+            if (ease === 2) { setKeys(prop, pairs, { linear: true }); }
+            else if (ease === 1) { var sm = [], k; for (k = 0; k < pairs.length; k++) { sm.push([66, 66]); } setKeys(prop, pairs, { eases: sm }); }
+            else { setKeys(prop, pairs, { eases: eases }); }
+        }
+        capClear(L.transform.opacity);
+        if (inT === "fade" || inT === "pop" || inT === "slideup" || inT === "blur") {
+            put(op, opE, [a, 0], IN_E[0]); put(op, opE, [a + inD, 100], IN_E[1]);
+        }
+        if (inT === "pop") { put(sc, scE, [a, [70, 70]], IN_E[0]); put(sc, scE, [a + inD, [100, 100]], IN_E[1]); }
+        if (inT === "slideup") { put(pos, posE, [a, [x, y + d]], IN_E[0]); put(pos, posE, [a + inD, [x, y]], IN_E[1]); }
+        if (inT === "blur") { put(bl, blE, [a, 14], IN_E[0]); put(bl, blE, [a + inD, 0], IN_E[1]); }
+        if (outT !== "none") {
+            put(op, opE, [b - outD, 100], OUT_E[0]); put(op, opE, [b, 0], OUT_E[1]);
+            if (outT === "slidedown") { put(pos, posE, [b - outD, [x, y]], OUT_E[0]); put(pos, posE, [b, [x, y + d]], OUT_E[1]); }
+            if (outT === "blur") { put(bl, blE, [b - outD, 0], OUT_E[0]); put(bl, blE, [b, 14], OUT_E[1]); }
+            if (outT === "pop") { put(sc, scE, [b - outD, [100, 100]], OUT_E[0]); put(sc, scE, [b, [70, 70]], OUT_E[1]); }
+        }
+        keys(L.transform.opacity, op, opE);
+        keys(L.transform.position, pos, posE);
+        keys(L.transform.scale, sc, scE);
+        if (bl.length) {
+            try {
+                e = fxAdd(L, "ADBE Gaussian Blur 2");
+                e.name = "Ru Caption Blur";
+                keys(e.property(1), bl, blE);
+            } catch (e1) {}
+        }
+        if (typed && !isBox) {
+            typeD = Math.min(dur * 0.6, inD * (inT === "type" ? 4 : 3));
+            try {
+                anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
+                anims.addProperty("ADBE Text Animator");
+                an = anims.property(anims.numProperties);
+                an.name = "Ru Caption In";
+                an.property("ADBE Text Animator Properties").addProperty("ADBE Text Opacity");
+                an.property("ADBE Text Animator Properties").property("ADBE Text Opacity").setValue(0);
+                sg = an.property("ADBE Text Selectors");
+                if (sg.numProperties === 0) { sg.addProperty("ADBE Text Selector"); }
+                sel = sg.property(1);
+                try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Type2").setValue(inT === "words" ? 3 : 1); } catch (e2) {}
+                setKeys(sel.property("ADBE Text Percent Start"), [[a, 0], [a + typeD, 100]], { linear: true });
+            } catch (e3) {}
+        }
+    }
+
+    // removes the old animation parts before a new one is built
+    function capResetFx(L) {
+        var fx = L.property("ADBE Effect Parade");
+        capRemoveNamed(fx, "Ru Caption Blur");
+        try { capRemoveNamed(L.property("ADBE Text Properties").property("ADBE Text Animators"), "Ru Caption In"); } catch (e) {}
+    }
+
+    function capMakeBox(comp, L, cs, geo, n) {
+        var padX = cs.boxPad, padY = Math.round(cs.boxPad * 0.6), w = geo.rect.width + padX * 2, h = geo.rect.height + padY * 2, B, gi;
+        B = shapeLayer(comp, "Ru Caption Box " + n);
+        gi = newGroup(B, "Box");
+        addRect(B, gi, w, h, cs.boxRad);
+        addFill(B, gi, hexToRgb(cs.boxColor), cs.boxOp);
+        try { B.startTime = geo.t0; } catch (e) {}
+        B.inPoint = geo.t0;
+        B.outPoint = geo.t1;
+        setXY(B.transform.position, geo.x, geo.y);
+        try { B.moveAfter(L); } catch (e1) {}
+        return B;
+    }
+
+    function capRemoveBoxes(comp, nums) {
+        var found = [], i, L, m, j;
+        for (i = 1; i <= comp.numLayers; i++) {
+            L = comp.layer(i);
+            m = L ? /^Ru Caption Box (\d+)$/.exec(L.name) : null;
+            if (m) { for (j = 0; j < nums.length; j++) { if (nums[j] === parseInt(m[1], 10)) { found.push(L); break; } } }
+        }
+        for (i = 0; i < found.length; i++) { try { found[i].remove(); } catch (e) {} }
+    }
+
+    // restyles and re-animates the given caption layers with the current card settings
+    function applyCaptionStyle(comp, layers) {
+        var cs = captionSettings(), i, L, geo, B, boxes = 0, nums = [];
+        for (i = 0; i < layers.length; i++) { nums.push(capNumberOf(layers[i].name)); }
+        capRemoveBoxes(comp, nums);
+        for (i = 0; i < layers.length; i++) {
+            L = layers[i];
+            capResetFx(L);
+            geo = capStyleText(comp, L, cs);
+            capShadow(L, cs);
+            capAnimate(comp, L, cs, geo, false);
+            if (cs.box) {
+                B = capMakeBox(comp, L, cs, geo, nums[i]);
+                capAnimate(comp, B, cs, geo, true);
+                boxes++;
+            }
+        }
+        return { n: layers.length, boxes: boxes };
+    }
+
+    function doCaptionApply(selectedOnly) {
+        var comp = activeComp(), layers, r;
+        if (!comp) { return; }
+        layers = captionLayers(comp, selectedOnly);
+        if (!layers.length) {
+            alert(selectedOnly ? "Select one or more caption layers (named Ru Caption N) first." : "There are no captions in this composition yet. Click English Transcript first.", NAME);
+            return;
+        }
+        r = applyCaptionStyle(comp, layers);
+        return r;
+    }
+
+    function doCaptionSelectAll() {
+        var comp = activeComp(), i, L, keep, n = 0;
+        if (!comp) { return; }
+        for (i = 1; i <= comp.numLayers; i++) {
+            L = comp.layer(i);
+            keep = !!L && capNumberOf(L.name) >= 0;
+            try { L.selected = keep; } catch (e) {}
+            if (keep) { n++; }
+        }
+        if (!n) { alert("There are no captions in this composition yet.", NAME); }
     }
 
     // data: { layerIndex, layerName, segments: [{ start, end, text }] }  (seconds in the source file)
     function buildCaptions(data) {
-        var comp = app.project.activeItem, src, cs = captionSettings(), made = 0, skipped = 0, i, seg, L, k, t0, t1, lo, hi, rect, x, y, col;
+        var comp = app.project.activeItem, src, made = 0, skipped = 0, i, seg, L, k, t0, t1, lo, hi, layers = [], res, col;
         if (!(comp && comp instanceof CompItem)) { return { error: "Open a composition first." }; }
         src = comp.layer(data.layerIndex);
         if (!src || src.name !== data.layerName) { return { error: "The layer moved while transcribing. Select it again and run the transcript again." }; }
         k = Math.abs(src.stretch) / 100; if (!(k > 0)) { k = 1; }
         lo = Math.max(0, src.inPoint); hi = Math.min(comp.duration, src.outPoint);
-        col = hexToRgb(cs.color);
+        col = hexToRgb("#FFFFFF");
         for (i = 0; i < data.segments.length; i++) {
             seg = data.segments[i];
             t0 = src.startTime + seg.start * k;
@@ -1742,32 +2019,17 @@
             if (t0 < lo) { t0 = lo; }
             if (t1 > hi) { t1 = hi; }
             if (!(t1 - t0 >= comp.frameDuration) || !trim(seg.text)) { skipped++; continue; }
-            L = makeText(comp, trim(seg.text), { size: cs.size, color: col, font: pickFont(true), just: "center" });
+            L = makeText(comp, trim(seg.text), { size: 64, color: col, font: pickFont(true), just: "center" });
             L.name = "Ru Caption " + (made + 1);
+            try { L.comment = "ru:" + trim(seg.text); } catch (e0) {}
             L.startTime = t0;
             L.inPoint = t0;
             L.outPoint = t1;
-            try { rect = L.sourceRectAtTime(t0, false); } catch (e0) { rect = null; }
-            x = comp.width / 2;
-            y = comp.height * (1 - cs.bottom / 100);
-            if (rect) {
-                anchorTo(L, "center", t0);
-                y -= rect.height / 2;
-            }
-            setXY(L.transform.position, x, y);
-            if (cs.shadow) {
-                try {
-                    var e = fxAdd(L, "ADBE Drop Shadow");
-                    fxSet(e, 1, [0, 0, 0, 1]);
-                    fxSet(e, 2, 170);
-                    fxSet(e, 3, 180);
-                    fxSet(e, 4, 3);
-                    fxSet(e, 5, 14);
-                } catch (e2) {}
-            }
+            layers.push(L);
             made++;
         }
-        return { made: made, skipped: skipped };
+        res = applyCaptionStyle(comp, layers);
+        return { made: made, skipped: skipped, boxes: res.boxes };
     }
 
     // =====================================================================
@@ -16014,6 +16276,7 @@
             pick.onClick = choose;
         }
         paintSwatch(sw, start);
+        api.set = function (h) { hex.text = h; update(); };
         return api;
     }
 
@@ -16916,7 +17179,7 @@
     try { CAP_PANEL = ($.global.RuMotionBridge === true); } catch (eCp) {}
     if (CAP_PANEL) {
         feature("Text", "Captions", function (p) {
-            hint(p, "Select an audio or video layer, then click English Transcript. The speech is turned into text on your computer.");
+            hint(p, "1. Select an audio or video layer and click English Transcript. 2. Style the captions. 3. Apply. You can restyle at any time without transcribing again.");
             var tr = subPanel(p, "Transcribe");
             CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB"], 1,
                 "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
@@ -16924,12 +17187,51 @@
                 alert("English Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
             }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
             tb.ruAction = "transcribe-en";
-            var cst = subPanel(p, "Caption style");
-            CAP.size = field(cst, "Font size (px):", "64", 5);
-            CAP.bottom = field(cst, "From bottom (%):", "10", 5, "Distance of the caption from the bottom edge, as a percentage of the comp height.");
-            CAP.color = colorChooser(cst, "Text color:", "#FFFFFF", "cap_color", false);
-            CAP.shadow = check(cst, "Soft shadow", true, "A dark drop shadow so the text reads on any picture.");
-            hint(p, "First use downloads the speech engine and model (about 150 MB). After that it works offline. Fonts come from the Style tab.");
+
+            var fp = subPanel(p, "Font");
+            CAP.family = drop(fp, "Font:", capLabels(CAP_FONTS, 0), 0, "A font that is not installed falls back to the Style tab font.");
+            CAP.weight = drop(fp, "Weight:", CAP_WEIGHTS, 2);
+            CAP.custom = field(fp, "Custom font:", "", 16, "Optional. A font's PostScript name (for example NotoSansSinhala-Bold) used instead of the choice above.");
+            CAP.size = field(fp, "Size (px):", "64", 5);
+            CAP.tracking = field(fp, "Letter spacing:", "0", 5, "Tracking in thousandths of an em. 0 = normal, 50 = a little wider.");
+            CAP.caseMode = drop(fp, "Case:", CAP_CASES, 0);
+            CAP.color = colorChooser(fp, "Text color:", "#FFFFFF", "cap_color", false);
+            CAP.stroke = check(fp, "Outline", false);
+            CAP.strokeColor = colorChooser(fp, "Outline color:", "#101010", "cap_stroke", false);
+            CAP.strokeW = field(fp, "Outline (px):", "4", 5);
+            CAP.box = check(fp, "Background box", false, "A rounded box behind each caption that moves and fades with it.");
+            CAP.boxColor = colorChooser(fp, "Box color:", "#101010", "cap_box", false);
+            CAP.boxOp = field(fp, "Box opacity (%):", "70", 5);
+            CAP.boxPad = field(fp, "Box padding (px):", "14", 5);
+            CAP.boxRad = field(fp, "Box corners (px):", "12", 5);
+            CAP.shadow = check(fp, "Soft shadow", true, "A dark drop shadow so the text reads on any picture.");
+            CAP.bottom = field(fp, "From bottom (%):", "10", 5, "Distance of the caption from the bottom edge, as a percentage of the comp height.");
+            CAP.maxW = field(fp, "Max width (%):", "88", 5, "A longer caption is split into balanced lines to stay within this share of the comp width.");
+
+            var ap = subPanel(p, "Animation");
+            CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);
+            CAP.inLen = field(ap, "In length (frames):", "8", 5, "Typewriter and Word by word take a few times longer.");
+            CAP.outT = drop(ap, "Out:", capLabels(CAP_OUT, 0), 1);
+            CAP.outLen = field(ap, "Out length (frames):", "6", 5);
+            CAP.ease = drop(ap, "Curve:", CAP_EASE, 0);
+            CAP.dist = field(ap, "Slide distance (px):", "40", 5, "For Slide up and Slide down.");
+
+            btn(p, "Apply to all captions", function () { run("Apply caption style", function () { doCaptionApply(false); }); },
+                "Restyles every Ru Caption layer in the comp with the settings above, and rebuilds their animation.", "primary");
+            var resetCap = function () {
+                var dd = [[CAP.family, 0], [CAP.weight, 2], [CAP.caseMode, 0], [CAP.inT, 1], [CAP.outT, 1], [CAP.ease, 0]], ff = [[CAP.custom, ""], [CAP.size, "64"], [CAP.tracking, "0"], [CAP.strokeW, "4"],
+                    [CAP.boxOp, "70"], [CAP.boxPad, "14"], [CAP.boxRad, "12"], [CAP.bottom, "10"], [CAP.maxW, "88"], [CAP.inLen, "8"], [CAP.outLen, "6"], [CAP.dist, "40"]], tt = [[CAP.stroke, false], [CAP.box, false], [CAP.shadow, true]], i;
+                for (i = 0; i < dd.length; i++) { dd[i][0].selection = dd[i][1]; }
+                for (i = 0; i < ff.length; i++) { ff[i][0].text = ff[i][1]; }
+                for (i = 0; i < tt.length; i++) { tt[i][0].value = tt[i][1]; try { redraw(tt[i][0]); } catch (eR) {} }
+                CAP.color.set("#FFFFFF"); CAP.strokeColor.set("#101010"); CAP.boxColor.set("#101010");
+            };
+            grid(p, [
+                ["Apply to selected", function () { run("Apply caption style", function () { doCaptionApply(true); }); }, "Restyles only the selected Ru Caption layers."],
+                ["Select all captions", function () { run("Select captions", doCaptionSelectAll); }, "Selects every Ru Caption layer in the comp."],
+                ["Reset style", resetCap, "Puts the style controls back to their defaults (click Apply to use them)."]
+            ]);
+            hint(p, "First use downloads the speech engine and model (about 150 MB). After that it works offline.");
         });
     }
 
