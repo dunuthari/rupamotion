@@ -52,6 +52,29 @@ R['picker: falls back to an OpenBLAS x64 zip when that is all there is'] = (T.pi
 R['picker: a differently named x64 zip is accepted (e.g. whisper-v1.8-bin-x64.zip)'] = (T.pickWindowsAsset([rel('v1', ['whisper-v1.8-bin-x64.zip'])]) || {}).name === 'whisper-v1.8-bin-x64.zip';
 R['picker: nothing usable -> null, and the error text lists what was seen'] = T.pickWindowsAsset([rel('v1', ['a.zip'])]) === null && /v1: a\.zip/.test(T.describeReleases([rel('v1', ['a.zip'])])) && T.pickWindowsAsset([rel('v1', ['whisper-bin-x64.zip'], { draft: true })]) === null;
 
+
+// ---- Google Speech-to-Text helpers (Sinhala)
+const mkWav = (secs, extraChunk) => { const n = Math.round(secs * 16000), pcm = new Int16Array(n); for (let i = 0; i < n; i++) pcm[i] = (i % 40 < 20 ? 3000 : -3000); return { n, pcm }; };
+{
+  const { n, pcm } = mkWav(2);
+  const w = T.encodeWav(pcm, 16000), listed = Buffer.concat([Buffer.from(w.slice(0, 36)), Buffer.from('LIST\x04\x00\x00\x00abcd'), Buffer.from(w.slice(36))]);
+  const rd = T.readWav(Buffer.from(w));
+  R['readWav: rate, mono, sample count and values round-trip'] = rd.rate === 16000 && rd.samples.length === n && rd.samples[0] === 3000 && rd.samples[25] === -3000;
+  R['readWav: skips an extra chunk before the data'] = T.readWav(listed).samples.length === n;
+  R['readWav: refuses non-WAV and stereo'] = (() => { let a = 0; try { T.readWav(Buffer.from('nope'.repeat(20))); } catch (e) { a++; } const st = Buffer.from(w); st.writeUInt16LE(2, 22); try { T.readWav(st); } catch (e) { a++; } return a === 2; })();
+  // 130 s of noise with a quiet gap at 50 s and at 100 s: cuts land in the gaps, parts <= 55 s
+  const big = mkWav(130).pcm; for (let i = 50 * 16000; i < 50.3 * 16000; i++) big[i] = 0; for (let i = 100 * 16000; i < 100.3 * 16000; i++) big[i] = 0;
+  const parts = T.splitAtQuiet(big, 16000, 55, 35);
+  R['splitAtQuiet: 3 parts, each <= 55 s, cut inside the quiet gaps, no sample lost'] = parts.length === 3 && parts.every(p => p[1] - p[0] <= 55 * 16000) && parts[0][1] / 16000 > 50 && parts[0][1] / 16000 < 50.3 && parts[1][1] / 16000 > 100 && parts[1][1] / 16000 < 100.3 && parts[0][0] === 0 && parts[1][0] === parts[0][1] && parts[2][1] === big.length;
+  R['splitAtQuiet: a short clip is one part'] = T.splitAtQuiet(mkWav(30).pcm, 16000, 55, 35).length === 1;
+  const gw = T.parseGoogle({ results: [{ alternatives: [{ transcript: 'x', words: [{ startTime: '0.400s', endTime: '0.900s', word: '\u0DB8\u0DB8' }, { startTime: '1s', endTime: { seconds: 1, nanos: 500000000 }, word: '\u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA' }] }] }] }, 55, 110);
+  R['parseGoogle: word times are shifted by the part offset ("1s" and {seconds,nanos} both work)'] = gw.words.length === 2 && near(gw.words[0].start, 55.4) && near(gw.words[0].end, 55.9) && near(gw.words[1].start, 56) && near(gw.words[1].end, 56.5) && gw.segs.length === 0;
+  const gs = T.parseGoogle({ results: [{ alternatives: [{ transcript: ' \u0DB8\u0DB8 ' }], resultEndTime: '3.0s' }, { alternatives: [{ transcript: '\u0D9A\u0DD9' }] }] }, 10, 20);
+  R['parseGoogle: without word times it falls back to one segment per result (end from resultEndTime, else the part end)'] = gs.words.length === 0 && gs.segs.length === 2 && near(gs.segs[0].start, 10) && near(gs.segs[0].end, 13) && near(gs.segs[1].end, 20) && gs.segs[0].text === '\u0DB8\u0DB8';
+  const lines = T.groupWords([{ start: 0, end: 1, text: 'aaaaaaaaaa' }, { start: 1, end: 2, text: 'bbbbbbbbbb' }, { start: 2, end: 3, text: 'cccccccccc' }, { start: 3, end: 4, text: 'dddddddddd' }, { start: 4, end: 5, text: 'e' }, { start: 6.5, end: 7, text: 'f' }], 40, 0.7);
+  R['groupWords: lines of at most 40 characters, and a new line after a pause'] = lines.length === 3 && lines.every(l => l.text.length <= 40) && lines[0].text === 'aaaaaaaaaa bbbbbbbbbb cccccccccc' && lines[1].text === 'dddddddddd e' && lines[2].text === 'f' && near(lines[2].start, 6.5);
+}
+
 // ---- the pipeline with fakes (Linux/Mac only: the fakes are shell scripts)
 async function pipeline() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ru-t-'));
@@ -75,7 +98,23 @@ EOF2
   fs.writeFileSync(path.join(bin, 'ffmpeg'), '#!/bin/sh\nfor last; do :; done\ncp "$3" "$last"\n'); fs.chmodSync(path.join(bin, 'ffmpeg'), 0o755);
   process.env.PATH = bin + ':' + prevPath;
   // a local server standing in for the model download
-  const srv = http.createServer((req, res) => { if (req.url === '/ggml-tiny.en.bin' || req.url === '/ggml-tiny.bin') { res.writeHead(200, { 'Content-Length': 2000 }); res.end(Buffer.alloc(2000, 7)); } else { res.writeHead(404); res.end(); } });
+  const gCalls = [];
+  const srv = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/v1/speech:recognize') {
+      const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString()), key = req.headers['x-goog-api-key'];
+        gCalls.push({ key, cfg: body.config, bytes: Buffer.from(body.audio.content, 'base64').length, url: req.url });
+        const send = (st, o) => { res.writeHead(st, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+        if (key === 'BADKEY') return send(400, { error: { message: 'API key not valid. Please pass a valid API key.' } });
+        if (key === 'NOBILL') return send(403, { error: { message: 'Cloud Speech-to-Text API has not been used in project 123 before or it is disabled.' } });
+        if (key === 'NOWORDS' && body.config.enableWordTimeOffsets) return send(400, { error: { message: 'Word time offsets are not supported for this language.' } });
+        const n = gCalls.filter(c => c.key === key).length;
+        if (key === 'NOWORDS') return send(200, { results: [{ alternatives: [{ transcript: '\u0DB8\u0DB8 \u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA' }], resultEndTime: '4s' }] });
+        return send(200, { results: [{ alternatives: [{ transcript: 'x', words: [{ startTime: '1s', endTime: '1.5s', word: '\u0DB8\u0DB8' + n }, { startTime: '1.6s', endTime: '2s', word: '\u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA' }] }] }] });
+      });
+      return;
+    }
+    if (req.url === '/ggml-tiny.en.bin' || req.url === '/ggml-tiny.bin') { res.writeHead(200, { 'Content-Length': 2000 }); res.end(Buffer.alloc(2000, 7)); } else { res.writeHead(404); res.end(); } });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const base = 'http://127.0.0.1:' + srv.address().port;
   T.MODELS['tiny.en'].mb = 0.001;   // 1 KB "model" for the test
@@ -118,6 +157,24 @@ EOF3
     await T.transcribe({ file: input, model: 'small', lang: 'si', modelBase: 'http://127.0.0.1:1', onStatus: m => msgsC.push(m) }).promise;
     R['a ggml-sinhala.bin in the models folder is used instead of downloading a model'] = msgsC.some(m => /Using your model ggml-sinhala\.bin/.test(m)) && /ggml-sinhala\.bin/.test(fs.readFileSync(argsFile, 'utf8'));
     fs.unlinkSync(path.join(T.baseDir(), 'models', 'ggml-sinhala.bin'));
+    // ---- Google Speech-to-Text: parts, offsets, key in a header, error messages
+    const long = path.join(root, 'long.wav'); fs.writeFileSync(long, T.encodeWav(mkWav(130).pcm, 16000));
+    const gEndpoint = base + '/v1/speech:recognize', gMsgs = [];
+    gCalls.length = 0;
+    const gSegs = await T.transcribeGoogle({ file: long, lang: 'si', apiKey: ' GOOD KEY '.replace(/ /g, '').replace('GOODKEY', 'GOODKEY'), endpoint: gEndpoint, onStatus: m => gMsgs.push(m) }).promise;
+    R['Google: 130 s of audio is sent as 3 parts, each under the 10 MB limit, language si-LK, 16 kHz LINEAR16, word times asked for'] = gCalls.length === 3 && gCalls.every(c => c.cfg.languageCode === 'si-LK' && c.cfg.encoding === 'LINEAR16' && c.cfg.sampleRateHertz === 16000 && c.cfg.enableWordTimeOffsets === true && c.bytes <= 55 * 32000 + 4);
+    R['Google: the key travels in the X-Goog-Api-Key header, never in the address'] = gCalls.every(c => c.key === 'GOODKEY' && c.url === '/v1/speech:recognize');
+    R['Google: lines come back in time order, shifted by each part offset, Sinhala text intact'] = gSegs.length === 3 && gSegs[0].start >= 1 && gSegs[1].start > gSegs[0].end && gSegs[2].start > gSegs[1].end && gSegs.every(s => /[\u0D80-\u0DFF]/.test(s.text)) && gSegs[0].text.indexOf('\u0DB8\u0DB81 \u0D9A') === 0 && gSegs[2].start > 100;
+    R['Google: status names each part and temp files are removed'] = gMsgs.some(m => /Sending part 2 of 3/.test(m)) && fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('rumotion-')).length === 0;
+    const msgBad = async (key) => { try { await T.transcribeGoogle({ file: input, lang: 'si', apiKey: key, endpoint: gEndpoint }).promise; return ''; } catch (e) { return e.message; } };
+    const eBad = await msgBad('BADKEY'), eBill = await msgBad('NOBILL'), eNone = await msgBad('  ');
+    R['Google: a bad key, a disabled API and a missing key give plain messages, and the key is never in them'] = /not valid/.test(eBad) && /Speech-to-Text API/.test(eBill) && /billing/.test(eBill) && /Enter your Google API key/.test(eNone) && ![eBad, eBill, eNone].some(m => /BADKEY|NOBILL/.test(m));
+    gCalls.length = 0;
+    const sNo = await T.transcribeGoogle({ file: input, lang: 'si', apiKey: 'NOWORDS', endpoint: gEndpoint }).promise;
+    R['Google: if word times are refused, it asks again without them and uses the result times'] = gCalls.length === 2 && gCalls[0].cfg.enableWordTimeOffsets === true && gCalls[1].cfg.enableWordTimeOffsets === undefined && sNo.length >= 1 && /[\u0D80-\u0DFF]/.test(sNo[0].text) && near(sNo[sNo.length - 1].end, 4);
+    const gCancel = T.transcribeGoogle({ file: long, lang: 'si', apiKey: 'GOODKEY', endpoint: gEndpoint });
+    gCancel.cancel(); let gcErr = null; try { await gCancel.promise; } catch (e) { gcErr = e; }
+    R['Google: cancel stops before sending and reports cancelled'] = !!gcErr && gcErr.cancelled === true;
     // a failing engine reports its message
     fs.writeFileSync(engine, '#!/bin/sh\necho "boom: bad model" >&2\nexit 7\n');
     let err = null; try { await T.transcribe({ file: input, model: 'tiny.en', modelBase: base }).promise; } catch (e) { err = e; }

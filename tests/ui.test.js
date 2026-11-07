@@ -1035,6 +1035,9 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['model dropdown has 4 choices (Fast, Balanced, Accurate, Best), Balanced selected'] = flat.some(i => i.k === 'd' && i.items.length === 4 && i.sel === 1 && /Best/.test(i.items[3]));
   const sbtn = flat.find(i => i.k === 'b' && i.text === 'Sinhala Transcript');
   R['"Sinhala Transcript" button is flagged for the panel (a = transcribe-si)'] = !!sbtn && sbtn.a === 'transcribe-si';
+  const gk = flat.find(i => i.k === 'f' && i.label === 'Google API key:');
+  R['a Google API key field exists and the bridge returns what was typed (trimmed)'] = !!gk && (B.set(gk.id, '  AIza-test-key  '), B.captionGoogleKey() === 'AIza-test-key');
+  B.set(gk.id, '');
   R['model name follows the dropdown and the language (English .en models, Sinhala multilingual)'] = B.captionModel('en') === 'base.en' && B.captionModel('si') === 'base';
 
   app.project.activeItem = null;
@@ -1087,7 +1090,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   const press = (text) => B.click(items().find(i => i.k === 'b' && i.text === text).id);
   const near = (a, b) => Math.abs(a - b) < 1e-6;
   const titles = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') { titles.push(k.card.title); w(k.card); } }); })(card());
-  R['the card has Transcribe and Animation sections and no Font section'] = titles.join() === 'Transcribe,Animation';
+  R['the card has Transcribe, Sinhala (Google) and Animation sections and no Font section'] = titles.join() === 'Transcribe,Sinhala (Google),Animation';
   R['no font, outline, box, shadow or size controls'] = !items().some(i => /Font|Outline|Background box|Soft shadow|Size \(px\)|Box |Letter spacing|Case:|From bottom|Max width/.test(i.label || i.text || ''));
   press('Reset animation');
   const mk = () => {

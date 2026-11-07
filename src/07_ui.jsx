@@ -1609,16 +1609,20 @@
             hint(p, "1. Select an audio or video layer and click English Transcript. 2. Pick an In and Out animation. 3. Apply. You can change the animation at any time without transcribing again.");
             var tr = subPanel(p, "Transcribe");
             CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB", "Best: 1.5 GB"], 1,
-                "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time. Sinhala needs Accurate or Best to be usable at all.");
+                "English only. Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
             var tb = btn(tr, "English Transcript", function () {
                 alert("English Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
             }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
             tb.ruAction = "transcribe-en";
             var sb = btn(tr, "Sinhala Transcript", function () {
                 alert("Sinhala Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
-            }, "Select an audio or video layer with Sinhala speech. Creates one caption layer per line, in a Sinhala font. Check every line: Sinhala recognition is far less accurate than English.", "primary");
+            }, "Select an audio or video layer with Sinhala speech. Uses Google Speech-to-Text online (needs your API key below) and writes the Sinhala alphabet, one caption layer per line.", "primary");
             sb.ruAction = "transcribe-si";
-            hint(tr, "Sinhala: use Accurate or Best. Fast and Balanced often write Sinhala in Latin letters (\"Mei ni amal\") instead of the Sinhala alphabet. Check every line. Sinhala also needs After Effects > Preferences > Type > Text Engine: South Asian and Middle Eastern.");
+            var gp = subPanel(p, "Sinhala (Google)");
+            hint(gp, "Sinhala is sent to Google Speech-to-Text, which writes the Sinhala alphabet. Your audio is uploaded to Google and your own Google Cloud account is billed (there is a free monthly allowance; check Google's current price).");
+            CAP.gkey = field(gp, "Google API key:", getS("cap_gkey", ""), 24, "Google Cloud console > create a project > turn on Cloud Speech-to-Text API > Credentials > Create API key (restrict it to that API). Kept in After Effects' preferences on this computer.");
+            CAP.gkey.onChange = function () { putS("cap_gkey", trim(CAP.gkey.text)); };
+            hint(gp, "Sinhala also needs After Effects > Preferences > Type > Text Engine: South Asian and Middle Eastern. Check every line: speech recognition makes mistakes.");
 
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);
@@ -2250,6 +2254,7 @@
                 try { BR.ctl[id].onClick(); return "ok"; } catch (e) { return "err: " + e; }
             },
             captionSource: function () { try { return jstr(captionSource()); } catch (e) { return jstr({ error: String(e) }); } },
+            captionGoogleKey: function () { try { return trim(CAP.gkey.text); } catch (e) { return ""; } },
             captionModel: function (lang) { try { return captionModelFor(lang); } catch (e) { return lang === "si" ? "base" : "base.en"; } },
             captionBuild: function (json) {
                 try {

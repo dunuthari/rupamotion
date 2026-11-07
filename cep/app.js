@@ -84,8 +84,8 @@
   function makeItem(item, ctx) {
     var n, k;
     if (item.k === "f") {
-      n = el("input", { type: "text", value: item.v, title: item.tip || "", "aria-label": item.label || "value" });
-      n.style.width = (String(item.v).length > 12 ? "100%" : String(item.v).length <= 5 && ctx.small ? "60px" : "72px");
+      n = el("input", { type: /\bkey\b/i.test(item.label || "") ? "password" : "text", value: item.v, title: item.tip || "", "aria-label": item.label || "value" });
+      n.style.width = (String(item.v).length > 12 || /\bkey\b/i.test(item.label || "") ? "100%" : String(item.v).length <= 5 && ctx.small ? "60px" : "72px");
       if (isHex(item.v)) { n.style.width = "84px"; }
       n.addEventListener("change", function () { sendSet(item, n.value); });
       n.addEventListener("keydown", function (e) { if (e.key === "Enter") { n.blur(); } });
@@ -187,26 +187,34 @@
       var src;
       try { src = JSON.parse(r); } catch (e) { src = { error: "Could not read the selected layer: " + String(r).slice(0, 120) }; }
       if (src.error) { finish(node, src.error, true); return; }
+      function done(segs) {
+        if (!segs.length) { finish(node, "No speech was found in that layer.", true); return; }
+        setStatus(node, "Adding " + segs.length + " captions…", null);
+        bridge("captionBuild(" + esc(JSON.stringify({ layerIndex: src.index, layerName: src.name, lang: lang, segments: segs })) + ")", function (res) {
+          var d;
+          try { d = JSON.parse(res); } catch (e2) { d = { error: String(res).slice(0, 120) }; }
+          if (d.error) { finish(node, d.error, true); return; }
+          var base = "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + ".";
+          if (lang === "si" && !(T.hasSinhala && T.hasSinhala(segs))) { finish(node, base + " None of the lines contains Sinhala letters. Check that the layer really has Sinhala speech.", true); }
+          else { finish(node, base + (lang === "si" ? " Check every line: speech recognition makes mistakes." : " Look for layers named Ru Caption."), false); }
+        });
+      }
+      function fail(e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); }
+      if (lang === "si") {   // Sinhala: Google Speech-to-Text with the user's key
+        bridge("captionGoogleKey()", function (kr) {
+          var key = String(kr || "").replace(/\s+/g, "");
+          if (!key || /^EvalScript/.test(key)) { finish(node, "Enter your Google API key in the Sinhala (Google) section first.", true); return; }
+          try { running = T.transcribeGoogle({ file: src.path, lang: "si", apiKey: key, onStatus: function (msg, f) { setStatus(node, msg, f); } }); } catch (e4) { fail(e4); return; }
+          running.promise.then(done, fail);
+        });
+        return;
+      }
       bridge("captionModel(" + esc(lang) + ")", function (mr) {
-        var model = String(mr).replace(/[^a-z.]/g, "") || (lang === "en" ? "base.en" : "base");
+        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";
         try {
           running = T.transcribe({ file: src.path, model: model, lang: lang, enginePath: store("whisper_path", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
-        } catch (e1) { finish(node, e1.message || String(e1), true); return; }
-        running.promise.then(function (segs) {
-          if (!segs.length) { finish(node, "No speech was found in that layer.", true); return; }
-          setStatus(node, "Adding " + segs.length + " captions…", null);
-          bridge("captionBuild(" + esc(JSON.stringify({ layerIndex: src.index, layerName: src.name, lang: lang, segments: segs })) + ")", function (res) {
-            var d;
-            try { d = JSON.parse(res); } catch (e2) { d = { error: String(res).slice(0, 120) }; }
-            if (d.error) { finish(node, d.error, true); return; }
-            var base = "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + ".";
-            if (lang === "si" && !(T.hasSinhala && T.hasSinhala(segs))) {
-              finish(node, base + " The model wrote the Sinhala in Latin letters, not the Sinhala alphabet. Choose Accurate or Best in Accuracy and run Sinhala Transcript again (delete these captions first).", true);
-            } else {
-              finish(node, base + (lang === "si" ? " Check every line: Sinhala recognition makes many mistakes." : " Look for layers named Ru Caption."), false);
-            }
-          });
-        }, function (e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); });
+        } catch (e1) { fail(e1); return; }
+        running.promise.then(done, fail);
       });
     });
   }
