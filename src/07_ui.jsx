@@ -1609,16 +1609,11 @@
             hint(p, "1. Select an audio or video layer and click English Transcript. 2. Pick an In and Out animation. 3. Apply. You can change the animation at any time without transcribing again.");
             var tr = subPanel(p, "Transcribe");
             CAP.model = drop(tr, "Accuracy:", ["Fast: 75 MB", "Balanced: 142 MB", "Accurate: 466 MB", "Best: 1.5 GB"], 1,
-                "English only (Sinhala has its own model). Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
+                "Bigger models are more accurate but slower. The first use downloads the model; it is kept for next time.");
             var tb = btn(tr, "English Transcript", function () {
                 alert("English Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
             }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
             tb.ruAction = "transcribe-en";
-            var sb = btn(tr, "Sinhala Transcript", function () {
-                alert("Sinhala Transcript runs in the Ru Motion CEP panel (Window > Extensions > Ru Motion).", NAME);
-            }, "Select an audio or video layer with Sinhala speech. Works offline with the Sinhala model and writes the Sinhala alphabet, one caption layer per line.", "primary");
-            sb.ruAction = "transcribe-si";
-            hint(tr, "Sinhala works offline. The first use downloads the Sinhala model once. Check every line: speech recognition makes mistakes. Sinhala also needs After Effects > Preferences > Type > Text Engine: South Asian and Middle Eastern.");
 
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);

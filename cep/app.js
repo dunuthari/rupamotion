@@ -172,9 +172,7 @@
     toast(isErr ? "Transcript: " + msg.slice(0, 80) : msg);
   }
   function runAction(item, node) {
-    var m = /^transcribe-(en|si)$/.exec(item.a || "");
-    if (!m) { return; }
-    var lang = m[1];
+    if (item.a !== "transcribe-en") { return; }
     if (running) { running.cancel(); return; }   // while it works, the button is Cancel
     var T = window.RuTranscribe;
     if (!T || !T.available()) { setStatus(node, "This panel cannot use Node.js yet. Run the latest installer and restart After Effects.", 0, "err"); return; }
@@ -190,20 +188,19 @@
       function done(segs) {
         if (!segs.length) { finish(node, "No speech was found in that layer.", true); return; }
         setStatus(node, "Adding " + segs.length + " captions…", null);
-        bridge("captionBuild(" + esc(JSON.stringify({ layerIndex: src.index, layerName: src.name, lang: lang, segments: segs })) + ")", function (res) {
+        bridge("captionBuild(" + esc(JSON.stringify({ layerIndex: src.index, layerName: src.name, segments: segs })) + ")", function (res) {
           var d;
           try { d = JSON.parse(res); } catch (e2) { d = { error: String(res).slice(0, 120) }; }
           if (d.error) { finish(node, d.error, true); return; }
           var base = "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + ".";
-          if (lang === "si" && !(T.hasSinhala && T.hasSinhala(segs))) { finish(node, base + " None of the lines contains Sinhala letters. Check that the layer really has Sinhala speech.", true); }
-          else { finish(node, base + (lang === "si" ? " Check every line: speech recognition makes mistakes." : " Look for layers named Ru Caption."), false); }
+          finish(node, base + " Look for layers named Ru Caption.", false);
         });
       }
       function fail(e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); }
       bridge("captionModel()", function (mr) {
-        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";   // the English model; Sinhala uses its own model file
+        var model = String(mr).replace(/[^a-z.]/g, "") || "base.en";
         try {
-          running = T.transcribe({ file: src.path, model: model, lang: lang, enginePath: store("whisper_path", ""), sinhalaUrl: store("sinhala_model_url", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
+          running = T.transcribe({ file: src.path, model: model, enginePath: store("whisper_path", ""), onStatus: function (msg, f) { setStatus(node, msg, f); } });
         } catch (e1) { fail(e1); return; }
         running.promise.then(done, fail);
       });

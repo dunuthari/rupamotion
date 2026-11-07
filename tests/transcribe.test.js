@@ -31,14 +31,6 @@ R['wav: RIFF header, 16 kHz mono 16-bit, 4 samples'] = String.fromCharCode(...wa
   && dv.getUint32(24, true) === 16000 && dv.getUint16(22, true) === 1 && dv.getUint16(34, true) === 16 && dv.getUint32(40, true) === 8 && wav.length === 52 && dv.getInt16(44 + 6, true) === 32767;
 const i16 = T.floatToInt16(new Float32Array([0, 1, -1, 2, -2, 0.5]));
 R['float -> int16 clips at full scale'] = i16[1] === 32767 && i16[2] === -32768 && i16[3] === 32767 && i16[4] === -32768 && Math.abs(i16[5] - 16383.5) < 1;
-R['whisper arguments for Sinhala: language si, JSON, no -ml/-sow (they can cut a multi-byte letter), no prompt'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4, 'si'); return a.join(' ') === '-m /m/b.bin -f /t/a.wav -l si -oj -of /t/out -t 4 -pp' && a.indexOf('-ml') < 0 && a.indexOf('--prompt') < 0; })();
-R['English arguments have no prompt'] = T.whisperArgs('m', 'w', 'o', 2, 'en').indexOf('--prompt') < 0;
-R['hasSinhala tells Sinhala script from Latin letters'] = T.hasSinhala([{ text: 'Mei ni amal' }, { text: '\u0DB8\u0DB8' }]) === true && T.hasSinhala([{ text: 'Mei ni amal, amal tati eno' }]) === false;
-const long = [{ start: 10, end: 20, text: 'aaaa bbbb cccc dddd eeee ffff gggg hhhh' }, { start: 20, end: 22, text: 'short one' }];
-const sp = T.splitLong(long, 20);
-R['splitLong: a long segment is cut at spaces into lines of at most 20 characters'] = sp.length === 3 && sp.every(s => s.text.length <= 20) && sp.map(s => s.text).join(' ') === long[0].text + ' short one' && sp[2].text === 'short one';
-R['splitLong: the segment time is shared in proportion to length and stays continuous'] = near(sp[0].start, 10) && near(sp[1].start, sp[0].end) && near(sp[1].end, 20) && sp[0].end > 10 && sp[0].end < 20;
-R['dropRepeats: an identical line right after itself is dropped (Whisper loops)'] = T.dropRepeats([{ text: 'a' }, { text: 'a' }, { text: 'b' }, { text: 'a' }]).map(s => s.text).join('') === 'aba';
 R['whisper arguments: English, JSON, 42-char lines split on words, progress'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4); return a.join(' ') === '-m /m/b.bin -f /t/a.wav -l en -oj -of /t/out -ml 42 -sow -t 4 -pp'; })();
 
 
@@ -76,9 +68,7 @@ EOF2
   process.env.PATH = bin + ':' + prevPath;
   // a local server standing in for the model download
     const srv = http.createServer((req, res) => {
-    if (req.url === '/sinhala.bin') { res.writeHead(200, { 'Content-Length': 31 * 1024 * 1024 }); res.end(Buffer.alloc(31 * 1024 * 1024, 9)); return; }
-    if (req.url === '/tiny-sinhala.bin') { res.writeHead(200, { 'Content-Length': 1000 }); res.end(Buffer.alloc(1000, 9)); return; }
-    if (req.url === '/ggml-tiny.en.bin' || req.url === '/ggml-tiny.bin') { res.writeHead(200, { 'Content-Length': 2000 }); res.end(Buffer.alloc(2000, 7)); } else { res.writeHead(404); res.end(); } });
+    if (req.url === '/ggml-tiny.en.bin') { res.writeHead(200, { 'Content-Length': 2000 }); res.end(Buffer.alloc(2000, 7)); } else { res.writeHead(404); res.end(); } });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const base = 'http://127.0.0.1:' + srv.address().port;
   T.MODELS['tiny.en'].mb = 0.001;   // 1 KB "model" for the test
@@ -97,35 +87,6 @@ EOF2
     const msgs2 = [];
     await T.transcribe({ file: input, model: 'tiny.en', modelBase: base, onStatus: m => msgs2.push(m) }).promise;
     R['second run reuses the model'] = !msgs2.some(m => /Downloading/.test(m));
-    // ---- Sinhala: one model file (ggml-sinhala.bin), language flag, long segments cut into lines, repeats dropped
-    const argsFile = path.join(root, 'args.txt');
-    const siJson = JSON.stringify({ transcription: [
-      { offsets: { from: 0, to: 12000 }, text: ' \u0DB8\u0DB8 \u0D9A\u0DD9\u0DB1\u0DD9\u0D9A\u0DCA \u0DC0\u0DD2\u0DBA \u0DC4\u0DD0\u0D9A\u0DD2 \u0DB6\u0DC0 \u0DB4\u0DD0\u0DC0\u0DC3\u0DD3\u0DB8 \u0D9A\u0DD2\u0DBA\u0DB1 \u0D9C\u0DD0\u0DB1 \u0D9A\u0DAD\u0DCF \u0D9A\u0DBB\u0DB8\u0DD2' },
-      { offsets: { from: 12000, to: 14000 }, text: ' \u0DB8\u0DB8' }, { offsets: { from: 14000, to: 16000 }, text: ' \u0DB8\u0DB8' }] });
-    fs.writeFileSync(engine, `#!/bin/sh
-echo "$@" > "${argsFile}"
-prefix=""; while [ $# -gt 0 ]; do case "$1" in -of) prefix="$2"; shift;; esac; shift; done
-cat > "$prefix.json" <<'EOF3'
-${siJson}
-EOF3
-`);
-    fs.chmodSync(engine, 0o755);
-    const modelsDir = path.join(T.baseDir(), 'models'), sModel = path.join(modelsDir, 'ggml-sinhala.bin');
-    const errOf = async (fn) => { try { await fn(); return ''; } catch (e) { return e.message; } };
-    const eNone = await errOf(() => T.transcribe({ file: input, lang: 'si' }).promise);
-    R['Sinhala without a model and without a download address: a clear message with the folder and the converter'] = /not installed yet/.test(eNone) && eNone.indexOf(modelsDir) >= 0 && /convert_sinhala_model\.py/.test(eNone) && !fs.existsSync(sModel);
-    const eSmall = await errOf(() => T.transcribe({ file: input, lang: 'si', sinhalaUrl: base + '/tiny-sinhala.bin' }).promise);
-    R['a Sinhala download that is far too small is refused and removed'] = /looks incomplete/.test(eSmall) && !fs.existsSync(sModel);
-    const sMsgs = [];
-    const sSegs = await T.transcribe({ file: input, lang: 'si', sinhalaUrl: base + '/sinhala.bin', onStatus: m => sMsgs.push(m) }).promise;
-    const sArgs = fs.readFileSync(argsFile, 'utf8');
-    R['Sinhala: the model is downloaded once to models/ggml-sinhala.bin with progress'] = fs.existsSync(sModel) && fs.statSync(sModel).size === 31 * 1024 * 1024 && sMsgs.some(m => /Downloading the Sinhala model/.test(m));
-    R['Sinhala: the engine is called with -l si and that model, no -ml, no prompt'] = /-l si /.test(sArgs) && sArgs.indexOf('ggml-sinhala.bin') > 0 && sArgs.indexOf('-ml') < 0 && sArgs.indexOf('--prompt') < 0;
-    R['Sinhala: the long segment is split into <= 40 character lines, the repeated line dropped, Sinhala text intact'] = sSegs.length >= 2 && sSegs.every(s => s.text.length <= 40) && sSegs[sSegs.length - 1].text === '\u0DB8\u0DB8' && sSegs.filter(s => s.text === '\u0DB8\u0DB8').length === 1 && /\u0DB8\u0DB8 \u0D9A\u0DD9/.test(sSegs[0].text);
-    const sMsgs2 = [];
-    await T.transcribe({ file: input, lang: 'si', sinhalaUrl: 'http://127.0.0.1:1/never', onStatus: m => sMsgs2.push(m) }).promise;
-    R['Sinhala: the second run uses the file on disk and never touches the network'] = sMsgs2.some(m => /Using the Sinhala model/.test(m)) && !sMsgs2.some(m => /Downloading/.test(m));
-    fs.unlinkSync(sModel);
     // a failing engine reports its message
     fs.writeFileSync(engine, '#!/bin/sh\necho "boom: bad model" >&2\nexit 7\n');
     let err = null; try { await T.transcribe({ file: input, model: 'tiny.en', modelBase: base }).promise; } catch (e) { err = e; }

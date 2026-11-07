@@ -53,43 +53,6 @@
   };
 
 
-  // Whisper's own segments can be 10 to 30 seconds of text. Cut them at spaces into caption-sized lines (at most maxChars each, similar
-  // lengths) and share the segment's time between the pieces in proportion to their length.
-  api.splitLong = function (segs, maxChars) {
-    var out = [], i, j, s, words, lines, cur, k, target, total, t, len, piece;
-    for (i = 0; i < segs.length; i++) {
-      s = segs[i];
-      if (s.text.length <= maxChars) { out.push(s); continue; }
-      k = Math.ceil(s.text.length / maxChars);
-      target = Math.ceil(s.text.length / k);
-      words = s.text.split(" "); lines = []; cur = "";
-      for (j = 0; j < words.length; j++) {
-        if (cur && (cur + " " + words[j]).length > target && lines.length < k - 1) { lines.push(cur); cur = words[j]; }
-        else { cur = cur ? cur + " " + words[j] : words[j]; }
-      }
-      if (cur) { lines.push(cur); }
-      total = 0; for (j = 0; j < lines.length; j++) { total += lines[j].length; }
-      t = s.start;
-      for (j = 0; j < lines.length; j++) {
-        len = (s.end - s.start) * lines[j].length / total;
-        piece = { start: Math.round(t * 1000) / 1000, end: Math.round((j === lines.length - 1 ? s.end : t + len) * 1000) / 1000, text: lines[j] };
-        out.push(piece);
-        t += len;
-      }
-    }
-    return out;
-  };
-
-  // low-resource languages make Whisper loop on one line; an identical line right after itself is dropped
-  api.dropRepeats = function (segs) {
-    var out = [], i;
-    for (i = 0; i < segs.length; i++) {
-      if (out.length && out[out.length - 1].text === segs[i].text) { continue; }
-      out.push(segs[i]);
-    }
-    return out;
-  };
-
   // 16-bit mono PCM -> WAV bytes
   api.encodeWav = function (samples, rate) {
     var n = samples.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf), i;
@@ -401,43 +364,12 @@
     });
   };
 
-  // English: lines of at most 42 characters split on words. Other languages (Sinhala): Whisper's own segments (splitting inside a word can
-  // cut a multi-byte letter in two); api.splitLong makes the lines afterwards.
-  api.whisperArgs = function (model, wav, prefix, threads, lang) {
-    lang = lang || "en";
-    if (lang === "en") { return ["-m", model, "-f", wav, "-l", "en", "-oj", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"]; }
-    return ["-m", model, "-f", wav, "-l", lang, "-oj", "-of", prefix, "-t", String(threads), "-pp"];
+  // lines of at most 42 characters, split on words, JSON output with times, progress on stderr
+  api.whisperArgs = function (model, wav, prefix, threads) {
+    return ["-m", model, "-f", wav, "-l", "en", "-oj", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"];
   };
 
-  api.hasSinhala = function (segs) {
-    var i;
-    for (i = 0; i < segs.length; i++) { if (/[\u0D80-\u0DFF]/.test(segs[i].text)) { return true; } }
-    return false;
-  };
-
-  // The Sinhala model is one file, models/ggml-sinhala.bin: a Sinhala-trained Whisper model converted to whisper.cpp's format
-  // (tools/convert_sinhala_model.py). If the file is there it is used; otherwise it is downloaded once from SINHALA_MODEL_URL
-  // (set when the converted file has been put online; the localStorage key ru:sinhala_model_url overrides it for testing).
-  api.SINHALA_MODEL_URL = "";
-  api.sinhalaModelPath = function () { var m = mods(); return m.path.join(api.baseDir(), "models", "ggml-sinhala.bin"); };
-  api.ensureSinhalaModel = function (status, url) {
-    var m = mods(), file = api.sinhalaModelPath(), src = url || api.SINHALA_MODEL_URL, dir = m.path.join(api.baseDir(), "models");
-    try { if (m.fs.existsSync(file) && m.fs.statSync(file).size > 30 * 1024 * 1024) { status("Using the Sinhala model…", null); return Promise.resolve(file); } } catch (e) {}
-    if (!src) {
-      return Promise.reject(new Error("The Sinhala model is not installed yet. Put the file ggml-sinhala.bin in " + dir + " (see tools/convert_sinhala_model.py), then try again."));
-    }
-    status("Downloading the Sinhala model (one time)…", 0);
-    return api.download(src, file, function (f) { status("Downloading the Sinhala model… " + Math.round(f * 100) + "%", f); }, 500 * 1024 * 1024).then(function (f) {
-      var size = 0; try { size = m.fs.statSync(f).size; } catch (e1) {}
-      if (size < 30 * 1024 * 1024) { try { m.fs.unlinkSync(f); } catch (e2) {} throw new Error("The Sinhala model download looks incomplete (" + Math.round(size / 1024) + " KB). Try again."); }
-      return f;
-    }).catch(function (e) {
-      if (!/^(The Sinhala model|Downloading the Sinhala)/.test(e.message)) { e.message = "Downloading the Sinhala model failed: " + e.message + api.netHint(e); }
-      throw e;
-    });
-  };
-
-  // o: { file, model: "base.en" (English), lang: "en"|"si", onStatus(message, fraction|null), enginePath, modelBase, sinhalaUrl }
+  // o: { file, model: "base.en", onStatus(message, fraction|null), enginePath, modelBase }
   // returns { promise -> segments [{start,end,text}] in source-file seconds, cancel() }
   api.transcribe = function (o) {
     var m = mods(), cancelled = false, child = null, status = o.onStatus || function () {}, tmp, wav, prefix;
@@ -449,8 +381,7 @@
     function stopCheck() { if (cancelled) { var e = new Error("Cancelled."); e.cancelled = true; throw e; } }
     var promise = api.ensureEngine(status, o.enginePath).then(function (engine) {
       stopCheck();
-      var getModel = (o.lang === "si") ? api.ensureSinhalaModel(status, o.sinhalaUrl) : api.ensureModel(o.model || "base.en", status, o.modelBase);
-      return getModel.then(function (model) {
+      return api.ensureModel(o.model || "base.en", status, o.modelBase).then(function (model) {
         stopCheck();
         tmp = m.path.join(m.os.tmpdir(), "rumotion-" + Date.now());
         mkdirp(tmp);
@@ -460,7 +391,7 @@
           stopCheck();
           status("Transcribing…", 0);
           var threads = Math.max(2, Math.min(8, m.os.cpus().length - 1));
-          return run(engine, api.whisperArgs(model, wav, prefix, threads, o.lang), function (l) {
+          return run(engine, api.whisperArgs(model, wav, prefix, threads), function (l) {
             var p = /progress\s*=\s*(\d+)\s*%/.exec(l);
             if (p) { status("Transcribing… " + p[1] + "%", (+p[1]) / 100); }
           }, { onChild: function (c) { child = c; } });
@@ -470,7 +401,6 @@
       var jsonFile = prefix + ".json";
       if (!m.fs.existsSync(jsonFile)) { throw new Error("The speech engine finished but wrote no transcript."); }
       var segs = api.cleanSegments(api.parseWhisperJson(m.fs.readFileSync(jsonFile, "utf8")));
-      if (o.lang && o.lang !== "en") { segs = api.splitLong(api.dropRepeats(segs), 40); }
       cleanup();
       return segs;
     }).catch(function (e) {

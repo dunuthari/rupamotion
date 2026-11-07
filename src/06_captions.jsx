@@ -19,14 +19,12 @@
         ["Manrope", ["Manrope-Regular", "Manrope-Medium", "Manrope-Bold"]],
         ["DM Sans", ["DMSans-Regular", "DMSans-Medium", "DMSans-Bold"]],
         ["Outfit", ["Outfit-Regular", "Outfit-Medium", "Outfit-Bold"]],
-        ["Noto Sans Sinhala", ["NotoSansSinhala-Regular", "NotoSansSinhala-Medium", "NotoSansSinhala-Bold"]],
         ["Arial", ["ArialMT", "ArialMT", "Arial-BoldMT"]]
     ];
     var CAP_IN = [["None", "none"], ["Fade", "fade"], ["Pop", "pop"], ["Slide up", "slideup"], ["Blur in", "blur"], ["Typewriter", "type"], ["Word by word", "words"]];
     var CAP_OUT = [["None", "none"], ["Fade", "fade"], ["Slide down", "slidedown"], ["Blur out", "blur"], ["Pop out", "pop"]];
     var CAP_EASE = ["Expo out", "Smooth", "Linear"];
     var CAP_MODELS = ["tiny.en", "base.en", "small.en", "medium.en"];
-    var CAP_SINHALA_FONTS = ["NotoSansSinhala-Bold", "NirmalaUI-Bold", "NirmalaUI", "IskoolaPota", "SinhalaSangamMN-Bold", "SinhalaMN-Bold", "SinhalaMN"];
 
     function capLabels(list, col) {
         var out = [], i;
@@ -86,25 +84,11 @@
         };
     }
 
-    // the English model name from the Accuracy choice (Sinhala uses its own single model file, see cep/transcribe.js)
+    // the English model name from the Accuracy choice
     function captionModelFor() { return CAP_MODELS[capIdx(CAP.model, 1)] || "base.en"; }
 
-    // a font that has Sinhala letters: Noto Sans Sinhala, Windows' Nirmala UI or Iskoola Pota, the Mac's Sinhala fonts
-    function sinhalaFont() {
-        var i, r, unknown = false;
-        for (i = 0; i < CAP_SINHALA_FONTS.length; i++) {
-            r = fontInstalled(CAP_SINHALA_FONTS[i]);
-            if (r === true) { return CAP_SINHALA_FONTS[i]; }
-            if (r === null) { unknown = true; }
-        }
-        return unknown ? CAP_SINHALA_FONTS[0] : pickFont(true);
-    }
-
-    function capFont(cs, txt) {
+    function capFont(cs) {
         if (cs.fontName) { return cs.fontName; }
-        // a caption that contains Sinhala letters gets a Sinhala font whatever button made it (a Latin font would show empty boxes);
-        // Latin text (English, or Sinhala written in Latin letters) keeps the normal font
-        if (txt && /[\u0D80-\u0DFF]/.test(txt)) { return sinhalaFont(); }
         var f = CAP_FONTS[cs.family] || CAP_FONTS[0], name;
         if (cs.custom) { return cs.custom; }
         if (!f[1]) { return pickFont(cs.weight >= 1); }
@@ -169,7 +153,7 @@
     function capStyleText(comp, L, cs) {
         var t0 = L.inPoint, t1 = L.outPoint, sp = textDocProp(L), d = sp.value, txt = capCase(capOrig(L), cs.caseMode), rect, k, maxPx = comp.width * cs.maxW / 100, x, y;
         d.fontSize = cs.size;
-        try { d.font = capFont(cs, txt); } catch (e0) {}
+        try { d.font = capFont(cs); } catch (e0) {}
         d.applyFill = true;
         d.fillColor = hexToRgb(cs.color);
         try { d.tracking = cs.tracking; } catch (e1) {}
@@ -263,8 +247,7 @@
                 sg = an.property("ADBE Text Selectors");
                 if (sg.numProperties === 0) { sg.addProperty("ADBE Text Selector"); }
                 sel = sg.property(1);
-                // Sinhala letters join into clusters, so a "letter by letter" reveal would cut them apart: Sinhala always reveals by words
-                try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Type2").setValue((inT === "words" || /[\u0D80-\u0DFF]/.test(capOrig(L))) ? 3 : 1); } catch (e2) {}
+                try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Type2").setValue(inT === "words" ? 3 : 1); } catch (e2) {}
                 setKeys(sel.property("ADBE Text Percent Start"), [[a, 0], [a + typeD, 100]], { linear: true });
             } catch (e3) {}
         }
@@ -361,7 +344,7 @@
         if (!n) { alert("There are no captions in this composition yet.", NAME); }
     }
 
-    // data: { layerIndex, layerName, lang: "en"|"si", segments: [{ start, end, text }] }  (seconds in the source file)
+    // data: { layerIndex, layerName, segments: [{ start, end, text }] }  (seconds in the source file)
     function buildCaptions(data) {
         var comp = app.project.activeItem, src, made = 0, skipped = 0, i, seg, L, k, t0, t1, lo, hi, layers = [], res, col;
         if (!(comp && comp instanceof CompItem)) { return { error: "Open a composition first." }; }
