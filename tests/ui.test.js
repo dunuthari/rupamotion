@@ -498,6 +498,7 @@ function fakeBuild() {
         Object.defineProperty(docNode, 'value', { get() { return Object.assign({}, doc); } }); docNode.setValue = v => { Object.assign(doc, v); };
         props.children.push(docNode);
         L.nodes['ADBE Text Properties'] = props; L.doc = doc;
+        L.duplicate = function () { const D = comp.layers.addText(doc.text); Object.assign(D.doc, doc); D.name = this.name; D.comment = this.comment; D.transform.position.value = this.transform.position.value; D.transform.anchorPoint.value = this.transform.anchorPoint.value; D.inPoint = this.inPoint; D.outPoint = this.outPoint; D.startTime = this.startTime; return D; };
         L.sourceRectAtTime = () => { const f = doc.fontSize, desc = /[gjpqy]/.test(doc.text) ? 0.25 * f : 0, bp = doc.boxTextPos || [0, 0]; return { left: bp[0], top: bp[1] - f * 0.75, width: doc.text.length * f * 0.5, height: 0.75 * f + desc }; };
         return push(L);
       }
@@ -1086,7 +1087,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   const press = (text) => B.click(items().find(i => i.k === 'b' && i.text === text).id);
   const near = (a, b) => Math.abs(a - b) < 1e-6;
   const titles = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') { titles.push(k.card.title); w(k.card); } }); })(card());
-  R['the card has Transcribe and Animation sections and no Font section'] = titles.join() === 'Transcribe,Animation';
+  R['the card has Transcribe, Transcript and Animation sections and no Font section'] = titles.join() === 'Transcribe,Transcript,Animation';
   R['no font, outline, box, shadow or size controls'] = !items().some(i => /Font|Outline|Background box|Soft shadow|Size \(px\)|Box |Letter spacing|Case:|From bottom|Max width/.test(i.label || i.text || ''));
   press('Reset animation');
   const mk = () => {
@@ -1143,4 +1144,74 @@ function buildTextIcon(sentence, atIndex, opts) {
   app.project.activeItem = null;
   const bad = Object.keys(R).filter(k2 => !R[k2]);
   console.log(`captions animation: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Transcript editor: list the captions, apply edited words and times, splits, joins and empty captions
+{
+  const B = $g.global.RuBridge, R = {};
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const apply = (w, rows) => JSON.parse(B.captionApply(JSON.stringify({ rows })));
+  const mk = () => {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+    const voice = comp.layers.add({}); voice.name = 'voice.wav'; voice.index = 1; voice.hasAudio = true; voice.startTime = 0; voice.inPoint = 0; voice.outPoint = 20; voice.stretch = 100;
+    const it = new g.FootageItem(); it.file = { fsName: '/m/v.wav' }; it.duration = 30; voice.source = it; comp.selectedLayers = [voice];
+    B.captionBuild(JSON.stringify({ layerIndex: 1, layerName: 'voice.wav', segments: [{ start: 1, end: 3, text: 'Hello there' }, { start: 4, end: 7, text: 'General Kenobi' }, { start: 8, end: 9.5, text: 'you' }] }));
+    const alive = () => made.filter(L => L.kind === 'text' && !L.removed);
+    return { comp, made, alive, by: n => alive().find(L => L.name === n) };
+  };
+  let w = mk();
+  const rows0 = JSON.parse(B.captionList()).rows;
+  R['list: 3 rows in time order with name, start, end and the words'] = rows0.length === 3 && rows0.map(r => r.name).join() === 'Ru Caption 1,Ru Caption 2,Ru Caption 3' && rows0[1].start === 4 && rows0[1].end === 7 && rows0[1].text === 'General Kenobi';
+  R['list without a comp is a clear error'] = (() => { const c = app.project.activeItem; app.project.activeItem = null; const e = JSON.parse(B.captionList()).error; app.project.activeItem = c; return /composition/i.test(e); })();
+  const l1 = w.by('Ru Caption 1'), l2 = w.by('Ru Caption 2'), l3 = w.by('Ru Caption 3'), key0 = l1.transform.opacity.keys[0];
+  l2.doc.fontSize = 100;
+  const bottomBefore = l2.transform.position.value[1] + l2.sourceRectAtTime(4, false).height / 2;
+  let res = apply(w, rows0);
+  R['nothing edited: nothing touched (no layer rebuilt)'] = res.changed === 0 && res.added === 0 && res.removed === 0 && l1.transform.opacity.keys[0] === key0;
+
+  // words edited
+  res = apply(w, rows0.map((r, i) => i === 1 ? Object.assign({}, r, { text: 'General' }) : r));
+  R['a word edit rewrites only that caption (text and comment), keeps its hand-made size, rebuilds its animation'] = res.changed === 1 && l2.doc.text === 'General' && l2.comment === 'ru:General' && l2.doc.fontSize === 100 && l2.transform.opacity.keys.length === 4 && near(l2.transform.opacity.keys[0].t, 4) && l1.transform.opacity.keys[0] === key0 && l3.doc.text === 'you';
+  R['the caption keeps its bottom edge after the words change'] = (() => { const r = l2.sourceRectAtTime(4, false); return near(l2.transform.position.value[1] + r.height / 2, bottomBefore); })();
+
+  // split: Enter between two words
+  const cur = JSON.parse(B.captionList()).rows;
+  res = apply(w, [cur[0], Object.assign({}, cur[1], { text: 'General', end: 5.5 }), { name: null, from: 'Ru Caption 2', start: 5.5, end: 7, text: 'Kenobi' }, cur[2]]);
+  const caps = w.alive();
+  R['split: 4 caption layers named Ru Caption 1..4 in row order'] = res.added === 1 && caps.length === 4 && [1, 2, 3, 4].every(n => !!w.by('Ru Caption ' + n));
+  const k3 = w.by('Ru Caption 3');
+  R['split: the new layer has the second words and times, the first keeps the start and ends at the cut'] = k3.doc.text === 'Kenobi' && near(k3.inPoint, 5.5) && near(k3.outPoint, 7) && near(w.by('Ru Caption 2').outPoint, 5.5) && w.by('Ru Caption 2').doc.text === 'General';
+  R['split: the new layer copies the look (hand-made size 100) and gets its own animation at its own times'] = k3.doc.fontSize === 100 && k3.transform.opacity.keys.length === 4 && near(k3.transform.opacity.keys[0].t, 5.5) && near(k3.transform.opacity.keys[3].t, 7);
+  R['split: the following caption was renumbered and left alone'] = w.by('Ru Caption 4').doc.text === 'you' && near(w.by('Ru Caption 4').inPoint, 8);
+
+  // join: Backspace at the start of a line
+  const cur2 = JSON.parse(B.captionList()).rows;
+  res = apply(w, [cur2[0], Object.assign({}, cur2[1], { text: 'General Kenobi', end: 7 }), cur2[3]]);
+  R['join: the joined-away layer is removed, the rest renumbered, the text and end taken over'] = res.removed === 1 && w.alive().length === 3 && w.by('Ru Caption 2').doc.text === 'General Kenobi' && near(w.by('Ru Caption 2').outPoint, 7) && w.by('Ru Caption 3').doc.text === 'you';
+
+  // empty caption with +
+  const cur3 = JSON.parse(B.captionList()).rows;
+  res = apply(w, [cur3[0], { name: null, from: 'Ru Caption 1', start: 3.1, end: 3.9, text: '' }, cur3[1], cur3[2]]);
+  const emp = w.by('Ru Caption 2');
+  R['empty caption: a layer with no words at the given times, in the right order'] = res.added === 1 && emp.doc.text === '' && near(emp.inPoint, 3.1) && near(emp.outPoint, 3.9) && w.by('Ru Caption 3').doc.text === 'General Kenobi' && JSON.parse(B.captionList()).rows[1].text === '';
+  const cur4 = JSON.parse(B.captionList()).rows;
+  res = apply(w, cur4.map((r, i) => i === 1 ? Object.assign({}, r, { text: 'Typed later' }) : r));
+  R['words typed into the empty caption later are applied (centred, same bottom edge)'] = res.changed === 1 && w.by('Ru Caption 2').doc.text === 'Typed later' && near(w.by('Ru Caption 2').transform.position.value[1] + w.by('Ru Caption 2').sourceRectAtTime(3.1, false).height / 2, 1080 * 0.9);
+
+  // time edit
+  const cur5 = JSON.parse(B.captionList()).rows;
+  res = apply(w, cur5.map((r, i) => i === 0 ? Object.assign({}, r, { start: 0.5 }) : r));
+  R['a changed start time moves that caption and rebuilds its animation from the new time'] = res.changed === 1 && near(w.by('Ru Caption 1').inPoint, 0.5) && near(w.by('Ru Caption 1').transform.opacity.keys[0].t, 0.5);
+
+  // errors and limits
+  R['a new row without a caption to copy from is refused'] = /copy the look/.test(apply(w, [{ name: null, start: 1, end: 2, text: 'x' }]).error);
+  R['a row that starts after the end of the comp is refused'] = /end of the composition/.test(apply(w, [Object.assign({}, cur5[0], { start: 25, end: 26 })]).error);
+  R['an end past the comp is clamped to the comp end'] = (() => { const cur6 = JSON.parse(B.captionList()).rows; const r = apply(w, cur6.map((x, i) => i === 2 ? Object.assign({}, x, { end: 99 }) : x)); return r.changed === 1 && near(w.by('Ru Caption 3').outPoint, 20); })();
+  R['a line shorter than a frame is refused'] = /shorter than one frame/.test(apply(w, [Object.assign({}, cur5[0], { start: 1, end: 1.01 })]).error);
+  R['garbage JSON is refused'] = /could not be read/.test(JSON.parse(B.captionApply('{"rows": [evil()]}')).error);
+  B.captionGoto('Ru Caption 2');
+  R['clicking a row moves the playhead to that caption'] = near(w.comp.time, w.by('Ru Caption 2').inPoint);
+  app.project.activeItem = null;
+  const bad = Object.keys(R).filter(k2 => !R[k2]);
+  console.log(`transcript editor: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

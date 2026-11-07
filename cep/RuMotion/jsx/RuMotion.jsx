@@ -2052,6 +2052,130 @@
     }
 
     // =====================================================================
+    // TRANSCRIPT EDITOR (CEP panel): list the caption layers, apply edited words and times, splits, joins and empty captions
+    // =====================================================================
+    // The panel shows one row per Ru Caption layer (start time + words). On Apply it sends every row: { name, from, start, end, text }.
+    // name = the layer the row came from (null for a new row), from = the layer a new row is copied from (it keeps that look).
+    // Rows whose text or times differ from their layer are rewritten; new rows are duplicates; layers that no row refers to
+    // (joined away) are removed; all layers are renamed Ru Caption 1..n in row order; touched layers get their In/Out animation rebuilt.
+
+    function capRect(L, t) {
+        try { return L.sourceRectAtTime(t, false); } catch (e) { return { left: 0, top: 0, width: 0, height: 0 }; }
+    }
+
+    function capCurText(L) {
+        return trim(String(textDocProp(L).value.text).replace(/[\r\n]+/g, " "));
+    }
+
+    function captionListData() {
+        var comp = app.project.activeItem, layers, rows = [], i, L;
+        if (!(comp && comp instanceof CompItem)) { return { error: "Open a composition first (click inside its timeline)." }; }
+        layers = captionLayers(comp, false);
+        layers.sort(function (a, b) { return (a.inPoint - b.inPoint) || (capNumberOf(a.name) - capNumberOf(b.name)); });
+        for (i = 0; i < layers.length; i++) {
+            L = layers[i];
+            rows.push({ name: L.name, start: Math.round(L.inPoint * 1000) / 1000, end: Math.round(L.outPoint * 1000) / 1000, text: capCurText(L) });
+        }
+        return { comp: comp.name, rows: rows };
+    }
+
+    // where a caption rests, then take its animation off so it can be moved, re-timed or copied
+    function capRestState(comp, L) {
+        var geo = capGeoOf(comp, L), rect = capRect(L, L.inPoint);
+        capResetFx(L);
+        capClear(L.transform.position); capClear(L.transform.scale); capClear(L.transform.opacity);
+        setXY(L.transform.position, geo.x, geo.y);
+        setXY(L.transform.scale, 100, 100);
+        L.transform.opacity.setValue(100);
+        geo.h = rect.height;
+        return geo;
+    }
+
+    // new words: wrapped like the others, centred, and the bottom edge stays where it was
+    function capRetext(comp, L, text, geo, cs) {
+        var sp = textDocProp(L), d = sp.value, maxPx = comp.width * cs.maxW / 100, rect, k, y;
+        d.text = text;
+        sp.setValue(d);
+        rect = capRect(L, L.inPoint);
+        if (text && maxPx > 0 && rect.width > maxPx) {
+            k = Math.min(4, Math.ceil(rect.width / maxPx));
+            if (k > 1) { d = sp.value; d.text = capWrap(text, k); sp.setValue(d); rect = capRect(L, L.inPoint); }
+        }
+        setXY(L.transform.anchorPoint, rect.left + rect.width / 2, rect.top + rect.height / 2);
+        y = geo.y + geo.h / 2 - rect.height / 2;
+        setXY(L.transform.position, geo.x, y);
+        geo.y = y; geo.h = rect.height;
+        try { L.comment = "ru:" + text; } catch (e) {}
+    }
+
+    function captionApplyData(data) {
+        var comp = app.project.activeItem, cs = captionSettings(), rows = data.rows, layers, byName = {}, seen = {}, isSource = {}, geoOf = {}, work = [], touched = [], added = 0, changed = 0, removed = 0, eps = 0.0005, i, r, t, L, w, S, D, g, nm, endCap;
+        if (!(comp && comp instanceof CompItem)) { return { error: "Open the composition with the captions first." }; }
+        if (!rows || !rows.length) { return { error: "There are no lines to apply." }; }
+        layers = captionLayers(comp, false);
+        for (i = 0; i < layers.length; i++) { byName[layers[i].name] = layers[i]; }
+        endCap = comp.duration;
+        for (i = 0; i < rows.length; i++) {
+            r = rows[i];
+            t = trim(String(r.text === undefined || r.text === null ? "" : r.text).replace(/[\r\n]+/g, " "));
+            if (r.start >= endCap - comp.frameDuration) { return { error: "A line starts at or after the end of the composition (" + Math.round(endCap * 10) / 10 + " s). Move it earlier." }; }
+            r.end = Math.min(r.end, endCap);
+            if (!(r.end - r.start >= comp.frameDuration)) { return { error: "A line is shorter than one frame. Change its time and try again." }; }
+            if (r.name && byName[r.name]) {
+                L = byName[r.name]; seen[r.name] = true;
+                w = { row: r, text: t, layer: L, isNew: false, textChanged: t !== capCurText(L), differs: false };
+                w.differs = w.textChanged || Math.abs(r.start - L.inPoint) > eps || Math.abs(r.end - L.outPoint) > eps;
+            } else {
+                if (!r.from || !byName[r.from]) { return { error: "A new line has no caption to copy the look from. Reload the list and try again." }; }
+                isSource[r.from] = true;
+                w = { row: r, text: t, layer: null, isNew: true, from: r.from, textChanged: true, differs: true };
+            }
+            work.push(w);
+        }
+        for (i = 0; i < work.length; i++) { if (!work[i].isNew && work[i].differs) { isSource[work[i].layer.name] = true; } }
+        for (nm in isSource) { if (isSource.hasOwnProperty(nm)) { geoOf[nm] = capRestState(comp, byName[nm]); } }
+        // copies first, while the layers they copy are still in their original state
+        for (i = 0; i < work.length; i++) {
+            w = work[i];
+            if (!w.isNew) { continue; }
+            S = byName[w.from]; D = S.duplicate();
+            g = geoOf[w.from];
+            w.layer = D; w.geo = { x: g.x, y: g.y, h: g.h };
+        }
+        for (i = 0; i < work.length; i++) {
+            w = work[i];
+            if (!w.isNew && w.differs) { g = geoOf[w.layer.name]; w.geo = { x: g.x, y: g.y, h: g.h }; }
+        }
+        for (i = 0; i < work.length; i++) {
+            w = work[i];
+            if (!w.differs) { continue; }
+            L = w.layer;
+            if (w.textChanged) { capRetext(comp, L, w.text, w.geo, cs); }
+            L.startTime = w.row.start;
+            L.inPoint = w.row.start;
+            L.outPoint = w.row.end;
+            touched.push(L);
+            if (w.isNew) { added++; } else { changed++; }
+        }
+        for (i = 0; i < layers.length; i++) {
+            if (!seen[layers[i].name]) { capRemoveBoxes(comp, [capNumberOf(layers[i].name)]); try { layers[i].remove(); removed++; } catch (e) {} }
+        }
+        for (i = 0; i < work.length; i++) { work[i].layer.name = "Ru Caption t" + i; }
+        for (i = 0; i < work.length; i++) { work[i].layer.name = "Ru Caption " + (i + 1); }
+        if (touched.length) { applyCaptionStyle(comp, touched, false); }
+        return { changed: changed, added: added, removed: removed };
+    }
+
+    function captionGotoName(name) {
+        var comp = app.project.activeItem, i, L;
+        if (!(comp && comp instanceof CompItem)) { return; }
+        for (i = 1; i <= comp.numLayers; i++) {
+            L = comp.layer(i);
+            if (L && L.name === name) { comp.time = L.inPoint; return; }
+        }
+    }
+
+    // =====================================================================
     // FIXED BAR — Cut Before / Split / Cut After (always visible at the bottom of the panel)
     // =====================================================================
     // Acts on the selected layers at the playhead (only layers the playhead is inside):
@@ -17207,6 +17331,9 @@
             }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
             tb.ruAction = "transcribe-en";
 
+            var trp = subPanel(p, "Transcript");
+            hint(trp, "The start time and words of every caption. Edit them, then press Apply changes. Enter splits a line, Backspace at the start joins it to the line above, + adds an empty caption.");
+
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);
             CAP.inLen = field(ap, "In length (frames):", "8", 5, "Typewriter and Word by word take a few times longer.");
@@ -17837,6 +17964,16 @@
                 try { BR.ctl[id].onClick(); return "ok"; } catch (e) { return "err: " + e; }
             },
             captionSource: function () { try { return jstr(captionSource()); } catch (e) { return jstr({ error: String(e) }); } },
+            captionList: function () { try { return jstr(captionListData()); } catch (e) { return jstr({ error: String(e) }); } },
+            captionApply: function (json) {
+                try {
+                    var data = jparse(json), res;
+                    app.beginUndoGroup(NAME + ": Edit captions");
+                    try { res = captionApplyData(data); } finally { app.endUndoGroup(); }
+                    return jstr(res);
+                } catch (e) { return jstr({ error: String(e) + (e.line ? " (line " + e.line + ")" : "") }); }
+            },
+            captionGoto: function (name) { try { captionGotoName(String(name)); return "ok"; } catch (e) { return "err: " + e; } },
             captionModel: function () { try { return captionModelFor(); } catch (e) { return "base.en"; } },
             captionBuild: function (json) {
                 try {

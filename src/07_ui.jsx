@@ -1615,6 +1615,9 @@
             }, "Select an audio or video layer first. Creates one caption text layer per line, named Ru Caption N.", "primary");
             tb.ruAction = "transcribe-en";
 
+            var trp = subPanel(p, "Transcript");
+            hint(trp, "The start time and words of every caption. Edit them, then press Apply changes. Enter splits a line, Backspace at the start joins it to the line above, + adds an empty caption.");
+
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);
             CAP.inLen = field(ap, "In length (frames):", "8", 5, "Typewriter and Word by word take a few times longer.");
@@ -2245,6 +2248,16 @@
                 try { BR.ctl[id].onClick(); return "ok"; } catch (e) { return "err: " + e; }
             },
             captionSource: function () { try { return jstr(captionSource()); } catch (e) { return jstr({ error: String(e) }); } },
+            captionList: function () { try { return jstr(captionListData()); } catch (e) { return jstr({ error: String(e) }); } },
+            captionApply: function (json) {
+                try {
+                    var data = jparse(json), res;
+                    app.beginUndoGroup(NAME + ": Edit captions");
+                    try { res = captionApplyData(data); } finally { app.endUndoGroup(); }
+                    return jstr(res);
+                } catch (e) { return jstr({ error: String(e) + (e.line ? " (line " + e.line + ")" : "") }); }
+            },
+            captionGoto: function (name) { try { captionGotoName(String(name)); return "ok"; } catch (e) { return "err: " + e; } },
             captionModel: function () { try { return captionModelFor(); } catch (e) { return "base.en"; } },
             captionBuild: function (json) {
                 try {

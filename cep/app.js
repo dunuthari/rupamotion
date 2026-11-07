@@ -194,6 +194,7 @@
           if (d.error) { finish(node, d.error, true); return; }
           var base = "Added " + d.made + " captions" + (d.skipped ? " (" + d.skipped + " fell outside the layer)" : "") + ".";
           finish(node, base + " Look for layers named Ru Caption.", false);
+          if (editorReload) { editorReload(); }
         });
       }
       function fail(e3) { finish(node, e3.cancelled ? "Cancelled." : (e3.message || String(e3)), !e3.cancelled); }
@@ -205,6 +206,132 @@
         running.promise.then(done, fail);
       });
     });
+  }
+
+  // ---------- transcript editor: one row per Ru Caption layer (start time + words); Enter splits, Backspace joins, + adds an empty caption ----------
+  var editorReload = null;
+  function fmtTime(sec) {
+    var m = Math.floor(sec / 60), s = Math.floor(sec % 60), d = Math.round((sec - Math.floor(sec)) * 10);
+    if (d === 10) { s++; d = 0; }
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s + (d ? "." + d : "");
+  }
+  function parseTime(v) {
+    var m = /^(\d+):(\d{1,2})(?:\.(\d))?$/.exec(String(v).trim());
+    return m ? (+m[1]) * 60 + (+m[2]) + (m[3] ? (+m[3]) / 10 : 0) : NaN;
+  }
+  function buildEditor() {
+    var rows = [], removedCount = 0, focusAfter = null, loaded = false;
+    var listEl = el("div", { class: "ted-list", "aria-label": "Caption lines" });
+    var pending = el("p", { class: "hint", text: "" });
+    var box = el("div", { class: "card" }, [el("h3", { text: "Transcript" }),
+      el("p", { class: "hint", text: "The start time and words of every caption. Edit them, then press Apply changes. Enter splits a line, Backspace at the start joins it to the line above, + adds an empty caption." }),
+      listEl, pending]);
+    var applyB = el("button", { class: "btn primary", type: "button", text: "Apply changes" });
+    var reloadB = el("button", { class: "btn", type: "button", text: "Reload from timeline" });
+    box.appendChild(el("div", { class: "btns" }, [applyB, reloadB]));
+
+    function count() { return rows.filter(function (r) { return r.changed || r.isNew; }).length + removedCount; }
+    function showPending() { var n = count(); pending.textContent = n ? n + (n === 1 ? " change" : " changes") + " not applied yet" : ""; }
+    function gotoRow(r) { var nm = r.name || r.from; if (nm) { bridge("captionGoto(" + esc(nm) + ")", function () {}); } }
+
+    function render() {
+      listEl.innerHTML = "";
+      if (!rows.length) {
+        listEl.appendChild(el("p", { class: "hint", text: loaded ? "No captions in this composition yet. Click English Transcript above, or open a composition that has Ru Caption layers." : "Reading the captions…" }));
+      }
+      rows.forEach(function (r, i) {
+        var tm = el("input", { class: "ted-time", type: "text", value: fmtTime(r.s), "aria-label": "Start time of line " + (i + 1) });
+        tm.addEventListener("change", function () {
+          var v = parseTime(tm.value), lo = i ? rows[i - 1].s + 0.3 : 0, hi = r.e - 0.3;
+          if (isNaN(v) || v < lo || v > hi) { toast("Times stay in order, like 00:03 or 00:03.5"); tm.value = fmtTime(r.s); return; }
+          r.s = v; r.changed = true;
+          if (i && rows[i - 1].e > v) { rows[i - 1].e = v; rows[i - 1].changed = true; }
+          render();
+        });
+        var tx = el("div", { class: "ted-text", contenteditable: "true", spellcheck: "false", role: "textbox", "aria-label": "Words of line " + (i + 1) });
+        tx.textContent = r.t;
+        tx.addEventListener("focus", function () { gotoRow(r); });
+        tx.addEventListener("input", function () { r.t = tx.textContent; if (!r.changed) { r.changed = true; showPending(); } });
+        tx.addEventListener("paste", function (e) {
+          e.preventDefault();
+          var text = (e.clipboardData || window.clipboardData).getData("text").replace(/[\r\n]+/g, " ");
+          document.execCommand("insertText", false, text);
+        });
+        tx.addEventListener("keydown", function (e) {
+          var sel = window.getSelection(), off = sel.rangeCount ? sel.getRangeAt(0).startOffset : 0, txt = tx.textContent;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            var left = txt.slice(0, off).replace(/\s+$/, ""), right = txt.slice(off).replace(/^\s+/, "");
+            if (!left || !right) { toast("Put the cursor between two words, then press Enter"); return; }
+            var cut = r.s + (r.e - r.s) * left.length / (left.length + right.length);
+            cut = Math.round(Math.min(r.e - 0.4, Math.max(r.s + 0.4, cut)) * 10) / 10;
+            if (!(r.e - r.s >= 0.8)) { toast("This line is too short to split. Make it longer first."); return; }
+            var second = { name: null, from: r.name || r.from, s: cut, e: r.e, t: right, isNew: true };
+            r.t = left; r.e = cut; r.changed = true;
+            rows.splice(i + 1, 0, second); focusAfter = { i: i + 1, off: 0 }; render();
+          } else if (e.key === "Backspace" && off === 0 && sel.isCollapsed && i > 0) {
+            e.preventDefault();
+            var prev = rows[i - 1], at = prev.t.length;
+            prev.t = (prev.t + " " + r.t).replace(/\s+$/, ""); prev.e = r.e; prev.changed = true;
+            if (r.name) { removedCount++; }
+            rows.splice(i, 1); focusAfter = { i: i - 1, off: at + 1 }; render();
+          }
+        });
+        var plus = el("button", { class: "ted-plus", type: "button", title: "Add an empty caption below", "aria-label": "Add an empty caption below line " + (i + 1) }, [
+          (function () { var s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 12 12"); var p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", "M6 2v8M2 6h8"); p.setAttribute("stroke", "currentColor"); p.setAttribute("stroke-width", "1.8"); p.setAttribute("stroke-linecap", "round"); p.setAttribute("fill", "none"); s.appendChild(p); return s; })()]);
+        plus.addEventListener("click", function () {
+          var next = rows[i + 1], from = r.name || r.from, fresh;
+          if (next && next.s - r.e >= 0.4) { fresh = { name: null, from: from, s: r.e, e: Math.min(next.s, r.e + 3), t: "", isNew: true }; }
+          else if (!next) { fresh = { name: null, from: from, s: r.e, e: r.e + 2, t: "", isNew: true }; }
+          else if (r.e - r.s >= 0.8) { var mid = Math.round((r.s + (r.e - r.s) / 2) * 10) / 10; fresh = { name: null, from: from, s: mid, e: r.e, t: "", isNew: true }; r.e = mid; r.changed = true; }
+          else { toast("No room for another caption here. Make this line longer, or change a time first."); return; }
+          rows.splice(i + 1, 0, fresh); focusAfter = { i: i + 1, off: 0 }; render();
+        });
+        listEl.appendChild(el("div", { class: "ted-row" }, [tm, tx, plus]));
+      });
+      showPending();
+      if (focusAfter) {
+        var row = listEl.children[focusAfter.i], node = row && row.querySelector(".ted-text");
+        if (node) {
+          node.focus();
+          var rg = document.createRange(), tn = node.firstChild;
+          if (tn) { rg.setStart(tn, Math.min(focusAfter.off, tn.length)); } else { rg.setStart(node, 0); }
+          rg.collapse(true);
+          var sl = window.getSelection(); sl.removeAllRanges(); sl.addRange(rg);
+        }
+        focusAfter = null;
+      }
+    }
+
+    function load() {
+      bridge("captionList()", function (r) {
+        var d;
+        try { d = JSON.parse(r); } catch (e) { d = { error: String(r).slice(0, 120) }; }
+        loaded = true; removedCount = 0;
+        if (d.error) { rows = []; render(); toast(d.error); return; }
+        rows = d.rows.map(function (x) { return { name: x.name, s: x.start, e: x.end, t: x.text }; });
+        render();
+      });
+    }
+    editorReload = load;
+    reloadB.addEventListener("click", load);
+    applyB.addEventListener("click", function () {
+      if (!rows.length) { toast("There are no captions to apply."); return; }
+      if (!count()) { toast("No changes to apply"); return; }
+      applyB.disabled = true;
+      var payload = rows.map(function (r) { return { name: r.name || null, from: r.from || null, start: r.s, end: r.e, text: r.t }; });
+      bridge("captionApply(" + esc(JSON.stringify({ rows: payload })) + ")", function (res) {
+        applyB.disabled = false;
+        var d;
+        try { d = JSON.parse(res); } catch (e) { d = { error: String(res).slice(0, 140) }; }
+        if (d.error) { toast(d.error.slice(0, 140)); return; }
+        toast("Applied: " + d.changed + " changed, " + d.added + " added, " + d.removed + " joined");
+        load();
+      });
+    });
+    render();
+    load();
+    return box;
   }
 
   function drawCurve(canvas, c, big) {
@@ -229,6 +356,7 @@
   function renderKids(card, parent, ctx) {
     card.kids.forEach(function (k) {
       if (k.t === "hint") { parent.appendChild(el("p", { class: "hint", text: k.text })); return; }
+      if (k.t === "card" && k.card.title === "Transcript") { parent.appendChild(buildEditor()); return; }
       if (k.t === "card") {
         var sub = el("div", { class: "card" }, [el("h3", { text: k.card.title })]);
         var c2 = { flow: ctx.flow };

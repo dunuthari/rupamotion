@@ -32,6 +32,14 @@ const extra = `<style>
   select { max-width: 100%; }
   input[type=text] { box-sizing: border-box; padding: 0 6px; }
   .flow-graph { height: 190px; }
+  .ted-list { display: grid; gap: 6px; max-height: 330px; overflow-y: auto; padding-right: 4px; }
+  .ted-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) 28px; gap: 8px; align-items: stretch; }
+  .ted-time { width: 100% !important; height: 100%; min-height: 34px; text-align: center; font-weight: 600; padding: 0 4px; }
+  .ted-text { background: var(--input, #17181B); color: var(--text); border: 1px solid transparent; border-radius: 9px; padding: 8px 10px; font-size: 13px; line-height: 1.35; min-height: 34px; outline: none; word-break: break-word; }
+  .ted-text:focus { border-color: var(--primary); }
+  .ted-plus { align-self: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--hairline); background: transparent; color: var(--label); display: grid; place-items: center; cursor: pointer; padding: 0; }
+  .ted-plus svg { width: 12px; height: 12px; }
+  .ted-plus:hover { border-color: var(--primary); color: var(--primary); }
   .cap-status { display: grid; gap: 6px; }
   .cap-status .bar { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
   .cap-status .bar i { display: block; height: 100%; width: 0; background: var(--primary); transition: width .2s; }
