@@ -26,12 +26,28 @@ R['clean: lines are in time order and never overlap'] = clean.every((s, i) => i 
 const tc = T.parseWhisperJson(JSON.stringify({ transcription: [{ timestamps: { from: '00:01:02,500', to: '01:00:00,000' }, text: 'x' }] }));
 R['parse: falls back to the HH:MM:SS,mmm stamps'] = near(tc[0].start, 62.5) && near(tc[0].end, 3600);
 
+// word timing from -ojf tokens
+const tok = (text, a, b) => ({ text, offsets: { from: a, to: b } });
+const wjson = JSON.stringify({ transcription: [
+  { offsets: { from: 0, to: 2000 }, text: ' in a busy world', tokens: [tok('[_BEG_]', 0, 0), tok(' in', 0, 300), tok(' a', 300, 600), tok(' bu', 600, 900), tok('sy', 900, 1200), tok(' world', 1200, 1900), tok('[_TT_150]', 1900, 1900)] },
+  { offsets: { from: 2000, to: 3000 }, text: ' [BLANK_AUDIO]', tokens: [tok(' [BLANK_AUDIO]', 2000, 3000)] },
+  { offsets: { from: 3000, to: 4000 }, text: ' no tokens here' },
+  { offsets: { from: 4000, to: 5000 }, text: ' two words', tokens: [tok(' two', 4000, 4300)] }
+] });
+const wp = T.parseWhisperJson(wjson);
+R['words: tokens give words, special tokens skipped, a space starts a new word'] = wp[0].words.length === 4 && wp[0].words.map(w => w.w).join(' ') === 'in a busy world' && near(wp[0].words[2].s, 0.6) && near(wp[0].words[2].e, 1.2) && near(wp[0].words[3].e, 1.9);
+R['words: a segment without tokens has no words'] = wp[2].words === undefined;
+const wc = T.cleanSegments(wp);
+R['words: kept when they match the cleaned text'] = wc[0].words && wc[0].words.length === 4 && near(wc[0].words[0].s, 0) && near(wc[0].words[3].e, 1.9) && wc[0].words.every(w => w.s >= wc[0].start - 1e-9 && w.e <= wc[0].end + 1e-9);
+R['words: dropped when the count does not match (two words, one token)'] = wc.filter(s => s.text === 'two words')[0].words === undefined;
+R['words: lines without tokens come through unchanged'] = wc.filter(s => s.text === 'no tokens here').length === 1 && wc.filter(s => s.text === 'no tokens here')[0].words === undefined;
+
 const wav = T.encodeWav(new Int16Array([0, 1000, -1000, 32767]), 16000), dv = new DataView(wav.buffer);
 R['wav: RIFF header, 16 kHz mono 16-bit, 4 samples'] = String.fromCharCode(...wav.slice(0, 4)) === 'RIFF' && String.fromCharCode(...wav.slice(8, 12)) === 'WAVE'
   && dv.getUint32(24, true) === 16000 && dv.getUint16(22, true) === 1 && dv.getUint16(34, true) === 16 && dv.getUint32(40, true) === 8 && wav.length === 52 && dv.getInt16(44 + 6, true) === 32767;
 const i16 = T.floatToInt16(new Float32Array([0, 1, -1, 2, -2, 0.5]));
 R['float -> int16 clips at full scale'] = i16[1] === 32767 && i16[2] === -32768 && i16[3] === 32767 && i16[4] === -32768 && Math.abs(i16[5] - 16383.5) < 1;
-R['whisper arguments: English, JSON, 42-char lines split on words, progress'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4); return a.join(' ') === '-m /m/b.bin -f /t/a.wav -l en -oj -of /t/out -ml 42 -sow -t 4 -pp'; })();
+R['whisper arguments: English, JSON, 42-char lines split on words, progress'] = (() => { const a = T.whisperArgs('/m/b.bin', '/t/a.wav', '/t/out', 4); return a.join(' ') === '-m /m/b.bin -f /t/a.wav -l en -ojf -of /t/out -ml 42 -sow -t 4 -pp'; })();
 
 
 // ---- picking the Windows engine download from a list of releases

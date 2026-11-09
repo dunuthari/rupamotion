@@ -80,6 +80,8 @@
             shadow: capOn(CAP.shadow, true), bottom: capNum(CAP.bottom, 10, 0, 90), maxW: capNum(CAP.maxW, 88, 20, 100),
             inIdx: capIdx(CAP.inT, 1), inLen: capNum(CAP.inLen, 8, 1, 120), outIdx: capIdx(CAP.outT, 1), outLen: capNum(CAP.outLen, 6, 1, 120),
             ease: capIdx(CAP.ease, 0), dist: capNum(CAP.dist, 40, 0, 600),
+            hlLook: capIdx(CAP.hlLook, 0), hlText: capHex(CAP.hlText, "#FFFFFF"), hlBox: capHex(CAP.hlBox, "#E8A23A"),
+            hlRad: capNum(CAP.hlRad, 10, 0, 100), hlDim: capNum(CAP.hlDim, 45, 0, 100), hlDimOn: capIdx(CAP.hlDimOn, 0) === 0,
             fontControls: !!CAP.size   // the card has no Font section: the look is whatever the layers have, only the animation is applied
         };
     }
@@ -96,6 +98,11 @@
         if (fontInstalled(name) === false) { return pickFont(cs.weight >= 1); }
         return name;
     }
+
+    // ---- word highlight ("Style"): the word being spoken is lit while the voice says it ----
+    var CAP_LOOKS = ["Plain", "Word box", "Word colour", "Word pop", "Underline", "Karaoke fill"];
+    // box / underline sizes in em (of the caption's font size); popScale in %
+    var HL = { rise: 0.28, boxH: 1.08, padX: 0.2, underH: 0.07, underDrop: 0.17, popScale: 118, drawIn: 0.12 };
 
     // ---- helpers ----
     function capNumberOf(name) {
@@ -117,7 +124,7 @@
     function capOrig(L) {
         var c = "", t;
         try { c = L.comment; } catch (e) {}
-        if (c && c.indexOf("ru:") === 0) { return c.substring(3); }
+        if (c && c.indexOf("ru:") === 0) { c = c.substring(3); return c.indexOf("\n") >= 0 ? c.substring(0, c.indexOf("\n")) : c; }
         t = textDocProp(L).value.text;
         try { L.comment = "ru:" + t; } catch (e1) {}
         return t;
@@ -254,10 +261,15 @@
     }
 
     // removes the old animation parts before a new one is built
-    function capResetFx(L) {
-        var fx = L.property("ADBE Effect Parade");
+    function capResetFx(L, comp) {
+        var fx = L.property("ADBE Effect Parade"), anims, i;
         capRemoveNamed(fx, "Ru Caption Blur");
-        try { capRemoveNamed(L.property("ADBE Text Properties").property("ADBE Text Animators"), "Ru Caption In"); } catch (e) {}
+        try {
+            anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
+            capRemoveNamed(anims, "Ru Caption In");
+            for (i = anims.numProperties; i >= 1; i--) { if (anims.property(i).name.indexOf("Ru Word ") === 0) { anims.property(i).remove(); } }
+        } catch (e) {}
+        if (comp) { capRemoveBoxes(comp, [capNumberOf(L.name)]); }
     }
 
     function capMakeBox(comp, L, cs, geo, n) {
@@ -278,7 +290,7 @@
         var found = [], i, L, m, j;
         for (i = 1; i <= comp.numLayers; i++) {
             L = comp.layer(i);
-            m = L ? /^Ru Caption Box (\d+)$/.exec(L.name) : null;
+            m = L ? /^Ru Caption (?:Box|Word) (\d+)$/.exec(L.name) : null;
             if (m) { for (j = 0; j < nums.length; j++) { if (nums[j] === parseInt(m[1], 10)) { found.push(L); break; } } }
         }
         for (i = 0; i < found.length; i++) { try { found[i].remove(); } catch (e) {} }
@@ -293,13 +305,13 @@
     // full: restyle the text too (a new transcript). Otherwise, without a Font section, only the animation is rebuilt and the layers'
     // own look (font, size, colour, position, anything edited by hand) is left alone.
     function applyCaptionStyle(comp, layers, full, fontName) {
-        var cs = captionSettings(), textToo = !!full || cs.fontControls, i, L, geo, B, boxes = 0, nums = [];
+        var cs = captionSettings(), textToo = !!full || cs.fontControls, i, L, geo, B, boxes = 0, words = 0, nums = [];
         for (i = 0; i < layers.length; i++) { nums.push(capNumberOf(layers[i].name)); }
         if (fontName) { cs.fontName = fontName; }
         if (textToo) { capRemoveBoxes(comp, nums); }
         for (i = 0; i < layers.length; i++) {
             L = layers[i];
-            capResetFx(L);
+            capResetFx(L, comp);
             if (textToo) {
                 geo = capStyleText(comp, L, cs);
                 capShadow(L, cs);
@@ -311,13 +323,157 @@
                 L.transform.opacity.setValue(100);
             }
             capAnimate(comp, L, cs, geo, false);
+            if (cs.hlLook > 0) { try { if (capWordStyle(comp, L, cs, geo, nums[i])) { words++; } } catch (eW) {} }
             if (textToo && cs.box) {
                 B = capMakeBox(comp, L, cs, geo, nums[i]);
                 capAnimate(comp, B, cs, geo, true);
                 boxes++;
             }
         }
-        return { n: layers.length, boxes: boxes };
+        return { n: layers.length, boxes: boxes, words: words };
+    }
+
+    function capR4(x) { return String(Math.round(x * 10000) / 10000); }
+
+    // "ru:<text>" plus, when the transcript knew when each word was said, "\nrw:s,e;s,e;..." (start and end as 0..1 of the caption)
+    function capPutComment(L, text, words) {
+        var c = "ru:" + text, i, a = [];
+        if (words && words.length) {
+            for (i = 0; i < words.length; i++) { a.push(capR4(words[i].s) + "," + capR4(words[i].e)); }
+            c += "\nrw:" + a.join(";");
+        }
+        try { L.comment = c; } catch (e) {}
+    }
+
+    // when each of the n words is said, as fractions of the caption: the stored word times, else an even spread by letters
+    function capWordTimes(L, text, n) {
+        var c = "", m, parts, out = [], i, p, toks, tot = 0, pos = 0, len;
+        try { c = L.comment; } catch (e0) {}
+        m = /\nrw:(.*)$/.exec(c || "");
+        if (m) {
+            parts = m[1].split(";");
+            if (parts.length === n) {
+                for (i = 0; i < n; i++) {
+                    p = parts[i].split(",");
+                    out.push({ s: parseFloat(p[0]), e: parseFloat(p[1]) });
+                    if (!(out[i].s >= 0 && out[i].s <= 1) || !(out[i].e >= out[i].s)) { out = []; break; }
+                }
+                if (out.length === n) { return { words: out, exact: true }; }
+            }
+        }
+        out = [];
+        toks = String(text).replace(/[\r\n\u0003]/g, " ").match(/\S+/g) || [];
+        for (i = 0; i < n; i++) { len = (toks.length === n) ? toks[i].length : 3; tot += len + 1; }
+        for (i = 0; i < n; i++) {
+            len = (toks.length === n) ? toks[i].length : 3;
+            out.push({ s: pos / tot, e: (pos + len) / tot });
+            pos += len + 1;
+        }
+        return { words: out, exact: false };
+    }
+
+    function capN(x) { return String(Math.round(x * 1000) / 1000); }
+    function capNumList(a) { var o = [], i; for (i = 0; i < a.length; i++) { o.push(String(Math.round(a[i] * 1000) / 1000)); } return "[" + o.join(",") + "]"; }
+
+    // a text animator with one property (fill colour, opacity or scale) and a Range Selector in Index units
+    function capWordAnimator(anims, name, prop, value, basedOn, startExpr, endExpr) {
+        var an = indexAnimator(anims, name), pr, sel;
+        an.property("ADBE Text Animator Properties").addProperty(prop);
+        pr = an.property("ADBE Text Animator Properties").property(prop);
+        if (prop === "ADBE Text Fill Color") { try { pr.setValue(c4(value)); } catch (e1) { pr.setValue(value); } }
+        else { pr.setValue(value); }
+        sel = indexSelector(an, basedOn);
+        sel.property("ADBE Text Index Start").expression = startExpr;
+        sel.property("ADBE Text Index End").expression = endExpr;
+        return an;
+    }
+
+    // Lights the word that is being spoken. Everything is driven by the caption's own time, so moving the layer keeps it working.
+    // look: 1 box, 2 colour, 3 pop, 4 underline, 5 karaoke fill. Returns true when something was built.
+    function capWordStyle(comp, L, cs, geo, num) {
+        var look = cs.hlLook, src, str, lay, n, wt, dur, rel0, st = [], en = [], i, anims, idx, sA, boxC = hexToRgb(cs.hlBox), textC = hexToRgb(cs.hlText), dim = cs.hlDim, fs, A;
+        var cs0 = [], cl = [], re, m, B, gi, rc, parented = false, xs = [], ys = [], ws = [], lx = [], ox, oy, MK = "// Ru Word Style\n", filled;
+        if (look <= 0 || look >= CAP_LOOKS.length) { return false; }
+        src = textDocProp(L).value; str = src.text;
+        if (!trim(str)) { return false; }
+        lay = layoutText(comp, L, L.inPoint);
+        n = lay.wx.length;
+        if (n < 1) { return false; }
+        wt = capWordTimes(L, str, n).words;
+        dur = L.outPoint - L.inPoint;
+        rel0 = L.inPoint - L.startTime;
+        for (i = 0; i < n; i++) { st.push(rel0 + wt[i].s * dur); en.push(rel0 + wt[i].e * dur); }
+        anims = L.property("ADBE Text Properties").property("ADBE Text Animators");
+        fs = src.fontSize;
+        A = L.transform.anchorPoint.value;
+        idx = MK + "var st=" + capNumList(st) + ";\nvar t=time-thisLayer.startTime;\nvar i=0;\nfor(var k=0;k<st.length;k++){if(t>=st[k]){i=k;}}\n";
+
+        if (look === 5) {
+            re = /\S+/g;
+            while ((m = re.exec(str)) !== null) { cs0.push(m.index); cl.push(m[0].length); }
+            if (cs0.length !== n) { return false; }
+            filled = MK + "var st=" + capNumList(st) + ";\nvar en=" + capNumList(en) + ";\nvar c0=" + capNumList(cs0) + ";\nvar cl=" + capNumList(cl) + ";\nvar t=time-thisLayer.startTime;\nvar f=0;\n" +
+                "for(var k=0;k<st.length;k++){if(t>=st[k]){var u=(en[k]>st[k])?Math.min(1,(t-st[k])/(en[k]-st[k])):1;f=c0[k]+Math.round(u*cl[k]);}}\n";
+            if (cs.hlDimOn && dim < 100) { capWordAnimator(anims, "Ru Word Dim", "ADBE Text Opacity", dim, 1, filled + "f", filled + "100000"); }
+            capWordAnimator(anims, "Ru Word Fill", "ADBE Text Fill Color", boxC, 1, MK + "0", filled + "f");
+            return true;
+        }
+
+        if (cs.hlDimOn && dim < 100) {
+            capWordAnimator(anims, "Ru Word Dim", "ADBE Text Opacity", dim, 3, MK + "0", idx + "i");
+            capWordAnimator(anims, "Ru Word Dim 2", "ADBE Text Opacity", dim, 3, idx + "i+1", idx + "100000");
+        }
+        if (look === 1) { capWordAnimator(anims, "Ru Word Active", "ADBE Text Fill Color", textC, 3, idx + "i", idx + "i+1"); }
+        if (look === 2) { capWordAnimator(anims, "Ru Word Active", "ADBE Text Fill Color", boxC, 3, idx + "i", idx + "i+1"); }
+        if (look === 3) {
+            sA = capWordAnimator(anims, "Ru Word Active", "ADBE Text Fill Color", boxC, 3, idx + "i", idx + "i+1");
+            try {
+                sA.property("ADBE Text Animator Properties").addProperty("ADBE Text Scale");
+                sA.property("ADBE Text Animator Properties").property("ADBE Text Scale").setValue([HL.popScale, HL.popScale]);
+                try { sA.property("ADBE Text More Options").property("ADBE Text Anchor Point Option").setValue(2); } catch (eG) {}     // scale each word around its own centre
+            } catch (eP) {}
+        }
+        if (look === 1 || look === 4) {
+            // a shape layer behind the caption: one box (or underline) that jumps to the word being spoken
+            for (i = 0; i < n; i++) {
+                ox = lay.wx[i] - A[0]; oy = lay.baseY + lay.wl[i] * lay.lineStep - A[1];
+                lx.push(ox); ws.push(lay.ww[i]);
+                xs.push(ox + lay.ww[i] / 2); ys.push(oy);
+            }
+            B = shapeLayer(comp, "Ru Caption Word " + num);
+            gi = newGroup(B, look === 1 ? "Box" : "Underline");
+            rc = addVec(B, gi, "ADBE Vector Shape - Rect");
+            rc.property("ADBE Vector Rect Size").setValue([100, 20]);
+            rc.property("ADBE Vector Rect Roundness").setValue(look === 1 ? cs.hlRad : 0);
+            try { B.startTime = L.startTime; } catch (e2) {}
+            B.inPoint = L.inPoint; B.outPoint = L.outPoint;
+            try { B.parent = L; parented = true; } catch (e3) {}
+            if (!parented) { for (i = 0; i < n; i++) { xs[i] += geo.x; ys[i] += geo.y; lx[i] += geo.x; } }
+            var bi = MK + "var st=" + capNumList(st) + ";\nvar t=time-thisLayer.startTime;\nvar i=0;\nfor(var k=0;k<st.length;k++){if(t>=st[k]){i=k;}}\n";
+            if (look === 1) {
+                for (i = 0; i < n; i++) { ys[i] = ys[i] - fs * HL.rise; }
+                rc.property("ADBE Vector Rect Size").expression = bi + "var ws=" + capNumList(ws) + ";\n[ws[i]+" + capN(fs * HL.padX * 2) + "," + capN(fs * HL.boxH) + "]";
+                B.transform.position.expression = bi + "var xs=" + capNumList(xs) + ";\nvar ys=" + capNumList(ys) + ";\n[xs[i],ys[i]]";
+            } else {
+                for (i = 0; i < n; i++) { ys[i] = ys[i] + fs * HL.underDrop; }
+                rc.property("ADBE Vector Rect Size").expression = bi + "var ws=" + capNumList(ws) + ";\nvar u=Math.max(0.02,Math.min(1,(t-st[i])/" + HL.drawIn + "));\n[ws[i]*u," + capN(Math.max(2, fs * HL.underH)) + "]";
+                B.transform.position.expression = bi + "var lx=" + capNumList(lx) + ";\nvar ws=" + capNumList(ws) + ";\nvar ys=" + capNumList(ys) + ";\nvar u=Math.max(0.02,Math.min(1,(t-st[i])/" + HL.drawIn + "));\n[lx[i]+ws[i]*u/2,ys[i]]";
+            }
+            addFill(B, gi, boxC, 100);
+            capWordBoxFade(comp, B, cs, geo);
+            try { B.moveAfter(L); } catch (e4) {}
+            B.selected = false;
+        }
+        return true;
+    }
+
+    // the box fades with its caption (the box follows the caption's move and scale through the parent link)
+    function capWordBoxFade(comp, B, cs, geo) {
+        var fl = comp.frameDuration, dur = geo.t1 - geo.t0, maxPart = dur * 0.45, inD = Math.min(cs.inLen * fl, maxPart), outD = Math.min(cs.outLen * fl, maxPart);
+        var inT = CAP_IN[cs.inIdx] ? CAP_IN[cs.inIdx][1] : "none", outT = CAP_OUT[cs.outIdx] ? CAP_OUT[cs.outIdx][1] : "none", pairs = [];
+        if (inT !== "none") { pairs.push([geo.t0, 0]); pairs.push([geo.t0 + inD, 100]); }
+        if (outT !== "none") { if (!pairs.length) { pairs.push([geo.t0, 100]); } pairs.push([geo.t1 - outD, 100]); pairs.push([geo.t1, 0]); }
+        if (pairs.length) { try { setKeys(B.transform.opacity, pairs, { linear: true }); } catch (e) {} }
     }
 
     function doCaptionApply(selectedOnly) {
@@ -344,7 +500,20 @@
         if (!n) { alert("There are no captions in this composition yet.", NAME); }
     }
 
-    // data: { layerIndex, layerName, segments: [{ start, end, text }] }  (seconds in the source file)
+    // word times of one transcript line as 0..1 of the caption (clipped to it); null unless they line up with the words of the text
+    function capSegWords(seg, src, k, t0, t1) {
+        var out = [], i, w, a, b, toks = trim(seg.text).split(/\s+/), d = t1 - t0;
+        if (!seg.words || seg.words.length !== toks.length || !(d > 0)) { return null; }
+        for (i = 0; i < seg.words.length; i++) {
+            w = seg.words[i];
+            a = (src.startTime + w.s * k - t0) / d; b = (src.startTime + w.e * k - t0) / d;
+            a = Math.max(0, Math.min(1, a)); b = Math.max(a, Math.min(1, b));
+            out.push({ s: a, e: b });
+        }
+        return out;
+    }
+
+    // data: { layerIndex, layerName, segments: [{ start, end, text, words?: [{ s, e, w }] }] }  (seconds in the source file)
     function buildCaptions(data) {
         var comp = app.project.activeItem, src, made = 0, skipped = 0, i, seg, L, k, t0, t1, lo, hi, layers = [], res, col;
         if (!(comp && comp instanceof CompItem)) { return { error: "Open a composition first." }; }
@@ -362,7 +531,7 @@
             if (!(t1 - t0 >= comp.frameDuration) || !trim(seg.text)) { skipped++; continue; }
             L = makeText(comp, trim(seg.text), { size: 64, color: col, font: pickFont(true), just: "center" });
             L.name = "Ru Caption " + (made + 1);
-            try { L.comment = "ru:" + trim(seg.text); } catch (e0) {}
+            capPutComment(L, trim(seg.text), capSegWords(seg, src, k, t0, t1));
             L.startTime = t0;
             L.inPoint = t0;
             L.outPoint = t1;
@@ -404,7 +573,7 @@
     // where a caption rests, then take its animation off so it can be moved, re-timed or copied
     function capRestState(comp, L) {
         var geo = capGeoOf(comp, L), rect = capRect(L, L.inPoint);
-        capResetFx(L);
+        capResetFx(L, comp);
         capClear(L.transform.position); capClear(L.transform.scale); capClear(L.transform.opacity);
         setXY(L.transform.position, geo.x, geo.y);
         setXY(L.transform.scale, 100, 100);
@@ -427,11 +596,22 @@
         y = geo.y + geo.h / 2 - rect.height / 2;
         setXY(L.transform.position, geo.x, y);
         geo.y = y; geo.h = rect.height;
-        try { L.comment = "ru:" + text; } catch (e) {}
+        capPutComment(L, text, null);
+    }
+
+    // the highlight layers of the comp by caption number
+    function capWordBoxes(comp) {
+        var out = {}, i, L, m;
+        for (i = 1; i <= comp.numLayers; i++) {
+            L = comp.layer(i);
+            m = L ? /^Ru Caption Word (\d+)$/.exec(L.name) : null;
+            if (m) { out[parseInt(m[1], 10)] = L; }
+        }
+        return out;
     }
 
     function captionApplyData(data) {
-        var comp = app.project.activeItem, cs = captionSettings(), rows = data.rows, layers, byName = {}, seen = {}, isSource = {}, geoOf = {}, work = [], touched = [], added = 0, changed = 0, removed = 0, eps = 0.0005, i, r, t, L, w, S, D, g, nm, endCap;
+        var boxOf, comp = app.project.activeItem, cs = captionSettings(), rows = data.rows, layers, byName = {}, seen = {}, isSource = {}, geoOf = {}, work = [], touched = [], added = 0, changed = 0, removed = 0, eps = 0.0005, i, r, t, L, w, S, D, g, nm, endCap;
         if (!(comp && comp instanceof CompItem)) { return { error: "Open the composition with the captions first." }; }
         if (!rows || !rows.length) { return { error: "There are no lines to apply." }; }
         layers = captionLayers(comp, false);
@@ -482,8 +662,13 @@
         for (i = 0; i < layers.length; i++) {
             if (!seen[layers[i].name]) { capRemoveBoxes(comp, [capNumberOf(layers[i].name)]); try { layers[i].remove(); removed++; } catch (e) {} }
         }
+        for (i = 0; i < work.length; i++) { work[i].oldNum = work[i].isNew ? -1 : capNumberOf(work[i].layer.name); }
+        boxOf = capWordBoxes(comp);
         for (i = 0; i < work.length; i++) { work[i].layer.name = "Ru Caption t" + i; }
         for (i = 0; i < work.length; i++) { work[i].layer.name = "Ru Caption " + (i + 1); }
+        // each caption keeps its own highlight layer: the numbers in their names follow the captions
+        for (i = 0; i < work.length; i++) { if (work[i].oldNum >= 0 && boxOf[work[i].oldNum]) { try { boxOf[work[i].oldNum].name = "Ru Caption Word t" + i; } catch (eB) {} } }
+        for (i = 0; i < work.length; i++) { if (work[i].oldNum >= 0 && boxOf[work[i].oldNum]) { try { boxOf[work[i].oldNum].name = "Ru Caption Word " + (i + 1); } catch (eB2) {} } }
         if (touched.length) { applyCaptionStyle(comp, touched, false); }
         return { changed: changed, added: added, removed: removed };
     }

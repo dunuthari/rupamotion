@@ -20,26 +20,44 @@
     return m ? (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+("0." + m[4])) : NaN;
   }
 
-  // whisper-cli -oj output -> [{ start, end, text }] in seconds
+  // tokens of one segment (-ojf) -> [{ s, e, w }] words with their own times in seconds. A token that starts with a space starts a new word.
+  function wordsFromTokens(tokens) {
+    var words = [], cur = null, i, tk, txt, a, b;
+    for (i = 0; i < (tokens || []).length; i++) {
+      tk = tokens[i]; txt = String(tk.text === undefined ? "" : tk.text);
+      if (/^\s*\[_[A-Z_]+[0-9_.]*\]\s*$/.test(txt)) { continue; }          // special tokens like [_BEG_] or [_TT_150]
+      if (tk.offsets && typeof tk.offsets.from === "number") { a = tk.offsets.from / 1000; b = tk.offsets.to / 1000; }
+      else { a = hms(tk.timestamps && tk.timestamps.from); b = hms(tk.timestamps && tk.timestamps.to); }
+      if (!trimStr(txt)) { continue; }
+      if (!cur || /^\s/.test(txt)) { cur = { s: a, e: b, w: trimStr(txt) }; words.push(cur); }
+      else { cur.w += trimStr(txt); if (b > cur.e || !(cur.e >= cur.s)) { cur.e = b; } if (!(cur.s >= 0)) { cur.s = a; } }
+    }
+    return words;
+  }
+  function trimStr(x) { return String(x).replace(/^\s+|\s+$/g, ""); }
+
+  // whisper-cli -oj / -ojf output -> [{ start, end, text, words? }] in seconds (words only when the tokens carry times)
   api.parseWhisperJson = function (text) {
-    var obj = JSON.parse(text), list = obj.transcription || [], out = [], i, t, a, b;
+    var obj = JSON.parse(text), list = obj.transcription || [], out = [], i, t, a, b, seg;
     for (i = 0; i < list.length; i++) {
       t = list[i];
       if (t.offsets && typeof t.offsets.from === "number") { a = t.offsets.from / 1000; b = t.offsets.to / 1000; }
       else { a = hms(t.timestamps && t.timestamps.from); b = hms(t.timestamps && t.timestamps.to); }
-      out.push({ start: a, end: b, text: String(t.text || "") });
+      seg = { start: a, end: b, text: String(t.text || "") };
+      if (t.tokens && t.tokens.length) { seg.words = wordsFromTokens(t.tokens); }
+      out.push(seg);
     }
     return out;
   };
 
   // drop sound tags like [BLANK_AUDIO] or (music), fix overlaps, give every line a readable minimum length
   api.cleanSegments = function (segs) {
-    var out = [], i, s, txt, n, minLen = 0.4;
+    var out = [], i, j, s, txt, n, minLen = 0.4, ws, w, prev;
     for (i = 0; i < segs.length; i++) {
       s = segs[i];
       txt = String(s.text || "").replace(/\[[^\]]*\]|\([^)]*\)|\u266a+/g, " ").replace(/\s+/g, " ").trim();
       if (!txt || !(s.start >= 0) || !(s.end > s.start)) { continue; }
-      out.push({ start: s.start, end: s.end, text: txt });
+      out.push({ start: s.start, end: s.end, text: txt, words: s.words });
     }
     out.sort(function (x, y) { return x.start - y.start; });
     for (i = 0; i < out.length; i++) {
@@ -48,7 +66,22 @@
       if (out[i].end - out[i].start < minLen) { out[i].end = n ? Math.min(out[i].start + minLen, n.start) : out[i].start + minLen; }
     }
     return out.filter(function (x) { return x.end > x.start; }).map(function (x) {
-      return { start: Math.round(x.start * 1000) / 1000, end: Math.round(x.end * 1000) / 1000, text: x.text };
+      var r = { start: Math.round(x.start * 1000) / 1000, end: Math.round(x.end * 1000) / 1000, text: x.text }, parts = x.text.split(" "), good = x.words && x.words.length;
+      if (good) {                                              // word times only when they line up with the cleaned text
+        ws = x.words.filter(function (q) { return !/^[\[(].*[\])]$/.test(q.w) && !/^\u266a+$/.test(q.w); });
+        good = ws.length === parts.length;
+        for (j = 0; good && j < ws.length; j++) { if (!(ws[j].s >= 0) || !(ws[j].e >= ws[j].s)) { good = false; } }
+      }
+      if (good) {
+        r.words = []; prev = r.start;
+        for (j = 0; j < ws.length; j++) {
+          w = { s: Math.max(prev, Math.min(r.end, ws[j].s)), e: Math.min(r.end, Math.max(ws[j].e, ws[j].s)), w: ws[j].w };
+          if (w.e < w.s) { w.e = w.s; }
+          prev = w.s;
+          r.words.push({ s: Math.round(w.s * 1000) / 1000, e: Math.round(w.e * 1000) / 1000, w: w.w });
+        }
+      }
+      return r;
     });
   };
 
@@ -366,7 +399,7 @@
 
   // lines of at most 42 characters, split on words, JSON output with times, progress on stderr
   api.whisperArgs = function (model, wav, prefix, threads) {
-    return ["-m", model, "-f", wav, "-l", "en", "-oj", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"];
+    return ["-m", model, "-f", wav, "-l", "en", "-ojf", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"];
   };
 
   // o: { file, model: "base.en", onStatus(message, fraction|null), enginePath, modelBase }

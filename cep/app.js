@@ -334,6 +334,90 @@
     return box;
   }
 
+  // ---------- Captions > Style: look tiles, colours and a live preview of the word highlight ----------
+  var CAP_LOOK_TILES = [
+    ["Plain", "Whole line, no highlight", "plain"], ["Word box", "Box jumps word to word", "box"], ["Word colour", "Spoken word changes colour", "color"],
+    ["Word pop", "Spoken word grows a little", "pop"], ["Underline", "Line draws under the word", "under"], ["Karaoke fill", "Letters fill as they are said", "fill"]
+  ];
+  function buildCapStyle(card) {
+    var pick = {}, hintText = "";
+    (function w(c) { c.kids.forEach(function (k) { if (k.t === "hint") { hintText = hintText || k.text; } else if (k.t === "card") { w(k.card); } else if (k.items) { k.items.forEach(function (it) { if (it.label && !pick[it.label]) pick[it.label] = it; }); } }); })(card);
+    var look = pick["Look:"], tcol = pick["Text colour:"], bcol = pick["Box colour:"], rad = pick["Roundness (px):"], dimf = pick["Other words (%):"], dimOn = pick["Other words:"];
+    var S = { look: look.sel, text: String(tcol.v), box: String(bcol.v), rad: parseFloat(rad.v) || 10, dim: parseFloat(dimf.v) || 45, dimOn: dimOn.sel === 0 };
+    function send(item, v) { bridge("set(" + item.id + "," + esc(v) + ")", function (r) { if (r !== "ok") toast(String(r).slice(0, 120)); }); }
+    function lum(c) { var r = parseInt(c.substr(1, 2), 16), g = parseInt(c.substr(3, 2), 16), b = parseInt(c.substr(5, 2), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+
+    var words = ["in", "a", "busy", "world"], spans = [], t0 = performance.now(), live = true;
+    var line = el("div", { class: "cs-line" }), stage = el("div", { class: "cs-stage", role: "img", "aria-label": "Preview of the word highlight" }, [el("div", { class: "cs-caps" }, [line])]);
+    function buildWords() {
+      line.innerHTML = ""; spans = [];
+      words.forEach(function (w2) { var sp = el("span", { class: "cs-w", text: w2 }); line.appendChild(sp); spans.push(sp); });
+    }
+    function applyLook() {
+      var m = CAP_LOOK_TILES[S.look][2];
+      line.className = "cs-line m-" + m + (S.dimOn && m !== "plain" ? " dimmed" : "");
+      stage.style.setProperty("--hl", S.box); stage.style.setProperty("--hl-text", S.text);
+      stage.style.setProperty("--rad", S.rad + "px"); stage.style.setProperty("--dim", String(S.dim / 100));
+    }
+    function frame(now) {
+      if (!stage.isConnected && now - t0 > 1500) { live = false; return; }
+      var per = 0.55, total = words.length * per, t = ((now - t0) / 1000) % (total + 0.6), m = CAP_LOOK_TILES[S.look][2], i, a, b, on, done, p;
+      for (i = 0; i < spans.length; i++) {
+        a = i * per; b = a + per; on = t >= a && t < b; done = t >= b;
+        spans[i].classList.toggle("on", on && m !== "plain");
+        spans[i].classList.toggle("done", done && m === "fill");
+        if (m === "fill") { p = on ? (t - a) / per : (done ? 1 : 0); spans[i].style.backgroundSize = (p * 100) + "% 100%"; } else { spans[i].style.backgroundSize = ""; }
+        if (m === "under") { spans[i].style.backgroundSize = on || done ? "100% 3px" : "0 3px"; }
+      }
+      requestAnimationFrame(frame);
+    }
+    var tiles = el("div", { class: "cs-tiles" });
+    CAP_LOOK_TILES.forEach(function (tl, i) {
+      var mini = el("div", { class: "cs-mini" }, [el("span", { class: "d", text: "in a" }), el("span", { class: "a", text: "busy" }), el("span", { class: "d", text: "world" })]);
+      mini.className = "cs-mini mm-" + tl[2];
+      var b = el("button", { class: "cs-tile", type: "button", "aria-pressed": String(i === S.look) }, [mini, el("b", { text: tl[0] }), el("span", { class: "s", text: tl[1] })]);
+      b.addEventListener("click", function () {
+        S.look = i; send(look, String(i));
+        [].forEach.call(tiles.children, function (n, j) { n.setAttribute("aria-pressed", String(j === i)); });
+        applyLook();
+      });
+      tiles.appendChild(b);
+    });
+    function colorRow(label, item, key) {
+      var pk = el("input", { type: "color", value: S[key], "aria-label": label }), hx = el("input", { type: "text", value: S[key].toUpperCase(), maxlength: "7", spellcheck: "false", "aria-label": label + " hex code" });
+      pk.style.cssText = "position:static;opacity:1;pointer-events:auto;padding:0;border:1px solid var(--hairline);border-radius:6px;background:none;width:32px;height:26px;cursor:pointer;flex:none";
+      hx.style.width = "84px";
+      function set(c) { S[key] = c; pk.value = c; hx.value = c.toUpperCase(); applyLook(); send(item, c.toUpperCase()); }
+      pk.addEventListener("input", function () { S[key] = pk.value; hx.value = pk.value.toUpperCase(); applyLook(); });
+      pk.addEventListener("change", function () { set(pk.value); });
+      hx.addEventListener("change", function () { var v = hx.value.trim(); if (v.charAt(0) !== "#") v = "#" + v; if (/^#[0-9a-fA-F]{6}$/.test(v)) set(v); else { toast("Use a colour like #E8A23A"); hx.value = S[key].toUpperCase(); } });
+      return el("div", { class: "row" }, [el("span", { class: "lbl", text: label }), el("div", { class: "ctl" }, [pk, hx])]);
+    }
+    function rangeRow(label, item, key, lo, hi, unit) {
+      var r = el("input", { type: "range", min: String(lo), max: String(hi), value: String(S[key]), "aria-label": label }), v = el("span", { class: "cs-val", text: S[key] + unit });
+      r.style.width = "100%";
+      r.addEventListener("input", function () { S[key] = +r.value; v.textContent = r.value + unit; applyLook(); });
+      r.addEventListener("change", function () { send(item, r.value); });
+      return el("div", { class: "row" }, [el("span", { class: "lbl", text: label }), el("div", { class: "ctl" }, [r, v])]);
+    }
+    var seg = el("div", { class: "cs-seg" });
+    ["Dimmed", "Full"].forEach(function (name, i) {
+      var b = el("button", { type: "button", text: name, "aria-pressed": String((i === 0) === S.dimOn) });
+      b.addEventListener("click", function () { S.dimOn = i === 0; send(dimOn, String(i)); [].forEach.call(seg.children, function (n, j) { n.setAttribute("aria-pressed", String(j === i)); }); applyLook(); });
+      seg.appendChild(b);
+    });
+    var box = el("div", { class: "card" }, [el("h3", { text: "Style" }), el("p", { class: "hint", text: hintText }), stage, tiles,
+      colorRow("Text colour", tcol, "text"), colorRow("Box colour", bcol, "box"), rangeRow("Roundness", rad, "rad", 0, 30, " px"), rangeRow("Other words", dimf, "dim", 10, 100, "%"),
+      el("div", { class: "row" }, [el("span", { class: "lbl", text: "Words shown" }), seg]),
+      el("p", { class: "hint", text: "Text colour is the spoken word in the Word box look. Box colour is also the highlight in the other looks. Click Apply to all captions to use the look." })]);
+    buildWords(); applyLook(); requestAnimationFrame(frame);
+    bridge("captionList()", function (r) {   // use the words of the first real caption in the preview
+      var d; try { d = JSON.parse(r); } catch (e) { return; }
+      if (d && d.rows && d.rows.length && d.rows[0].text) { var w3 = d.rows[0].text.split(/\s+/).filter(Boolean).slice(0, 6); if (w3.length) { words = w3; buildWords(); } }
+    });
+    return box;
+  }
+
   function drawCurve(canvas, c, big) {
     var d = window.devicePixelRatio || 1, w = canvas.clientWidth || canvas.width, h = canvas.clientHeight || canvas.height;
     if (big) { canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); }
@@ -357,6 +441,7 @@
     card.kids.forEach(function (k) {
       if (k.t === "hint") { parent.appendChild(el("p", { class: "hint", text: k.text })); return; }
       if (k.t === "card" && k.card.title === "Transcript") { parent.appendChild(buildEditor()); return; }
+      if (k.t === "card" && k.card.title === "Style" && JSON.stringify(k.card).indexOf("\"Look:\"") >= 0) { parent.appendChild(buildCapStyle(k.card)); return; }
       if (k.t === "card") {
         var sub = el("div", { class: "card" }, [el("h3", { text: k.card.title })]);
         var c2 = { flow: ctx.flow };

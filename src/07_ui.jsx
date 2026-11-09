@@ -1618,6 +1618,15 @@
             var trp = subPanel(p, "Transcript");
             hint(trp, "The start time and words of every caption. Edit them, then press Apply changes. Enter splits a line, Backspace at the start joins it to the line above, + adds an empty caption.");
 
+            var hs = subPanel(p, "Style");
+            hint(hs, "How the word being spoken is shown while the voice says it. Click Apply to all captions after changing it. Captions made before word timing existed are spread evenly over the line; transcribe again for exact timing.");
+            CAP.hlLook = drop(hs, "Look:", CAP_LOOKS, 0, "Plain leaves the captions as they are. The other looks light up one word at a time.");
+            CAP.hlText = colorChooser(hs, "Text colour:", "#FFFFFF", null);
+            CAP.hlBox = colorChooser(hs, "Box colour:", "#E8A23A", null);
+            CAP.hlRad = field(hs, "Roundness (px):", "10", 4, "Corner roundness of the Word box.");
+            CAP.hlDim = field(hs, "Other words (%):", "45", 4, "Brightness of the words that are not being spoken (when they are dimmed).");
+            CAP.hlDimOn = drop(hs, "Other words:", ["Dimmed", "Full"], 0, "Dimmed: the other words fade back. Full: they stay at full brightness.");
+
             var ap = subPanel(p, "Animation");
             CAP.inT = drop(ap, "In:", capLabels(CAP_IN, 0), 1);
             CAP.inLen = field(ap, "In length (frames):", "8", 5, "Typewriter and Word by word take a few times longer.");
@@ -1627,7 +1636,7 @@
             CAP.dist = field(ap, "Slide distance (px):", "40", 5, "For Slide up and Slide down.");
 
             btn(p, "Apply to all captions", function () { run("Apply caption animation", function () { doCaptionApply(false); }); },
-                "Rebuilds the In and Out animation of every Ru Caption layer in the comp. Their font, size, colour and position are not touched.", "primary");
+                "Rebuilds the In and Out animation and the word highlight of every Ru Caption layer in the comp. Their font, size, colour and position are not touched.", "primary");
             var resetCap = function () {
                 var dd = [[CAP.inT, 1], [CAP.outT, 1], [CAP.ease, 0]], ff = [[CAP.inLen, "8"], [CAP.outLen, "6"], [CAP.dist, "40"]], i;
                 for (i = 0; i < dd.length; i++) { dd[i][0].selection = dd[i][1]; }

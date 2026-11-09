@@ -255,6 +255,37 @@
   .ted-text:focus { border-color: var(--primary); }
   .ted-plus { align-self: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--hairline); background: transparent; color: var(--label); display: grid; place-items: center; cursor: pointer; padding: 0; }
   .ted-plus svg { width: 12px; height: 12px; }
+  .cs-stage { aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; position: relative; border: 1px solid var(--hairline); background: linear-gradient(135deg, #4a5a58, #2d3a3f 55%, #59482f); --hl: #E8A23A; --hl-text: #fff; --rad: 10px; --dim: .45; }
+  .cs-stage::after { content: ""; position: absolute; inset: 0; background: radial-gradient(80% 60% at 50% 100%, rgba(0,0,0,.55), transparent); pointer-events: none; }
+  .cs-caps { position: absolute; left: 0; right: 0; bottom: 12%; z-index: 2; display: flex; justify-content: center; padding: 0 6%; }
+  .cs-line { display: flex; flex-wrap: wrap; justify-content: center; gap: .1em .28em; font-family: "Poppins", "Segoe UI", system-ui, sans-serif; font-weight: 700; font-size: 22px; color: #fff; line-height: 1.35; }
+  .cs-w { position: relative; z-index: 1; padding: .02em .2em; border-radius: var(--rad); transition: color .08s, opacity .08s, transform .12s, background .08s; }
+  .cs-line.dimmed .cs-w { opacity: var(--dim); }
+  .cs-line.dimmed .cs-w.on { opacity: 1; }
+  .cs-line.m-box .cs-w.on { background: var(--hl); color: var(--hl-text); }
+  .cs-line.m-color .cs-w.on { color: var(--hl); }
+  .cs-line.m-pop .cs-w.on { color: var(--hl); transform: scale(1.18); }
+  .cs-line.m-under .cs-w { background-image: linear-gradient(var(--hl), var(--hl)); background-repeat: no-repeat; background-position: 0 100%; background-size: 0 3px; border-radius: 0; transition: background-size .12s; }
+  .cs-line.m-fill .cs-w { background-image: linear-gradient(90deg, var(--hl), var(--hl)); background-repeat: no-repeat; background-size: 0% 100%; -webkit-background-clip: text; background-clip: text; color: rgba(255,255,255,.55); }
+  .cs-line.m-fill .cs-w.done, .cs-line.m-fill .cs-w.on { color: var(--hl); }
+  .cs-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .cs-tile { text-align: left; color: var(--text); background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; font: inherit; }
+  .cs-tile[aria-pressed="true"] { border-color: var(--primary); background: var(--tint); }
+  .cs-tile b { font-size: 12px; }
+  .cs-tile .s { font-size: 11px; color: var(--hint); }
+  .cs-mini { height: 30px; border-radius: 6px; background: #15161a; display: flex; align-items: center; justify-content: center; gap: 4px; font-weight: 700; font-size: 11px; overflow: hidden; color: #fff; }
+  .cs-mini .d { opacity: .45; }
+  .cs-mini.mm-box .a { background: #E8A23A; border-radius: 4px; padding: 0 5px; }
+  .cs-mini.mm-color .a, .cs-mini.mm-pop .a { color: #E8A23A; }
+  .cs-mini.mm-pop .a { transform: scale(1.2); }
+  .cs-mini.mm-under .a { box-shadow: inset 0 -2px #E8A23A; }
+  .cs-mini.mm-fill .d:first-child { color: #E8A23A; opacity: 1; }
+  .cs-mini.mm-fill .a { color: #E8A23A; }
+  .cs-mini.mm-plain .d { opacity: 1; }
+  .cs-val { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--hint); min-width: 40px; text-align: right; }
+  .cs-seg { display: flex; gap: 6px; }
+  .cs-seg button { font: inherit; font-size: 12px; font-weight: 700; color: var(--label); background: var(--surface); border: 1px solid var(--hairline); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+  .cs-seg button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); background: var(--tint); }
   .ted-plus:hover { border-color: var(--primary); color: var(--primary); }
   .cap-status { display: grid; gap: 6px; }
   .cap-status .bar { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
@@ -323,26 +354,44 @@
     return m ? (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+("0." + m[4])) : NaN;
   }
 
-  // whisper-cli -oj output -> [{ start, end, text }] in seconds
+  // tokens of one segment (-ojf) -> [{ s, e, w }] words with their own times in seconds. A token that starts with a space starts a new word.
+  function wordsFromTokens(tokens) {
+    var words = [], cur = null, i, tk, txt, a, b;
+    for (i = 0; i < (tokens || []).length; i++) {
+      tk = tokens[i]; txt = String(tk.text === undefined ? "" : tk.text);
+      if (/^\s*\[_[A-Z_]+[0-9_.]*\]\s*$/.test(txt)) { continue; }          // special tokens like [_BEG_] or [_TT_150]
+      if (tk.offsets && typeof tk.offsets.from === "number") { a = tk.offsets.from / 1000; b = tk.offsets.to / 1000; }
+      else { a = hms(tk.timestamps && tk.timestamps.from); b = hms(tk.timestamps && tk.timestamps.to); }
+      if (!trimStr(txt)) { continue; }
+      if (!cur || /^\s/.test(txt)) { cur = { s: a, e: b, w: trimStr(txt) }; words.push(cur); }
+      else { cur.w += trimStr(txt); if (b > cur.e || !(cur.e >= cur.s)) { cur.e = b; } if (!(cur.s >= 0)) { cur.s = a; } }
+    }
+    return words;
+  }
+  function trimStr(x) { return String(x).replace(/^\s+|\s+$/g, ""); }
+
+  // whisper-cli -oj / -ojf output -> [{ start, end, text, words? }] in seconds (words only when the tokens carry times)
   api.parseWhisperJson = function (text) {
-    var obj = JSON.parse(text), list = obj.transcription || [], out = [], i, t, a, b;
+    var obj = JSON.parse(text), list = obj.transcription || [], out = [], i, t, a, b, seg;
     for (i = 0; i < list.length; i++) {
       t = list[i];
       if (t.offsets && typeof t.offsets.from === "number") { a = t.offsets.from / 1000; b = t.offsets.to / 1000; }
       else { a = hms(t.timestamps && t.timestamps.from); b = hms(t.timestamps && t.timestamps.to); }
-      out.push({ start: a, end: b, text: String(t.text || "") });
+      seg = { start: a, end: b, text: String(t.text || "") };
+      if (t.tokens && t.tokens.length) { seg.words = wordsFromTokens(t.tokens); }
+      out.push(seg);
     }
     return out;
   };
 
   // drop sound tags like [BLANK_AUDIO] or (music), fix overlaps, give every line a readable minimum length
   api.cleanSegments = function (segs) {
-    var out = [], i, s, txt, n, minLen = 0.4;
+    var out = [], i, j, s, txt, n, minLen = 0.4, ws, w, prev;
     for (i = 0; i < segs.length; i++) {
       s = segs[i];
       txt = String(s.text || "").replace(/\[[^\]]*\]|\([^)]*\)|\u266a+/g, " ").replace(/\s+/g, " ").trim();
       if (!txt || !(s.start >= 0) || !(s.end > s.start)) { continue; }
-      out.push({ start: s.start, end: s.end, text: txt });
+      out.push({ start: s.start, end: s.end, text: txt, words: s.words });
     }
     out.sort(function (x, y) { return x.start - y.start; });
     for (i = 0; i < out.length; i++) {
@@ -351,7 +400,22 @@
       if (out[i].end - out[i].start < minLen) { out[i].end = n ? Math.min(out[i].start + minLen, n.start) : out[i].start + minLen; }
     }
     return out.filter(function (x) { return x.end > x.start; }).map(function (x) {
-      return { start: Math.round(x.start * 1000) / 1000, end: Math.round(x.end * 1000) / 1000, text: x.text };
+      var r = { start: Math.round(x.start * 1000) / 1000, end: Math.round(x.end * 1000) / 1000, text: x.text }, parts = x.text.split(" "), good = x.words && x.words.length;
+      if (good) {                                              // word times only when they line up with the cleaned text
+        ws = x.words.filter(function (q) { return !/^[\[(].*[\])]$/.test(q.w) && !/^\u266a+$/.test(q.w); });
+        good = ws.length === parts.length;
+        for (j = 0; good && j < ws.length; j++) { if (!(ws[j].s >= 0) || !(ws[j].e >= ws[j].s)) { good = false; } }
+      }
+      if (good) {
+        r.words = []; prev = r.start;
+        for (j = 0; j < ws.length; j++) {
+          w = { s: Math.max(prev, Math.min(r.end, ws[j].s)), e: Math.min(r.end, Math.max(ws[j].e, ws[j].s)), w: ws[j].w };
+          if (w.e < w.s) { w.e = w.s; }
+          prev = w.s;
+          r.words.push({ s: Math.round(w.s * 1000) / 1000, e: Math.round(w.e * 1000) / 1000, w: w.w });
+        }
+      }
+      return r;
     });
   };
 
@@ -669,7 +733,7 @@
 
   // lines of at most 42 characters, split on words, JSON output with times, progress on stderr
   api.whisperArgs = function (model, wav, prefix, threads) {
-    return ["-m", model, "-f", wav, "-l", "en", "-oj", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"];
+    return ["-m", model, "-f", wav, "-l", "en", "-ojf", "-of", prefix, "-ml", "42", "-sow", "-t", String(threads), "-pp"];
   };
 
   // o: { file, model: "base.en", onStatus(message, fraction|null), enginePath, modelBase }
@@ -1072,6 +1136,90 @@
     return box;
   }
 
+  // ---------- Captions > Style: look tiles, colours and a live preview of the word highlight ----------
+  var CAP_LOOK_TILES = [
+    ["Plain", "Whole line, no highlight", "plain"], ["Word box", "Box jumps word to word", "box"], ["Word colour", "Spoken word changes colour", "color"],
+    ["Word pop", "Spoken word grows a little", "pop"], ["Underline", "Line draws under the word", "under"], ["Karaoke fill", "Letters fill as they are said", "fill"]
+  ];
+  function buildCapStyle(card) {
+    var pick = {}, hintText = "";
+    (function w(c) { c.kids.forEach(function (k) { if (k.t === "hint") { hintText = hintText || k.text; } else if (k.t === "card") { w(k.card); } else if (k.items) { k.items.forEach(function (it) { if (it.label && !pick[it.label]) pick[it.label] = it; }); } }); })(card);
+    var look = pick["Look:"], tcol = pick["Text colour:"], bcol = pick["Box colour:"], rad = pick["Roundness (px):"], dimf = pick["Other words (%):"], dimOn = pick["Other words:"];
+    var S = { look: look.sel, text: String(tcol.v), box: String(bcol.v), rad: parseFloat(rad.v) || 10, dim: parseFloat(dimf.v) || 45, dimOn: dimOn.sel === 0 };
+    function send(item, v) { bridge("set(" + item.id + "," + esc(v) + ")", function (r) { if (r !== "ok") toast(String(r).slice(0, 120)); }); }
+    function lum(c) { var r = parseInt(c.substr(1, 2), 16), g = parseInt(c.substr(3, 2), 16), b = parseInt(c.substr(5, 2), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+
+    var words = ["in", "a", "busy", "world"], spans = [], t0 = performance.now(), live = true;
+    var line = el("div", { class: "cs-line" }), stage = el("div", { class: "cs-stage", role: "img", "aria-label": "Preview of the word highlight" }, [el("div", { class: "cs-caps" }, [line])]);
+    function buildWords() {
+      line.innerHTML = ""; spans = [];
+      words.forEach(function (w2) { var sp = el("span", { class: "cs-w", text: w2 }); line.appendChild(sp); spans.push(sp); });
+    }
+    function applyLook() {
+      var m = CAP_LOOK_TILES[S.look][2];
+      line.className = "cs-line m-" + m + (S.dimOn && m !== "plain" ? " dimmed" : "");
+      stage.style.setProperty("--hl", S.box); stage.style.setProperty("--hl-text", S.text);
+      stage.style.setProperty("--rad", S.rad + "px"); stage.style.setProperty("--dim", String(S.dim / 100));
+    }
+    function frame(now) {
+      if (!stage.isConnected && now - t0 > 1500) { live = false; return; }
+      var per = 0.55, total = words.length * per, t = ((now - t0) / 1000) % (total + 0.6), m = CAP_LOOK_TILES[S.look][2], i, a, b, on, done, p;
+      for (i = 0; i < spans.length; i++) {
+        a = i * per; b = a + per; on = t >= a && t < b; done = t >= b;
+        spans[i].classList.toggle("on", on && m !== "plain");
+        spans[i].classList.toggle("done", done && m === "fill");
+        if (m === "fill") { p = on ? (t - a) / per : (done ? 1 : 0); spans[i].style.backgroundSize = (p * 100) + "% 100%"; } else { spans[i].style.backgroundSize = ""; }
+        if (m === "under") { spans[i].style.backgroundSize = on || done ? "100% 3px" : "0 3px"; }
+      }
+      requestAnimationFrame(frame);
+    }
+    var tiles = el("div", { class: "cs-tiles" });
+    CAP_LOOK_TILES.forEach(function (tl, i) {
+      var mini = el("div", { class: "cs-mini" }, [el("span", { class: "d", text: "in a" }), el("span", { class: "a", text: "busy" }), el("span", { class: "d", text: "world" })]);
+      mini.className = "cs-mini mm-" + tl[2];
+      var b = el("button", { class: "cs-tile", type: "button", "aria-pressed": String(i === S.look) }, [mini, el("b", { text: tl[0] }), el("span", { class: "s", text: tl[1] })]);
+      b.addEventListener("click", function () {
+        S.look = i; send(look, String(i));
+        [].forEach.call(tiles.children, function (n, j) { n.setAttribute("aria-pressed", String(j === i)); });
+        applyLook();
+      });
+      tiles.appendChild(b);
+    });
+    function colorRow(label, item, key) {
+      var pk = el("input", { type: "color", value: S[key], "aria-label": label }), hx = el("input", { type: "text", value: S[key].toUpperCase(), maxlength: "7", spellcheck: "false", "aria-label": label + " hex code" });
+      pk.style.cssText = "position:static;opacity:1;pointer-events:auto;padding:0;border:1px solid var(--hairline);border-radius:6px;background:none;width:32px;height:26px;cursor:pointer;flex:none";
+      hx.style.width = "84px";
+      function set(c) { S[key] = c; pk.value = c; hx.value = c.toUpperCase(); applyLook(); send(item, c.toUpperCase()); }
+      pk.addEventListener("input", function () { S[key] = pk.value; hx.value = pk.value.toUpperCase(); applyLook(); });
+      pk.addEventListener("change", function () { set(pk.value); });
+      hx.addEventListener("change", function () { var v = hx.value.trim(); if (v.charAt(0) !== "#") v = "#" + v; if (/^#[0-9a-fA-F]{6}$/.test(v)) set(v); else { toast("Use a colour like #E8A23A"); hx.value = S[key].toUpperCase(); } });
+      return el("div", { class: "row" }, [el("span", { class: "lbl", text: label }), el("div", { class: "ctl" }, [pk, hx])]);
+    }
+    function rangeRow(label, item, key, lo, hi, unit) {
+      var r = el("input", { type: "range", min: String(lo), max: String(hi), value: String(S[key]), "aria-label": label }), v = el("span", { class: "cs-val", text: S[key] + unit });
+      r.style.width = "100%";
+      r.addEventListener("input", function () { S[key] = +r.value; v.textContent = r.value + unit; applyLook(); });
+      r.addEventListener("change", function () { send(item, r.value); });
+      return el("div", { class: "row" }, [el("span", { class: "lbl", text: label }), el("div", { class: "ctl" }, [r, v])]);
+    }
+    var seg = el("div", { class: "cs-seg" });
+    ["Dimmed", "Full"].forEach(function (name, i) {
+      var b = el("button", { type: "button", text: name, "aria-pressed": String((i === 0) === S.dimOn) });
+      b.addEventListener("click", function () { S.dimOn = i === 0; send(dimOn, String(i)); [].forEach.call(seg.children, function (n, j) { n.setAttribute("aria-pressed", String(j === i)); }); applyLook(); });
+      seg.appendChild(b);
+    });
+    var box = el("div", { class: "card" }, [el("h3", { text: "Style" }), el("p", { class: "hint", text: hintText }), stage, tiles,
+      colorRow("Text colour", tcol, "text"), colorRow("Box colour", bcol, "box"), rangeRow("Roundness", rad, "rad", 0, 30, " px"), rangeRow("Other words", dimf, "dim", 10, 100, "%"),
+      el("div", { class: "row" }, [el("span", { class: "lbl", text: "Words shown" }), seg]),
+      el("p", { class: "hint", text: "Text colour is the spoken word in the Word box look. Box colour is also the highlight in the other looks. Click Apply to all captions to use the look." })]);
+    buildWords(); applyLook(); requestAnimationFrame(frame);
+    bridge("captionList()", function (r) {   // use the words of the first real caption in the preview
+      var d; try { d = JSON.parse(r); } catch (e) { return; }
+      if (d && d.rows && d.rows.length && d.rows[0].text) { var w3 = d.rows[0].text.split(/\s+/).filter(Boolean).slice(0, 6); if (w3.length) { words = w3; buildWords(); } }
+    });
+    return box;
+  }
+
   function drawCurve(canvas, c, big) {
     var d = window.devicePixelRatio || 1, w = canvas.clientWidth || canvas.width, h = canvas.clientHeight || canvas.height;
     if (big) { canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); }
@@ -1095,6 +1243,7 @@
     card.kids.forEach(function (k) {
       if (k.t === "hint") { parent.appendChild(el("p", { class: "hint", text: k.text })); return; }
       if (k.t === "card" && k.card.title === "Transcript") { parent.appendChild(buildEditor()); return; }
+      if (k.t === "card" && k.card.title === "Style" && JSON.stringify(k.card).indexOf("\"Look:\"") >= 0) { parent.appendChild(buildCapStyle(k.card)); return; }
       if (k.t === "card") {
         var sub = el("div", { class: "card" }, [el("h3", { text: k.card.title })]);
         var c2 = { flow: ctx.flow };

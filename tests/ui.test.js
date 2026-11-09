@@ -1087,8 +1087,8 @@ function buildTextIcon(sentence, atIndex, opts) {
   const press = (text) => B.click(items().find(i => i.k === 'b' && i.text === text).id);
   const near = (a, b) => Math.abs(a - b) < 1e-6;
   const titles = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') { titles.push(k.card.title); w(k.card); } }); })(card());
-  R['the card has Transcribe, Transcript and Animation sections and no Font section'] = titles.join() === 'Transcribe,Transcript,Animation';
-  R['no font, outline, box, shadow or size controls'] = !items().some(i => /Font|Outline|Background box|Soft shadow|Size \(px\)|Box |Letter spacing|Case:|From bottom|Max width/.test(i.label || i.text || ''));
+  R['the card has Transcribe, Transcript, Style and Animation sections and no Font section'] = titles.join() === 'Transcribe,Transcript,Style,Animation';
+  R['no font, outline, box, shadow or size controls'] = !items().some(i => /Font|Outline|Background box|Soft shadow|Size \(px\)|Box padding|Box opacity|Letter spacing|Case:|From bottom|Max width/.test(i.label || i.text || ''));
   press('Reset animation');
   const mk = () => {
     const { comp, made } = fakeBuild(); app.project.activeItem = comp;
@@ -1144,6 +1144,92 @@ function buildTextIcon(sentence, atIndex, opts) {
   app.project.activeItem = null;
   const bad = Object.keys(R).filter(k2 => !R[k2]);
   console.log(`captions animation: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
+// Captions: word highlight (Style) - the word being spoken is lit, driven by word times (or an even spread when there are none)
+{
+  const B = $g.global.RuBridge, R = {};
+  const meta = JSON.parse(B.meta()), fi = meta.features.find(f => f.name === 'Captions').i;
+  const card = () => JSON.parse(B.feature(fi));
+  const items = () => { const out = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => out.push(i)); }); })(card()); return out; };
+  const byLabel = (label) => items().find(i => (i.label || i.text) === label);
+  const setv = (label, v) => { const it = byLabel(label); if (!it) throw new Error('no control: ' + label); return B.set(it.id, v); };
+  const press = (text) => B.click(items().find(i => i.k === 'b' && i.text === text).id);
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const mk = (words) => {
+    const { comp, made } = fakeBuild(); app.project.activeItem = comp;
+    const voice = comp.layers.add({}); voice.name = 'voice.wav'; voice.index = 1; voice.hasAudio = true; voice.startTime = 0; voice.inPoint = 0; voice.outPoint = 20; voice.stretch = 100;
+    const it = new g.FootageItem(); it.file = { fsName: '/m/v.wav' }; it.duration = 30; voice.source = it; comp.selectedLayers = [voice];
+    const segs = [{ start: 1, end: 3, text: 'Hello there' }, { start: 4, end: 7, text: 'General Kenobi' }];
+    if (words) { segs[0].words = [{ s: 1, e: 1.5, w: 'Hello' }, { s: 1.5, e: 3, w: 'there' }]; }
+    B.captionBuild(JSON.stringify({ layerIndex: 1, layerName: 'voice.wav', segments: segs }));
+    return { comp, made, caps: () => made.filter(L => L.kind === 'text' && !L.removed), boxes: () => made.filter(L => /^Ru Caption Word \d+$/.test(L.name) && !L.removed) };
+  };
+  const animNames = (L) => L.property('ADBE Text Properties').property('ADBE Text Animators').children.map(n => n.name);
+  const anim = (L, name) => L.property('ADBE Text Properties').property('ADBE Text Animators').children.find(n => n.name === name);
+  const selOf = (an) => an.property('ADBE Text Selectors').property(1);
+  const startEx = (L, name) => selOf(anim(L, name)).property('ADBE Text Index Start').expression;
+  const endEx = (L, name) => selOf(anim(L, name)).property('ADBE Text Index End').expression;
+  const titles = JSON.stringify(byLabel('Look:').items);
+  R['Look has the six looks, starting with Plain'] = titles === JSON.stringify(['Plain', 'Word box', 'Word colour', 'Word pop', 'Underline', 'Karaoke fill']) && byLabel('Look:').sel === 0;
+  R['colour fields start at white text and orange box'] = byLabel('Text colour:').v.toUpperCase() === '#FFFFFF' && byLabel('Box colour:').v.toUpperCase() === '#E8A23A';
+  R['Plain adds nothing (no word animators, no highlight layer)'] = (() => { const w = mk(true); return w.caps().every(L => animNames(L).filter(n => /^Ru Word/.test(n)).length === 0) && w.boxes().length === 0; })();
+
+  // word box, with exact word times
+  setv('Look:', 1); press('Apply to all captions');
+  let w = mk(true), c = w.caps();
+  R['a new transcript keeps word times in the layer comment (Hello 0..0.25, there 0.25..1)'] = /\nrw:0,0.25;0.25,1$/.test(c[0].comment) && c[0].comment.indexOf('ru:Hello there') === 0 && c[1].comment.indexOf('rw:') < 0;
+  R['word box: one box per caption, named after it, parented to it, below it'] = w.boxes().length === 2 && w.boxes()[0].name === 'Ru Caption Word 1' && w.boxes()[0].parent === c[0];
+  R['word box: dim animators before and after, one Active animator'] = animNames(c[0]).filter(n => /^Ru Word/.test(n)).join() === 'Ru Word Dim,Ru Word Dim 2,Ru Word Active';
+  R['word box: the spoken word index comes from the stored times (Hello at 0 s, there at 0.5 s)'] = startEx(c[0], 'Ru Word Active').indexOf('var st=[0,0.5]') >= 0 && /i\+1$/.test(endEx(c[0], 'Ru Word Active')) && /\ni$/.test(startEx(c[0], 'Ru Word Active'));
+  R['word box: dim words are the ones before (0..i) and after (i+1..) the spoken word, at 45%'] = /\n0$/.test(startEx(c[0], 'Ru Word Dim')) && /\ni$/.test(endEx(c[0], 'Ru Word Dim')) && /\ni\+1$/.test(startEx(c[0], 'Ru Word Dim 2')) && /100000$/.test(endEx(c[0], 'Ru Word Dim 2')) && anim(c[0], 'Ru Word Dim').property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 45;
+  R['word box: text colour on the spoken word is white, the box is orange'] = anim(c[0], 'Ru Word Active').property('ADBE Text Animator Properties').property('ADBE Text Fill Color').value.slice(0, 3).join() === '1,1,1';
+  const box = w.boxes()[0], rect = (() => { let found = null; (function f(n) { if (n && n.matchName === 'ADBE Vector Shape - Rect') found = n; (n && n.children || []).forEach(f); })(box.property('ADBE Root Vectors Group')); return found; })();
+  R['word box: box size and position are expressions over the word list, with the layer start time'] = !!rect && /Ru Word Style/.test(rect.property('ADBE Vector Rect Size').expression) && /time-thisLayer\.startTime/.test(rect.property('ADBE Vector Rect Size').expression) && /var xs=\[/.test(box.transform.position.expression) && /var ys=\[/.test(box.transform.position.expression);
+  R['word box: roundness follows the field'] = rect.property('ADBE Vector Rect Roundness').value === 10;
+  R['word box: the box fades with its caption (fade in 8 frames, out 6)'] = box.transform.opacity.keys.length === 4;
+
+  // colours and sliders
+  setv('Text colour:', '#101010'); setv('Box colour:', '#4285F4'); setv('Roundness (px):', '24'); setv('Other words (%):', '20'); press('Apply to all captions');
+  c = w.caps();
+  const w1 = mk(true); c = w1.caps();
+  R['new colours, roundness and dim level are used on the next transcript'] = anim(c[0], 'Ru Word Active').property('ADBE Text Animator Properties').property('ADBE Text Fill Color').value.slice(0, 3).map(x => Math.round(x * 255)).join() === '16,16,16' && anim(c[0], 'Ru Word Dim').property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 20;
+  setv('Other words:', 1); press('Apply to all captions');
+  const w2 = mk(true);
+  R['Other words: Full removes the dim animators'] = animNames(w2.caps()[0]).filter(n => /^Ru Word/.test(n)).join() === 'Ru Word Active';
+  setv('Other words:', 0);
+
+  // Apply on existing captions: re-applying never stacks animators or boxes; switching to Plain removes them
+  w = mk(false); c = w.caps();
+  press('Apply to all captions'); press('Apply to all captions');
+  R['re-applying does not stack animators or highlight layers'] = animNames(c[0]).filter(n => n === 'Ru Word Active').length === 1 && w.boxes().length === 2;
+  R['captions without word times are spread evenly by letters (Hello 0 s, there 1 s for a 2 s caption)'] = startEx(c[0], 'Ru Word Active').indexOf('var st=[0,1]') >= 0;
+  setv('Look:', 0); press('Apply to all captions');
+  R['back to Plain: animators and highlight layers are gone'] = c.every(L => animNames(L).filter(n => /^Ru Word/.test(n)).length === 0) && w.boxes().length === 0;
+
+  // other looks
+  setv('Look:', 2); press('Apply to all captions');
+  R['word colour: Active animator in the box colour, no box layer'] = !!anim(c[0], 'Ru Word Active') && w.boxes().length === 0 && anim(c[0], 'Ru Word Active').property('ADBE Text Animator Properties').property('ADBE Text Fill Color').value.slice(0, 3).map(x => Math.round(x * 255)).join() === '66,133,244';
+  setv('Look:', 3); press('Apply to all captions');
+  R['word pop: Active animator also scales to 118%'] = anim(c[0], 'Ru Word Active').property('ADBE Text Animator Properties').property('ADBE Text Scale').value.join() === '118,118' && animNames(c[0]).filter(n => n === 'Ru Word Active').length === 1;
+  setv('Look:', 4); press('Apply to all captions');
+  R['underline: a thin box layer under the word that draws in, no colour animator'] = w.boxes().length === 2 && !anim(c[0], 'Ru Word Active') && /var lx=\[/.test(w.boxes()[0].transform.position.expression) && /Math\.min\(1,\(t-st\[i\]\)\/0\.12\)/.test(w.boxes()[0].transform.position.expression);
+  setv('Look:', 5); press('Apply to all captions');
+  R['karaoke fill: letters fill up inside each word (character index list), unspoken words dimmed'] = /var c0=\[0,6\]/.test(endEx(c[0], 'Ru Word Fill')) && /var cl=\[5,5\]/.test(endEx(c[0], 'Ru Word Fill')) && /\nf$/.test(endEx(c[0], 'Ru Word Fill')) && /\nf$/.test(startEx(c[0], 'Ru Word Dim')) && w.boxes().length === 0;
+
+  // the editor: new words drop the word times, joins keep each caption's highlight layer under the right number
+  setv('Look:', 1); press('Apply to all captions');
+  const rowsOf = () => JSON.parse(B.captionList()).rows;
+  const apply = (rows) => JSON.parse(B.captionApply(JSON.stringify({ rows })));
+  const r0 = rowsOf();
+  let res = apply([{ name: 'Ru Caption 2', start: r0[1].start, end: r0[1].end, text: r0[1].text }]);
+  R['editor: joining away caption 1 keeps caption 2 and its highlight layer, renumbered to 1'] = !res.error && w.caps().length === 1 && w.caps()[0].name === 'Ru Caption 1' && w.boxes().length === 1 && w.boxes()[0].name === 'Ru Caption Word 1';
+  res = apply([{ name: 'Ru Caption 1', start: 4, end: 7, text: 'General Skywalker' }]);
+  R['editor: new words rebuild the highlight for the new words and drop the old word times'] = !res.error && w.boxes().length === 1 && w.caps()[0].comment === 'ru:General Skywalker' && animNames(w.caps()[0]).filter(n => n === 'Ru Word Active').length === 1;
+  setv('Look:', 0);
+  app.project.activeItem = null;
+  const bad = Object.keys(R).filter(k2 => !R[k2]);
+  console.log(`captions word style: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
 // Transcript editor: list the captions, apply edited words and times, splits, joins and empty captions
