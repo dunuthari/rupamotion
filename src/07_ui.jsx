@@ -1637,15 +1637,9 @@
 
             btn(p, "Apply to all captions", function () { run("Apply caption animation", function () { doCaptionApply(false); }); },
                 "Rebuilds the In and Out animation and the word highlight of every Ru Caption layer in the comp. Their font, size, colour and position are not touched.", "primary");
-            var resetCap = function () {
-                var dd = [[CAP.inT, 1], [CAP.outT, 1], [CAP.ease, 0]], ff = [[CAP.inLen, "8"], [CAP.outLen, "6"], [CAP.dist, "40"]], i;
-                for (i = 0; i < dd.length; i++) { dd[i][0].selection = dd[i][1]; }
-                for (i = 0; i < ff.length; i++) { ff[i][0].text = ff[i][1]; }
-            };
             grid(p, [
                 ["Apply to selected", function () { run("Apply caption animation", function () { doCaptionApply(true); }); }, "Re-animates only the selected Ru Caption layers."],
-                ["Select all captions", function () { run("Select captions", doCaptionSelectAll); }, "Selects every Ru Caption layer in the comp."],
-                ["Reset animation", resetCap, "Puts the animation controls back to their defaults (click Apply to use them)."]
+                ["Select all captions", function () { run("Select captions", doCaptionSelectAll); }, "Selects every Ru Caption layer in the comp."]
             ]);
             hint(p, "New captions are white, bold, 64 px, near the bottom with a soft shadow; restyle them in After Effects as you like. First use downloads the speech engine and model (about 150 MB), then it works offline.");
         });

@@ -102,7 +102,7 @@
     // ---- word highlight ("Style"): the word being spoken is lit while the voice says it ----
     var CAP_LOOKS = ["Plain", "Word box", "Word colour", "Word pop", "Underline", "Karaoke fill"];
     // box / underline sizes in em (of the caption's font size); popScale in %
-    var HL = { rise: 0.28, boxH: 1.08, padX: 0.2, underH: 0.07, underDrop: 0.17, popScale: 118, drawIn: 0.12 };
+    var HL = { rise: 0.28, boxH: 1.1, padX: 0.2, underH: 0.07, underDrop: 0.17, popScale: 118, drawIn: 0.12 };
 
     // ---- helpers ----
     function capNumberOf(name) {
@@ -269,7 +269,12 @@
             capRemoveNamed(anims, "Ru Caption In");
             for (i = anims.numProperties; i >= 1; i--) { if (anims.property(i).name.indexOf("Ru Word ") === 0) { anims.property(i).remove(); } }
         } catch (e) {}
-        if (comp) { capRemoveBoxes(comp, [capNumberOf(L.name)]); }
+        if (comp) {
+            capRemoveBoxes(comp, [capNumberOf(L.name)]);
+            for (i = comp.numLayers; i >= 1; i--) {           // any highlight layer still linked to this caption, whatever its name
+                try { if (/^Ru Caption Word /.test(comp.layer(i).name) && comp.layer(i).parent === L) { comp.layer(i).remove(); } } catch (eR) {}
+            }
+        }
     }
 
     function capMakeBox(comp, L, cs, geo, n) {
@@ -302,6 +307,26 @@
         return { x: v[0], y: v[1], rect: null, t0: t0, t1: t1 };
     }
 
+    // After Effects opens the property tree of every layer a script adds animators to. There is no scripting call to close it again;
+    // the menu command "Reveal All Modified Properties" (id 2771) on the selected layers toggles it, so run it once on the layers we touched.
+    function capCollapse(comp, layers) {
+        var prev = [], i, boxes = capWordBoxes(comp), nm;
+        try {
+            for (i = 0; i < comp.selectedLayers.length; i++) { prev.push(comp.selectedLayers[i]); }
+            for (i = 1; i <= comp.numLayers; i++) { try { comp.layer(i).selected = false; } catch (e0) {} }
+            for (i = 0; i < layers.length; i++) {
+                try { layers[i].selected = true; } catch (e1) {}
+                nm = capNumberOf(layers[i].name);
+                if (boxes[nm]) { try { boxes[nm].selected = true; } catch (e2) {} }
+            }
+            app.executeCommand(2771);
+        } catch (e3) {}
+        try {
+            for (i = 1; i <= comp.numLayers; i++) { try { comp.layer(i).selected = false; } catch (e4) {} }
+            for (i = 0; i < prev.length; i++) { try { prev[i].selected = true; } catch (e5) {} }
+        } catch (e6) {}
+    }
+
     // full: restyle the text too (a new transcript). Otherwise, without a Font section, only the animation is rebuilt and the layers'
     // own look (font, size, colour, position, anything edited by hand) is left alone.
     function applyCaptionStyle(comp, layers, full, fontName) {
@@ -330,6 +355,7 @@
                 boxes++;
             }
         }
+        capCollapse(comp, layers);
         return { n: layers.length, boxes: boxes, words: words };
     }
 
@@ -392,7 +418,7 @@
     // look: 1 box, 2 colour, 3 pop, 4 underline, 5 karaoke fill. Returns true when something was built.
     function capWordStyle(comp, L, cs, geo, num) {
         var look = cs.hlLook, src, str, lay, n, wt, dur, rel0, st = [], en = [], i, anims, idx, sA, boxC = hexToRgb(cs.hlBox), textC = hexToRgb(cs.hlText), dim = cs.hlDim, fs, A;
-        var cs0 = [], cl = [], re, m, B, gi, rc, parented = false, xs = [], ys = [], ws = [], lx = [], ox, oy, MK = "// Ru Word Style\n", filled;
+        var cs0 = [], cl = [], re, m, B, gi, rc, parented = false, xs = [], ys = [], ws = [], lx = [], ox, oy, MK = "// Ru Word Style\n", filled, tr, midY;
         if (look <= 0 || look >= CAP_LOOKS.length) { return false; }
         src = textDocProp(L).value; str = src.text;
         if (!trim(str)) { return false; }
@@ -428,17 +454,20 @@
         if (look === 3) {
             sA = capWordAnimator(anims, "Ru Word Active", "ADBE Text Fill Color", boxC, 3, idx + "i", idx + "i+1");
             try {
-                sA.property("ADBE Text Animator Properties").addProperty("ADBE Text Scale");
-                sA.property("ADBE Text Animator Properties").property("ADBE Text Scale").setValue([HL.popScale, HL.popScale]);
+                sA.property("ADBE Text Animator Properties").addProperty("ADBE Text Scale 3D");
+                sA.property("ADBE Text Animator Properties").property("ADBE Text Scale 3D").setValue([HL.popScale, HL.popScale, HL.popScale]);
                 try { sA.property("ADBE Text More Options").property("ADBE Text Anchor Point Option").setValue(2); } catch (eG) {}     // scale each word around its own centre
             } catch (eP) {}
         }
         if (look === 1 || look === 4) {
             // a shape layer behind the caption: one box (or underline) that jumps to the word being spoken
+            tr = capRect(L, L.inPoint);
+            midY = tr.top + tr.height / 2;                          // the vertical middle of the text itself (the caption's anchor point sits there)
             for (i = 0; i < n; i++) {
                 ox = lay.wx[i] - A[0]; oy = lay.baseY + lay.wl[i] * lay.lineStep - A[1];
                 lx.push(ox); ws.push(lay.ww[i]);
-                xs.push(ox + lay.ww[i] / 2); ys.push(oy);
+                xs.push(ox + lay.ww[i] / 2);
+                ys.push(look === 1 ? midY + (lay.wl[i] - (lay.lines - 1) / 2) * lay.lineStep - A[1] : oy);
             }
             B = shapeLayer(comp, "Ru Caption Word " + num);
             gi = newGroup(B, look === 1 ? "Box" : "Underline");
@@ -451,7 +480,6 @@
             if (!parented) { for (i = 0; i < n; i++) { xs[i] += geo.x; ys[i] += geo.y; lx[i] += geo.x; } }
             var bi = MK + "var st=" + capNumList(st) + ";\nvar t=time-thisLayer.startTime;\nvar i=0;\nfor(var k=0;k<st.length;k++){if(t>=st[k]){i=k;}}\n";
             if (look === 1) {
-                for (i = 0; i < n; i++) { ys[i] = ys[i] - fs * HL.rise; }
                 rc.property("ADBE Vector Rect Size").expression = bi + "var ws=" + capNumList(ws) + ";\n[ws[i]+" + capN(fs * HL.padX * 2) + "," + capN(fs * HL.boxH) + "]";
                 B.transform.position.expression = bi + "var xs=" + capNumList(xs) + ";\nvar ys=" + capNumList(ys) + ";\n[xs[i],ys[i]]";
             } else {

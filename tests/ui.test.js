@@ -1089,7 +1089,8 @@ function buildTextIcon(sentence, atIndex, opts) {
   const titles = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') { titles.push(k.card.title); w(k.card); } }); })(card());
   R['the card has Transcribe, Transcript, Style and Animation sections and no Font section'] = titles.join() === 'Transcribe,Transcript,Style,Animation';
   R['no font, outline, box, shadow or size controls'] = !items().some(i => /Font|Outline|Background box|Soft shadow|Size \(px\)|Box padding|Box opacity|Letter spacing|Case:|From bottom|Max width/.test(i.label || i.text || ''));
-  press('Reset animation');
+  const resetAnim = () => { setv('In:', 1); setv('Out:', 1); setv('Curve:', 0); setv('In length (frames):', '8'); setv('Out length (frames):', '6'); setv('Slide distance (px):', '40'); };
+  resetAnim();
   const mk = () => {
     const { comp, made } = fakeBuild(); app.project.activeItem = comp;
     const voice = comp.layers.add({}); voice.name = 'voice.wav'; voice.index = 1; voice.hasAudio = true; voice.startTime = 0; voice.inPoint = 0; voice.outPoint = 20; voice.stretch = 100;
@@ -1134,13 +1135,13 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['Apply to selected re-animates only the selected caption'] = c[1].transform.scale.numKeys === 2 && c[0].transform.scale.numKeys === 0;
   press('Select all captions');
   R['Select all captions selects the captions and nothing else'] = c.every(L => L.selected === true) && w.voice.selected !== true;
-  press('Reset animation');
-  R['Reset animation puts the controls back (Fade in/out, 8 and 6 frames, 40 px)'] = byLabel('In:').sel === 1 && byLabel('Out:').sel === 1 && byLabel('In length (frames):').v === '8' && byLabel('Out length (frames):').v === '6' && byLabel('Slide distance (px):').v === '40';
+  resetAnim();
+  R['there is no Reset animation button'] = !items().some(i => i.text === 'Reset animation');
   // a new transcript is built with the current animation and the standard look
   setv('In:', 3);
   const w2 = mk();
   R['a new transcript is built with the current animation (slide up) and the standard look'] = w2.caps()[0].transform.position.numKeys === 2 && w2.caps()[0].doc.fontSize === 64;
-  press('Reset animation');
+  resetAnim();
   app.project.activeItem = null;
   const bad = Object.keys(R).filter(k2 => !R[k2]);
   console.log(`captions animation: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
@@ -1211,13 +1212,29 @@ function buildTextIcon(sentence, atIndex, opts) {
   setv('Look:', 2); press('Apply to all captions');
   R['word colour: Active animator in the box colour, no box layer'] = !!anim(c[0], 'Ru Word Active') && w.boxes().length === 0 && anim(c[0], 'Ru Word Active').property('ADBE Text Animator Properties').property('ADBE Text Fill Color').value.slice(0, 3).map(x => Math.round(x * 255)).join() === '66,133,244';
   setv('Look:', 3); press('Apply to all captions');
-  R['word pop: Active animator also scales to 118%'] = anim(c[0], 'Ru Word Active').property('ADBE Text Animator Properties').property('ADBE Text Scale').value.join() === '118,118' && animNames(c[0]).filter(n => n === 'Ru Word Active').length === 1;
+  R['word pop: Active animator also scales to 118%'] = anim(c[0], 'Ru Word Active').property('ADBE Text Animator Properties').property('ADBE Text Scale 3D').value.join() === '118,118,118' && animNames(c[0]).filter(n => n === 'Ru Word Active').length === 1;
   setv('Look:', 4); press('Apply to all captions');
   R['underline: a thin box layer under the word that draws in, no colour animator'] = w.boxes().length === 2 && !anim(c[0], 'Ru Word Active') && /var lx=\[/.test(w.boxes()[0].transform.position.expression) && /Math\.min\(1,\(t-st\[i\]\)\/0\.12\)/.test(w.boxes()[0].transform.position.expression);
   setv('Look:', 5); press('Apply to all captions');
   R['karaoke fill: letters fill up inside each word (character index list), unspoken words dimmed'] = /var c0=\[0,6\]/.test(endEx(c[0], 'Ru Word Fill')) && /var cl=\[5,5\]/.test(endEx(c[0], 'Ru Word Fill')) && /\nf$/.test(endEx(c[0], 'Ru Word Fill')) && /\nf$/.test(startEx(c[0], 'Ru Word Dim')) && w.boxes().length === 0;
 
+
+  // layers collapse after Apply, boxes are centred on the text, a new look replaces the old one
+  const cmds = []; app.executeCommand = (id) => { cmds.push(id); };
+  setv('Look:', 1); setv('Roundness (px):', '10'); setv('Other words (%):', '45');
+  const wc2 = mk(true); const cc2 = wc2.caps(); cc2[1].selected = true; cc2[0].selected = false; wc2.comp.selectedLayers = [cc2[1]];
+  cmds.length = 0; press('Apply to all captions');
+  R['Apply runs the "Reveal All Modified Properties" command (2771) once, to close the layer twirl-downs, and restores the selection'] = cmds.join() === '2771' && cc2[1].selected === true && cc2[0].selected !== true;
+  const bx = wc2.boxes()[0];
+  R['word box: centred on the text (one line: the vertical middle is the anchor, so every y is 0 in the caption\'s own space)'] = /var ys=\[0,0\]/.test(bx.transform.position.expression);
+  setv('Look:', 3); press('Apply to all captions');
+  R['switching Word box -> Word pop removes the box layers and the old animators, adds the new ones'] = wc2.boxes().length === 0 && animNames(cc2[0]).filter(n => n === 'Ru Word Active').length === 1 && animNames(cc2[0]).join() === 'Ru Word Dim,Ru Word Dim 2,Ru Word Active';
+  setv('Look:', 1); press('Apply to all captions');
+  R['switching back (Word pop -> Word box): box layers are back, still one Active animator'] = wc2.boxes().length === 2 && animNames(cc2[0]).filter(n => n === 'Ru Word Active').length === 1 && !anim(cc2[0], 'Ru Word Active').property('ADBE Text Animator Properties').children.some(n => n.matchName === 'ADBE Text Scale 3D');
+  delete app.executeCommand;
+
   // the editor: new words drop the word times, joins keep each caption's highlight layer under the right number
+  w = mk(true);
   setv('Look:', 1); press('Apply to all captions');
   const rowsOf = () => JSON.parse(B.captionList()).rows;
   const apply = (rows) => JSON.parse(B.captionApply(JSON.stringify({ rows })));
