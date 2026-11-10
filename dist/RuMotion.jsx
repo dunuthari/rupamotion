@@ -825,7 +825,7 @@
     }
 
     function shapeCompBox(L, t) {
-        var rect = findFirst(contentsOf(L), VN.rect);
+        var isShape = (L instanceof ShapeLayer), rect = isShape ? findFirst(contentsOf(L), VN.rect) : null, ell = (isShape && !rect) ? findFirst(contentsOf(L), VN.ellipse) : null;
         if (rect) {
             var chain = getChain(rect), ts = totalScale(chain, L, t);
             var c = rect.property(VN.rectPos).valueAtTime(t, false);
@@ -836,6 +836,12 @@
                 size: [Math.abs(s[0] * ts[0]), Math.abs(s[1] * ts[1])],
                 round: r * (Math.abs(ts[0]) + Math.abs(ts[1])) / 2
             };
+        }
+        if (ell) {                                    // an ellipse is a rounded rectangle with the largest roundness
+            var chainE = getChain(ell), tsE = totalScale(chainE, L, t);
+            var ce = ell.property(VN.ellipsePos).valueAtTime(t, false), se = ell.property(VN.ellipseSize).valueAtTime(t, false);
+            var szE = [Math.abs(se[0] * tsE[0]), Math.abs(se[1] * tsE[1])];
+            return { center: layerToComp(groupToLayer(ce, chainE, t), L, t), size: szE, round: Math.min(szE[0], szE[1]) / 2 };
         }
         var sr = L.sourceRectAtTime(t, false), ls = totalScale([], L, t);
         return {
@@ -896,29 +902,62 @@
         return target.vertices.length !== a.vertices.length;
     }
 
+    // A layer is a "shape" when it is a shape layer with a rectangle, ellipse or path to move; everything else (pictures, footage,
+    // solids, pre-comps, text, shape layers with other content) is an "image": it is morphed with a mask.
+    function morphKind(L) {
+        if (L instanceof ShapeLayer) {
+            var c = contentsOf(L);
+            if (findFirst(c, VN.rect) || findFirst(c, VN.ellipse) || findFirst(c, VN.path)) { return "shape"; }
+        }
+        return "image";
+    }
+
+    // A picture has no points to move, so a mask morphs instead: the layer's own bounds become the target's box and outline,
+    // the picture moves (and, with fit "fill", scales) with it.
+    function morphImage(src, tgt, o, t, d) {
+        var R = src.sourceRectAtTime(t, false), ls = readLayerTr(src, t), box = shapeCompBox(tgt, t), rc = [R.left + R.width / 2, R.top + R.height / 2];
+        var s0 = [Math.abs(ls.scl[0]) / 100, Math.abs(ls.scl[1]) / 100], s1, k, p1, maskW, maskH, rEnd, ms, mk, mp;
+        if (o.fit === "keep") { s1 = [s0[0], s0[1]]; }
+        else { k = Math.max(sd(box.size[0], R.width), sd(box.size[1], R.height)); s1 = [k, k]; }
+        p1 = [box.center[0] - (rc[0] - ls.anc[0]) * s1[0], box.center[1] - (rc[1] - ls.anc[1]) * s1[1]];
+        maskW = sd(box.size[0], s1[0]); maskH = sd(box.size[1], s1[1]);
+        if (o.fit === "keep") { maskW = Math.min(maskW, R.width); maskH = Math.min(maskH, R.height); }
+        rEnd = (box.round === null) ? 0 : sd(box.round, (s1[0] + s1[1]) / 2);
+        ms = src.property("ADBE Mask Parade");
+        mk = ms.addProperty("ADBE Mask Atom");
+        try { mk.name = "Ru Morph Mask"; } catch (e0) {}
+        mp = mk.property("ADBE Mask Shape");
+        setKeys(mp, [[t, roundRectShape(rc[0], rc[1], R.width, R.height, 0)], [t + d, roundRectShape(rc[0], rc[1], maskW, maskH, rEnd)]], { bounce: true, isShape: true });
+        setKeys(src.transform.scale, [[t, [s0[0] * 100, s0[1] * 100]], [t + d, [s1[0] * 100, s1[1] * 100]]], { bounce: true, clamp: true });
+        setKeys(src.transform.position, [[t, ls.pos], [t + d, p1]], { bounce: true });
+    }
+
     function doMorph(o) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = comp.selectedLayers;
-        if (sel.length !== 2 || !(sel[0] instanceof ShapeLayer) || !(sel[1] instanceof ShapeLayer)) {
-            alert("Select exactly 2 shape layers: the shape to morph and the shape it should become.", NAME);
+        if (sel.length !== 2 || !(sel[0] instanceof AVLayer) || !(sel[1] instanceof AVLayer)) {
+            alert("Select exactly 2 layers (shapes, pictures, footage, solids or text): the layer to morph and the layer it should become.", NAME);
             return;
         }
         var ls = [sel[0], sel[1]].sort(function (a, b) { return a.index - b.index; });
         var src = o.fromLower ? ls[1] : ls[0], tgt = o.fromLower ? ls[0] : ls[1];
-        var t = comp.time, d = animDur(comp);
+        var t = comp.time, d = animDur(comp), kindA = morphKind(src), kindB = morphKind(tgt), fit = o.fit || "fill";
 
         ensureBounce(src);
-        var c = contentsOf(src);
-        var rect = findFirst(c, VN.rect), ell = rect ? null : findFirst(c, VN.ellipse);
-        var path = (rect || ell) ? null : findFirst(c, VN.path);
-        if (!rect && !ell && !path) { alert("\"" + src.name + "\" has no rectangle, ellipse or path to morph.", NAME); return; }
-
         var mismatch = false;
-        if (rect) { morphParametric(src, tgt, rect, true, t, d); }
-        else if (ell) { morphParametric(src, tgt, ell, false, t, d); }
-        else { mismatch = morphPath(src, tgt, path, t, d); }
+        if (kindA === "shape") {
+            var c = contentsOf(src);
+            var rect = findFirst(c, VN.rect), ell = rect ? null : findFirst(c, VN.ellipse);
+            var path = (rect || ell) ? null : findFirst(c, VN.path);
+            if (rect) { morphParametric(src, tgt, rect, true, t, d); }
+            else if (ell) { morphParametric(src, tgt, ell, false, t, d); }
+            else { mismatch = morphPath(src, tgt, path, t, d); }
+        } else {
+            morphImage(src, tgt, { fit: fit }, t, d);
+        }
 
-        if (o.color) {
+        // the colour only morphs between two shapes
+        if (o.color && kindA === "shape" && kindB === "shape") {
             var fa = findFirst(contentsOf(src), VN.fill), fb = findFirst(contentsOf(tgt), VN.fill);
             if (fa && fb) {
                 var ca = fa.property(VN.fillColor);
@@ -926,8 +965,19 @@
                 if (s0.toString() !== s1.toString()) { setKeys(ca, [[t, s0], [t + d, s1]]); }
             }
         }
+
+        // a picture as the target: it arrives while the first layer morphs and fades out (or, without cross-fade, the first picture stays)
+        if (kindB === "image") {
+            if (kindA === "shape" || o.fade) {
+                setKeys(tgt.transform.opacity, [[t, 0], [t + d * 0.35, 0], [t + d * 0.8, 100]], { linear: true });
+                setKeys(src.transform.opacity, [[t, 100], [t + d * 0.35, 100], [t + d * 0.8, 0]], { linear: true });
+            } else {
+                tgt.enabled = false;
+            }
+        } else if (o.hide) { tgt.enabled = false; }
+
         mb(src);
-        if (o.hide) { tgt.enabled = false; }
+        if (kindB === "image" && tgt.enabled) { mb(tgt); }
         if (o.precomp) {
             var n = 1;
             for (var i = 1; i <= app.project.numItems; i++) {
@@ -16986,14 +17036,16 @@
     // ---------------- Animation ----------------
 
     feature("Animate", "Shape morph", function (p) {
-        hint(p, "Select 2 shape layers, playhead at the start.");
-        var from = drop(p, "Morph from:", ["Lower layer", "Upper layer"], 0, "Lower layer = the shape you drew first.");
-        var colr = check(p, "Morph fill color", true);
-        var hide = check(p, "Hide target layer", true);
+        hint(p, "Select 2 layers, playhead at the start. Each can be a shape or a picture (image, footage, solid, text): the plugin works out which is which, so shape to shape, shape to image, image to image and image to shape all work.");
+        var from = drop(p, "Morph from:", ["Lower layer", "Upper layer"], 0, "Lower layer = the layer at the bottom of the two.");
+        var fit = drop(p, "Picture in the new shape:", ["Fill the new shape", "Keep its size"], 0, "Fill: the picture scales to cover the new shape. Keep: it keeps its size and the new shape crops it.");
+        var fade = check(p, "Cross-fade to the second picture", true, "When the second layer is a picture: the first one fades into it. Off: the first picture stays and the second layer is hidden.");
+        var colr = check(p, "Morph fill color", true, "Between two shapes.");
+        var hide = check(p, "Hide target layer", true, "Hides the second layer when it is a shape. A second picture always fades in.");
         var pre = check(p, "Put morph in a new composition", true);
         btn(p, "Morph", function () {
             run("Shape morph", function () {
-                doMorph({ fromLower: from.selection.index === 0, color: colr.value, hide: hide.value, precomp: pre.value });
+                doMorph({ fromLower: from.selection.index === 0, fit: fit.selection.index === 1 ? "keep" : "fill", fade: fade.value, color: colr.value, hide: hide.value, precomp: pre.value });
             });
         });
     });

@@ -1057,14 +1057,16 @@
     // ---------------- Animation ----------------
 
     feature("Animate", "Shape morph", function (p) {
-        hint(p, "Select 2 shape layers, playhead at the start.");
-        var from = drop(p, "Morph from:", ["Lower layer", "Upper layer"], 0, "Lower layer = the shape you drew first.");
-        var colr = check(p, "Morph fill color", true);
-        var hide = check(p, "Hide target layer", true);
+        hint(p, "Select 2 layers, playhead at the start. Each can be a shape or a picture (image, footage, solid, text): the plugin works out which is which, so shape to shape, shape to image, image to image and image to shape all work.");
+        var from = drop(p, "Morph from:", ["Lower layer", "Upper layer"], 0, "Lower layer = the layer at the bottom of the two.");
+        var fit = drop(p, "Picture in the new shape:", ["Fill the new shape", "Keep its size"], 0, "Fill: the picture scales to cover the new shape. Keep: it keeps its size and the new shape crops it.");
+        var fade = check(p, "Cross-fade to the second picture", true, "When the second layer is a picture: the first one fades into it. Off: the first picture stays and the second layer is hidden.");
+        var colr = check(p, "Morph fill color", true, "Between two shapes.");
+        var hide = check(p, "Hide target layer", true, "Hides the second layer when it is a shape. A second picture always fades in.");
         var pre = check(p, "Put morph in a new composition", true);
         btn(p, "Morph", function () {
             run("Shape morph", function () {
-                doMorph({ fromLower: from.selection.index === 0, color: colr.value, hide: hide.value, precomp: pre.value });
+                doMorph({ fromLower: from.selection.index === 0, fit: fit.selection.index === 1 ? "keep" : "fill", fade: fade.value, color: colr.value, hide: hide.value, precomp: pre.value });
             });
         });
     });

@@ -1249,6 +1249,92 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`captions word style: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
+// Shape morph: shape/image in any combination (shapes morph their points, pictures get a mask)
+{
+  const B = $g.global.RuBridge, R = {};
+  g.ShapeLayer.prototype = Object.create(g.AVLayer.prototype);
+  const meta = JSON.parse(B.meta()), fi = meta.features.find(f => f.name === 'Shape morph').i;
+  const items = () => { const out = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => out.push(i)); }); })(JSON.parse(B.feature(fi))); return out; };
+  const byLabel = (label) => items().find(i => (i.label || i.text) === label);
+  const setv = (label, v) => { const it = byLabel(label); if (!it) throw new Error('no control: ' + label); return B.set(it.id, v); };
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const mkComp = () => { const { comp, made } = fakeBuild(); app.project.activeItem = comp; comp.time = 1; return comp; };
+  const shapeL = (comp, name, index, kind, pos, size, round) => {
+    const L = comp.layers.addShape(); Object.setPrototypeOf(L, g.ShapeLayer.prototype); L.name = name; L.index = index;
+    const r = L.property('ADBE Root Vectors Group').addProperty(kind === 'rect' ? 'ADBE Vector Shape - Rect' : 'ADBE Vector Shape - Ellipse');
+    if (kind === 'rect') { r.property('ADBE Vector Rect Size').value = size; r.property('ADBE Vector Rect Position').value = pos; r.property('ADBE Vector Rect Roundness').value = round || 0; }
+    else { r.property('ADBE Vector Ellipse Size').value = size; r.property('ADBE Vector Ellipse Position').value = pos; }
+    L.sourceRectAtTime = () => ({ left: pos[0] - size[0] / 2, top: pos[1] - size[1] / 2, width: size[0], height: size[1] });
+    return L;
+  };
+  const imgL = (comp, name, index, pos, w, h) => {
+    const L = comp.layers.add({}); Object.setPrototypeOf(L, g.AVLayer.prototype); L.name = name; L.index = index;
+    L.transform.position.value = pos; L.transform.anchorPoint.value = [w / 2, h / 2];
+    L.sourceRectAtTime = () => ({ left: 0, top: 0, width: w, height: h });
+    return L;
+  };
+  const morph = (comp, a, b) => { comp.selectedLayers = [a, b]; B.click(byLabel('Morph').id); };
+  setv('Put morph in a new composition', 'false'); setv('Hide target layer', 'true'); setv('Cross-fade to the second picture', 'true'); setv('Picture in the new shape:', '0'); setv('Morph from:', '0');
+
+  // shape -> shape: as before (rectangle size and position keyed to the other rectangle's box)
+  let comp = mkComp();
+  let top = shapeL(comp, 'target', 1, 'rect', [800, 400], [200, 100], 10), low = shapeL(comp, 'source', 2, 'rect', [200, 200], [100, 100], 0);
+  morph(comp, top, low);
+  const rs = low.property('ADBE Root Vectors Group').children[0];
+  R['shape -> shape: the rectangle size and position get two keys each and the target is hidden'] = rs.property('ADBE Vector Rect Size').numKeys === 2 && rs.property('ADBE Vector Rect Position').numKeys === 2 && top.enabled === false
+    && near(rs.property('ADBE Vector Rect Size').keys[1].v[0], 200) && near(rs.property('ADBE Vector Rect Position').keys[1].v[0], 800);
+  R['shape -> shape: no mask is added'] = !low.nodes['ADBE Mask Parade'] || low.nodes['ADBE Mask Parade'].children.length === 0;
+
+  // shape -> image: the shape morphs into the picture's box, the picture arrives, the shape fades out
+  comp = mkComp();
+  const pic = imgL(comp, 'photo', 1, [1200, 600], 200, 100), shp = shapeL(comp, 'dot', 2, 'ellipse', [300, 300], [80, 80]);
+  morph(comp, pic, shp);
+  const es = shp.property('ADBE Root Vectors Group').children[0];
+  R['shape -> image: the ellipse is keyed to the picture\'s size (200 x 100) and centre (1200, 600)'] = es.property('ADBE Vector Ellipse Size').numKeys === 2 && near(es.property('ADBE Vector Ellipse Size').keys[1].v[0], 200) && near(es.property('ADBE Vector Ellipse Size').keys[1].v[1], 100) && near(es.property('ADBE Vector Ellipse Position').keys[1].v[0], 1200);
+  R['shape -> image: the picture fades in (0 -> 100) while the shape fades out (100 -> 0), and the picture stays visible'] = pic.transform.opacity.keys.length === 3 && pic.transform.opacity.keys[0].v === 0 && pic.transform.opacity.keys[2].v === 100 && shp.transform.opacity.keys[2].v === 0 && pic.enabled !== false;
+
+  // image -> image, fill: mask from the full picture to the target's box, scaled to cover it, moved onto it, cross-fade
+  comp = mkComp();
+  let tgt = imgL(comp, 'second', 1, [1200, 600], 200, 100), srcI = imgL(comp, 'first', 2, [300, 300], 400, 300);
+  morph(comp, tgt, srcI);
+  let mask = srcI.property('ADBE Mask Parade').children[0], mk = mask.property('ADBE Mask Shape');
+  R['image -> image: a mask is added to the first picture and keyed twice, from its full bounds'] = !!mask && mask.name === 'Ru Morph Mask' && mk.numKeys === 2 && near(mk.keys[0].v.vertices[0][0], 0) && near(mk.keys[0].v.vertices[0][1], 0) && near(mk.keys[0].v.vertices[1][0], 400);
+  R['image -> image (fill): scale ends at 50% (covers 200 x 100) and the picture lands on the target\'s centre'] = near(srcI.transform.scale.keys[1].v[0], 50) && near(srcI.transform.scale.keys[1].v[1], 50) && near(srcI.transform.position.keys[1].v[0], 1200) && near(srcI.transform.position.keys[1].v[1], 600);
+  R['image -> image (fill): the mask ends as the target\'s box in the picture\'s own space (400 x 200 around its centre)'] = near(mk.keys[1].v.vertices[0][0], 0) && near(mk.keys[1].v.vertices[0][1], 50) && near(mk.keys[1].v.vertices[1][0], 400);
+  R['image -> image: cross-fade (second in, first out); the second picture stays on'] = tgt.transform.opacity.keys[0].v === 0 && tgt.transform.opacity.keys[2].v === 100 && srcI.transform.opacity.keys[2].v === 0 && tgt.enabled !== false;
+
+  // keep its size
+  setv('Picture in the new shape:', '1');
+  comp = mkComp(); tgt = imgL(comp, 'second', 1, [1200, 600], 200, 100); srcI = imgL(comp, 'first', 2, [300, 300], 400, 300);
+  morph(comp, tgt, srcI); mk = srcI.property('ADBE Mask Parade').children[0].property('ADBE Mask Shape');
+  R['image -> image (keep its size): scale stays 100%, the picture moves to the target\'s centre, the mask crops it to 200 x 100'] = near(srcI.transform.scale.keys[1].v[0], 100) && near(srcI.transform.position.keys[1].v[0], 1200) && near(mk.keys[1].v.vertices[0][0], 100) && near(mk.keys[1].v.vertices[0][1], 100);
+  setv('Picture in the new shape:', '0');
+
+  // cross-fade off: the first picture stays, the second layer is hidden
+  setv('Cross-fade to the second picture', 'false');
+  comp = mkComp(); tgt = imgL(comp, 'second', 1, [1200, 600], 200, 100); srcI = imgL(comp, 'first', 2, [300, 300], 400, 300);
+  morph(comp, tgt, srcI);
+  R['image -> image without cross-fade: no opacity keys, the second layer is hidden'] = tgt.transform.opacity.numKeys === 0 && srcI.transform.opacity.numKeys === 0 && tgt.enabled === false;
+  setv('Cross-fade to the second picture', 'true');
+
+  // image -> shape: the mask ends as the shape's outline (a circle: the top point is in the middle)
+  comp = mkComp();
+  const circ = shapeL(comp, 'circle', 1, 'ellipse', [1000, 500], [200, 200]), srcP = imgL(comp, 'photo', 2, [300, 300], 400, 300);
+  morph(comp, circ, srcP);
+  mk = srcP.property('ADBE Mask Parade').children[0].property('ADBE Mask Shape');
+  const end = mk.keys[1].v.vertices[0];
+  R['image -> shape (circle): the mask ends round: its first point is the top middle of the picture'] = near(end[0], 200) && near(end[1], 0) && near(mk.keys[1].v.vertices[2][0], 350) && circ.enabled === false;
+  R['image -> shape: the picture is not faded'] = srcP.transform.opacity.numKeys === 0;
+
+  // bad selections
+  comp = mkComp(); const one = imgL(comp, 'x', 1, [0, 0], 10, 10); let alerts = 0; comp.selectedLayers = [one];
+  const before = srcP.transform.position.numKeys; B.click(byLabel('Morph').id);
+  R['one layer selected: nothing changes'] = one.property('ADBE Mask Parade').children.length === 0;
+  app.project.activeItem = null;
+  const bad = Object.keys(R).filter(k2 => !R[k2]);
+  console.log(`shape morph (shape / image): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
 // Transcript editor: list the captions, apply edited words and times, splits, joins and empty captions
 {
   const B = $g.global.RuBridge, R = {};
