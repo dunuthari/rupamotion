@@ -901,6 +901,16 @@
       }
       return [n];
     }
+    if (item.k === "s") {   // a draggable slider: the real value is v / div
+      var shown = function (v) { return (Math.round(v) / item.div).toFixed(item.dec) + item.unit; };
+      n = el("input", { type: "range", min: String(item.min), max: String(item.max), step: "1", value: String(item.v), title: item.tip || "", "aria-label": item.label || "slider" });
+      n.style.cssText = "width:100%;min-width:120px;flex:1;accent-color:var(--primary)";
+      var lab = el("span", { class: "cs-val", text: shown(item.v) });
+      n.addEventListener("input", function () { lab.textContent = shown(+n.value); });
+      n.addEventListener("change", function () { sendSet(item, n.value); });
+      ctlMap[item.id] = { item: item, node: n, label: lab, shown: shown };
+      return [n, lab];
+    }
     if (item.k === "d") {
       n = el("select", { title: item.tip || "", "aria-label": item.label || "choice" });
       item.items.forEach(function (t, i) { var o = el("option", { value: String(i), text: t }); if (i === item.sel) o.selected = true; n.appendChild(o); });
@@ -1348,6 +1358,7 @@
             var m = ctlMap[it.id]; if (!m) return;
             if (it.k === "f") { if (document.activeElement !== m.node) { m.node.value = it.v; } if (m.swatch && isHex(it.v)) m.swatch.value = it.v; }
             else if (it.k === "d") { m.node.value = String(it.sel); }
+            else if (it.k === "s") { if (document.activeElement !== m.node) { m.node.value = String(it.v); m.label.textContent = m.shown(it.v); } }
             else if (it.k === "t") { m.node.setAttribute("aria-checked", String(!!it.v)); }
             else if (it.k === "b") {
               if (m.node.classList.contains("flow-tile")) { m.node.setAttribute("aria-pressed", String(it.v === "primary")); }

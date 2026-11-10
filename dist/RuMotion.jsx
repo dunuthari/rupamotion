@@ -851,22 +851,89 @@
         };
     }
 
-    function morphParametric(src, tgt, shp, isRect, t, d) {
+    // ---------------------------------------------------------------------
+    // The morph motion (read from a hand-made morph): four keys on every moving property, then an inertial bounce
+    //   0 s start (Easy Ease) · 0.16 s pull-back, a small step away from the target (Easy Ease) · 0.40 s middle (roving key, keeps the
+    //   speed smooth) · 0.64 s arrival (linear, so it lands at full speed and the bounce carries on).
+    // The bounce is an expression that reads the speed at the last key; Amplitude / Frequency / Decay are slider effects on the layer.
+    // ---------------------------------------------------------------------
+    var MORPH = { pull: 0.06, ant: 0.16, mid: 0.40, end: 0.64, amp: 26, freq: 1.2, decay: 1.0 };
+    var MORPH_FX = { amp: "Ru Morph Amplitude", freq: "Ru Morph Frequency", decay: "Ru Morph Decay" };
+    var MORPH_EXPR = "// Ru Morph Bounce\n" +
+        "var amp=effect(\"" + MORPH_FX.amp + "\")(\"Slider\")/100;\n" +
+        "var freq=effect(\"" + MORPH_FX.freq + "\")(\"Slider\");\n" +
+        "var decay=effect(\"" + MORPH_FX.decay + "\")(\"Slider\");\n" +
+        "var n=0;\n" +
+        "if(numKeys>0){n=nearestKey(time).index;if(key(n).time>time){n--;}}\n" +
+        "if(n>0&&freq>0){\n" +
+        "var t=time-key(n).time;\n" +
+        "var v=velocityAtTime(key(n).time-0.001);\n" +
+        "add(value,mul(v,amp*Math.sin(freq*t*2*Math.PI)/Math.exp(decay*t)/(freq*2*Math.PI)));\n" +
+        "}else{value;}";
+
+    // progress at the four keys: 0, the pull-back, the middle (on the straight line between pull-back and arrival), 1
+    function morphP() { return [0, -MORPH.pull, -MORPH.pull + (1 + MORPH.pull) * (MORPH.mid - MORPH.ant) / (MORPH.end - MORPH.ant), 1]; }
+
+    function morphLerp(a, b, p, mn) {
+        var i, out, v, vs = [], it = [], ot = [];
+        if (a && a.vertices) {                       // a path: blend every point (two paths with different point counts cannot blend)
+            if (a.vertices.length !== b.vertices.length) { return p < 0.5 ? a : b; }
+            for (i = 0; i < a.vertices.length; i++) {
+                vs.push([a.vertices[i][0] + (b.vertices[i][0] - a.vertices[i][0]) * p, a.vertices[i][1] + (b.vertices[i][1] - a.vertices[i][1]) * p]);
+                it.push([a.inTangents[i][0] + (b.inTangents[i][0] - a.inTangents[i][0]) * p, a.inTangents[i][1] + (b.inTangents[i][1] - a.inTangents[i][1]) * p]);
+                ot.push([a.outTangents[i][0] + (b.outTangents[i][0] - a.outTangents[i][0]) * p, a.outTangents[i][1] + (b.outTangents[i][1] - a.outTangents[i][1]) * p]);
+            }
+            return makeShape(vs, it, ot, b.closed);
+        }
+        if (a instanceof Array) {
+            out = [];
+            for (i = 0; i < a.length; i++) { v = a[i] + (b[i] - a[i]) * p; if (mn !== undefined && v < mn) { v = mn; } out.push(v); }
+            return out;
+        }
+        v = a + (b - a) * p;
+        return (mn !== undefined && v < mn) ? mn : v;
+    }
+
+    // the four keys on one property; o.expr adds the bounce (not for paths, which have no speed), o.min keeps sizes from going negative
+    function morphKeyed(prop, t, v0, v1, o) {
+        o = o || {};
+        var P = morphP(), T = [t, t + MORPH.ant, t + MORPH.mid, t + MORPH.end], pairs = [], eases = [], i;
+        for (i = 0; i < 4; i++) { pairs.push([T[i], morphLerp(v0, v1, P[i], o.min)]); eases.push([33, 33]); }
+        setKeys(prop, pairs, { eases: eases });
+        try { prop.setRovingAtKey(3, true); } catch (e0) {}
+        try { prop.setInterpolationTypeAtKey(4, KeyframeInterpolationType.LINEAR, KeyframeInterpolationType.LINEAR); } catch (e1) {}
+        if (o.expr) { try { prop.expression = MORPH_EXPR; } catch (e2) {} }
+    }
+
+    // Amplitude, Frequency and Decay as slider effects on the layer (drag them in the Effect Controls to change the bounce later)
+    function morphSlider(L, name, val) {
+        var fx = L.property("ADBE Effect Parade"), e = null;
+        try { e = fx.property(name); } catch (e0) {}
+        if (!e) { e = fxAdd(L, "ADBE Slider Control"); if (e) { e.name = name; } }
+        if (e) { try { e.property(1).setValue(val); } catch (e1) {} }
+    }
+    function ensureMorphController(L, o) {
+        morphSlider(L, MORPH_FX.amp, o && o.amp !== undefined ? o.amp : MORPH.amp);
+        morphSlider(L, MORPH_FX.freq, o && o.freq !== undefined ? o.freq : MORPH.freq);
+        morphSlider(L, MORPH_FX.decay, o && o.decay !== undefined ? o.decay : MORPH.decay);
+    }
+
+    function morphParametric(src, tgt, shp, isRect, t) {
         var sizeP = shp.property(isRect ? VN.rectSize : VN.ellipseSize);
         var posP = shp.property(isRect ? VN.rectPos : VN.ellipsePos);
         var chain = getChain(shp), ts = totalScale(chain, src, t), box = shapeCompBox(tgt, t);
         var tPos = layerToGroup(compToLayer(box.center, src, t), chain, t);
         var tSize = [Math.abs(sd(box.size[0], ts[0])), Math.abs(sd(box.size[1], ts[1]))];
-        setKeys(sizeP, [[t, sizeP.valueAtTime(t, false)], [t + d, tSize]], { bounce: true, clamp: true });
-        setKeys(posP, [[t, posP.valueAtTime(t, false)], [t + d, tPos]], { bounce: true });
+        morphKeyed(sizeP, t, sizeP.valueAtTime(t, false), tSize, { expr: true, min: 0 });
+        morphKeyed(posP, t, posP.valueAtTime(t, false), tPos, { expr: true });
         if (isRect) {
             var rP = shp.property(VN.rectRound), r0 = rP.valueAtTime(t, false);
             var r1 = (box.round !== null) ? sd(box.round, (Math.abs(ts[0]) + Math.abs(ts[1])) / 2) : r0;
-            if (r1 !== r0) { setKeys(rP, [[t, r0], [t + d, r1]], { bounce: true, clamp: true }); }
+            if (r1 !== r0) { morphKeyed(rP, t, r0, r1, { expr: true, min: 0 }); }
         }
     }
 
-    function morphPath(src, tgt, pg, t, d) {
+    function morphPath(src, tgt, pg, t) {
         var pathP = pg.property(VN.pathValue), chainA = getChain(pg), tsA = totalScale(chainA, src, t);
         var a = pathP.valueAtTime(t, false), target, i;
         var tp = findFirst(contentsOf(tgt), VN.path);
@@ -898,7 +965,7 @@
             }
             target = makeShape(v2, it2, ot2, a.closed);
         }
-        setKeys(pathP, [[t, a], [t + d, target]], { bounce: true, isShape: true });
+        morphKeyed(pathP, t, a, target, {});
         return target.vertices.length !== a.vertices.length;
     }
 
@@ -915,24 +982,33 @@
         return "image";
     }
 
-    // A picture has no points to move, so a mask morphs instead: the layer's own bounds become the target's box and outline,
-    // the picture moves (and, with fit "fill", scales) with it.
-    function morphImage(src, tgt, o, t, d) {
+    // A picture has no points to move: the whole layer is stretched, moved and rotated onto the second layer's bounds (like the
+    // hand-made morph: non-uniform scale to the target's proportions), and a mask gives it the target's rounded outline.
+    // fit "stretch" (default): the picture is stretched to the target's width and height. "fill": uniform scale that covers the
+    // target box and a mask crops it. "keep": it keeps its size and the mask crops it.
+    function morphImage(src, tgt, o, t) {
         var R = src.sourceRectAtTime(t, false), ls = readLayerTr(src, t), box = shapeCompBox(tgt, t), rc = [R.left + R.width / 2, R.top + R.height / 2];
-        var s0 = [Math.abs(ls.scl[0]) / 100, Math.abs(ls.scl[1]) / 100], s1, k, p1, maskW, maskH, rEnd, ms, mk, mp;
+        var s0 = [Math.abs(ls.scl[0]) / 100, Math.abs(ls.scl[1]) / 100], s1, k, p1, maskW, maskH, rEnd, ms, mk, mp, r0, rT;
         if (o.fit === "keep") { s1 = [s0[0], s0[1]]; }
-        else { k = Math.max(sd(box.size[0], R.width), sd(box.size[1], R.height)); s1 = [k, k]; }
+        else if (o.fit === "fill") { k = Math.max(sd(box.size[0], R.width), sd(box.size[1], R.height)); s1 = [k, k]; }
+        else { s1 = [sd(box.size[0], R.width), sd(box.size[1], R.height)]; }
         p1 = [box.center[0] - (rc[0] - ls.anc[0]) * s1[0], box.center[1] - (rc[1] - ls.anc[1]) * s1[1]];
-        maskW = sd(box.size[0], s1[0]); maskH = sd(box.size[1], s1[1]);
+        if (ls.pos.length > 2) { p1.push(ls.pos[2]); }
+        if (o.fit === "stretch") { maskW = R.width; maskH = R.height; }
+        else { maskW = sd(box.size[0], s1[0]); maskH = sd(box.size[1], s1[1]); }
         if (o.fit === "keep") { maskW = Math.min(maskW, R.width); maskH = Math.min(maskH, R.height); }
         rEnd = (box.round === null) ? 0 : sd(box.round, (s1[0] + s1[1]) / 2);
-        ms = src.property("ADBE Mask Parade");
-        mk = ms.addProperty("ADBE Mask Atom");
-        try { mk.name = "Ru Morph Mask"; } catch (e0) {}
-        mp = mk.property("ADBE Mask Shape");
-        setKeys(mp, [[t, roundRectShape(rc[0], rc[1], R.width, R.height, 0)], [t + d, roundRectShape(rc[0], rc[1], maskW, maskH, rEnd)]], { bounce: true, isShape: true });
-        setKeys(src.transform.scale, [[t, [s0[0] * 100, s0[1] * 100]], [t + d, [s1[0] * 100, s1[1] * 100]]], { bounce: true, clamp: true });
-        setKeys(src.transform.position, [[t, ls.pos], [t + d, p1]], { bounce: true });
+        if (o.fit !== "stretch" || rEnd > 0) {
+            ms = src.property("ADBE Mask Parade");
+            mk = ms.addProperty("ADBE Mask Atom");
+            try { mk.name = "Ru Morph Mask"; } catch (e0) {}
+            mp = mk.property("ADBE Mask Shape");
+            morphKeyed(mp, t, roundRectShape(rc[0], rc[1], R.width, R.height, 0), roundRectShape(rc[0], rc[1], maskW, maskH, rEnd), {});
+        }
+        morphKeyed(src.transform.scale, t, [s0[0] * 100, s0[1] * 100], [s1[0] * 100, s1[1] * 100], { expr: true, min: 0 });
+        morphKeyed(src.transform.position, t, ls.pos, p1, { expr: true });
+        r0 = src.transform.rotation.valueAtTime(t, false); rT = tgt.transform.rotation.valueAtTime(t, false);
+        if (Math.abs(rT - r0) > 0.01) { morphKeyed(src.transform.rotation, t, r0, rT, { expr: true }); }
     }
 
     function doMorph(o) {
@@ -944,19 +1020,19 @@
         }
         var ls = [sel[0], sel[1]].sort(function (a, b) { return a.index - b.index; });
         var src = o.fromLower ? ls[1] : ls[0], tgt = o.fromLower ? ls[0] : ls[1];
-        var t = comp.time, d = animDur(comp), kindA = morphKind(src), kindB = morphKind(tgt), fit = o.fit || "fill";
+        var t = comp.time, d = MORPH.end, kindA = morphKind(src), kindB = morphKind(tgt), fit = o.fit || "stretch";
 
-        ensureBounce(src);
+        ensureMorphController(src, o);
         var mismatch = false;
         if (kindA === "shape") {
             var c = contentsOf(src);
             var rect = findFirst(c, VN.rect), ell = rect ? null : findFirst(c, VN.ellipse);
             var path = (rect || ell) ? null : findFirst(c, VN.path);
-            if (rect) { morphParametric(src, tgt, rect, true, t, d); }
-            else if (ell) { morphParametric(src, tgt, ell, false, t, d); }
-            else { mismatch = morphPath(src, tgt, path, t, d); }
+            if (rect) { morphParametric(src, tgt, rect, true, t); }
+            else if (ell) { morphParametric(src, tgt, ell, false, t); }
+            else { mismatch = morphPath(src, tgt, path, t); }
         } else {
-            morphImage(src, tgt, { fit: fit }, t, d);
+            morphImage(src, tgt, { fit: fit }, t);
         }
 
         // the colour only morphs between two shapes
@@ -965,7 +1041,7 @@
             if (fa && fb) {
                 var ca = fa.property(VN.fillColor);
                 var s0 = ca.valueAtTime(t, false), s1 = fb.property(VN.fillColor).valueAtTime(t, false);
-                if (s0.toString() !== s1.toString()) { setKeys(ca, [[t, s0], [t + d, s1]]); }
+                if (s0.toString() !== s1.toString()) { setKeys(ca, [[t + MORPH.ant, s0], [t + MORPH.mid + 0.1, s1]]); }
             }
         }
 
@@ -16168,6 +16244,22 @@
         return e;
     }
 
+    // Draggable slider with a value label. Integer slider, shown as value / div (so 12 can mean 1.2). Read .get() for the real value.
+    function sliderRow(parent, label, min, max, val, div, unit, dec, tip) {
+        var r = row(parent, label), s = r.add("slider", undefined, val, min, max), lbl = r.add("statictext", undefined, "");
+        s.minvalue = min; s.maxvalue = max; s.value = val;
+        s.ruDiv = div; s.ruUnit = unit; s.ruDec = dec;
+        s.preferredSize.width = 150;
+        lbl.preferredSize.width = 54; lbl.ruValueLabel = true;
+        setFg(lbl, DS.hint);
+        function show() { lbl.text = (Math.round(s.value) / div).toFixed(dec) + unit; }
+        s.onChanging = show; s.onChange = show;
+        s.get = function () { return Math.round(s.value) / div; };
+        if (tip) { s.helpTip = tip; }
+        show();
+        return s;
+    }
+
     function drop(parent, label, items, sel, tip) {
         var d = row(parent, label).add("dropdownlist", undefined, items);
         d.selection = sel || 0;
@@ -17041,14 +17133,21 @@
     feature("Animate", "Shape morph", function (p) {
         hint(p, "Select 2 layers, playhead at the start. Each can be a shape or a picture (image, footage, solid, text): the plugin works out which is which, so shape to shape, shape to image, image to image and image to shape all work.");
         var from = drop(p, "Morph from:", ["Lower layer", "Upper layer"], 0, "Lower layer = the layer at the bottom of the two.");
-        var fit = drop(p, "Picture in the new shape:", ["Fill the new shape", "Keep its size"], 0, "Fill: the picture scales to cover the new shape. Keep: it keeps its size and the new shape crops it.");
+        var fit = drop(p, "Picture in the new shape:", ["Stretch to the new shape", "Fill the new shape", "Keep its size"], 0, "Stretch: the picture takes the second layer's width and height. Fill: it scales to cover the new shape and is cropped. Keep: it keeps its size and is cropped.");
         var fade = check(p, "Cross-fade to the second picture", true, "When the second layer is a picture: the first one fades into it. Off: the first picture stays and the second layer is hidden.");
         var colr = check(p, "Morph fill color", true, "Between two shapes.");
         var hide = check(p, "Hide target layer", true, "Hides the second layer when it is a shape. A second picture always fades in.");
         var pre = check(p, "Put morph in a new composition", true);
+        var bo = subPanel(p, "Bounce");
+        hint(bo, "How the morph settles after it lands. The same three sliders are on the layer as effects, so you can change them later.");
+        var amp = sliderRow(bo, "Amplitude:", 0, 200, 26, 1, " %", 0, "How far it swings past the target.");
+        var frq = sliderRow(bo, "Frequency:", 5, 60, 12, 10, "", 2, "How fast it swings (swings per second).");
+        var dec = sliderRow(bo, "Decay (sec):", 2, 40, 10, 10, "", 2, "How quickly the swinging fades out.");
         btn(p, "Morph", function () {
             run("Shape morph", function () {
-                doMorph({ fromLower: from.selection.index === 0, fit: fit.selection.index === 1 ? "keep" : "fill", fade: fade.value, color: colr.value, hide: hide.value, precomp: pre.value });
+                var fi = fit.selection.index;
+                doMorph({ fromLower: from.selection.index === 0, fit: fi === 1 ? "fill" : (fi === 2 ? "keep" : "stretch"), fade: fade.value, color: colr.value, hide: hide.value, precomp: pre.value,
+                    amp: amp.get(), freq: frq.get(), decay: dec.get() });
             });
         });
     });
@@ -18166,6 +18265,7 @@
             for (i = 0; i < c.items.length; i++) { its.push(c.items[i].text); }
             return { k: "d", id: brId(c), label: label, items: its, sel: c.selection ? c.selection.index : 0, tip: c.helpTip || "" };
         }
+        if (t === "slider") { return { k: "s", id: brId(c), label: label, v: c.value, min: c.minvalue, max: c.maxvalue, div: c.ruDiv || 1, unit: c.ruUnit || "", dec: c.ruDec || 0, tip: c.helpTip || "" }; }
         if (t === "button") {
             if (c.isSwatch) { return null; }
             if (typeof c.value === "boolean") { return { k: "t", id: brId(c), text: c.text, v: c.value, tip: c.helpTip || "" }; }
@@ -18179,7 +18279,7 @@
         var k, c, it;
         for (k = 0; k < g.children.length; k++) {
             c = g.children[k];
-            if (c.type === "statictext") { st.label = c.text; continue; }
+            if (c.type === "statictext") { if (!c.ruValueLabel) { st.label = c.text; } continue; }
             if (c.type === "group") { brLeaves(c, items, st); continue; }
             it = brItem(c, st.label);
             if (it) { items.push(it); st.label = ""; }
@@ -18227,6 +18327,7 @@
                     var c = BR.ctl[id];
                     if (c.type === "edittext") { c.text = String(value); if (c.onChange) { c.onChange(); } }
                     else if (c.type === "dropdownlist") { c.selection = Number(value); if (c.onChange) { c.onChange(); } }
+                    else if (c.type === "slider") { c.value = Math.max(c.minvalue, Math.min(c.maxvalue, Number(value))); if (c.onChange) { c.onChange(); } }
                     else if (typeof c.value === "boolean") { c.value = (String(value) === "true"); if (c.onToggle) { c.onToggle(); } }
                     return "ok";
                 } catch (e) { return "err: " + e; }

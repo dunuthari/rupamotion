@@ -186,6 +186,22 @@
         return e;
     }
 
+    // Draggable slider with a value label. Integer slider, shown as value / div (so 12 can mean 1.2). Read .get() for the real value.
+    function sliderRow(parent, label, min, max, val, div, unit, dec, tip) {
+        var r = row(parent, label), s = r.add("slider", undefined, val, min, max), lbl = r.add("statictext", undefined, "");
+        s.minvalue = min; s.maxvalue = max; s.value = val;
+        s.ruDiv = div; s.ruUnit = unit; s.ruDec = dec;
+        s.preferredSize.width = 150;
+        lbl.preferredSize.width = 54; lbl.ruValueLabel = true;
+        setFg(lbl, DS.hint);
+        function show() { lbl.text = (Math.round(s.value) / div).toFixed(dec) + unit; }
+        s.onChanging = show; s.onChange = show;
+        s.get = function () { return Math.round(s.value) / div; };
+        if (tip) { s.helpTip = tip; }
+        show();
+        return s;
+    }
+
     function drop(parent, label, items, sel, tip) {
         var d = row(parent, label).add("dropdownlist", undefined, items);
         d.selection = sel || 0;
@@ -1059,14 +1075,21 @@
     feature("Animate", "Shape morph", function (p) {
         hint(p, "Select 2 layers, playhead at the start. Each can be a shape or a picture (image, footage, solid, text): the plugin works out which is which, so shape to shape, shape to image, image to image and image to shape all work.");
         var from = drop(p, "Morph from:", ["Lower layer", "Upper layer"], 0, "Lower layer = the layer at the bottom of the two.");
-        var fit = drop(p, "Picture in the new shape:", ["Fill the new shape", "Keep its size"], 0, "Fill: the picture scales to cover the new shape. Keep: it keeps its size and the new shape crops it.");
+        var fit = drop(p, "Picture in the new shape:", ["Stretch to the new shape", "Fill the new shape", "Keep its size"], 0, "Stretch: the picture takes the second layer's width and height. Fill: it scales to cover the new shape and is cropped. Keep: it keeps its size and is cropped.");
         var fade = check(p, "Cross-fade to the second picture", true, "When the second layer is a picture: the first one fades into it. Off: the first picture stays and the second layer is hidden.");
         var colr = check(p, "Morph fill color", true, "Between two shapes.");
         var hide = check(p, "Hide target layer", true, "Hides the second layer when it is a shape. A second picture always fades in.");
         var pre = check(p, "Put morph in a new composition", true);
+        var bo = subPanel(p, "Bounce");
+        hint(bo, "How the morph settles after it lands. The same three sliders are on the layer as effects, so you can change them later.");
+        var amp = sliderRow(bo, "Amplitude:", 0, 200, 26, 1, " %", 0, "How far it swings past the target.");
+        var frq = sliderRow(bo, "Frequency:", 5, 60, 12, 10, "", 2, "How fast it swings (swings per second).");
+        var dec = sliderRow(bo, "Decay (sec):", 2, 40, 10, 10, "", 2, "How quickly the swinging fades out.");
         btn(p, "Morph", function () {
             run("Shape morph", function () {
-                doMorph({ fromLower: from.selection.index === 0, fit: fit.selection.index === 1 ? "keep" : "fill", fade: fade.value, color: colr.value, hide: hide.value, precomp: pre.value });
+                var fi = fit.selection.index;
+                doMorph({ fromLower: from.selection.index === 0, fit: fi === 1 ? "fill" : (fi === 2 ? "keep" : "stretch"), fade: fade.value, color: colr.value, hide: hide.value, precomp: pre.value,
+                    amp: amp.get(), freq: frq.get(), decay: dec.get() });
             });
         });
     });
@@ -2184,6 +2207,7 @@
             for (i = 0; i < c.items.length; i++) { its.push(c.items[i].text); }
             return { k: "d", id: brId(c), label: label, items: its, sel: c.selection ? c.selection.index : 0, tip: c.helpTip || "" };
         }
+        if (t === "slider") { return { k: "s", id: brId(c), label: label, v: c.value, min: c.minvalue, max: c.maxvalue, div: c.ruDiv || 1, unit: c.ruUnit || "", dec: c.ruDec || 0, tip: c.helpTip || "" }; }
         if (t === "button") {
             if (c.isSwatch) { return null; }
             if (typeof c.value === "boolean") { return { k: "t", id: brId(c), text: c.text, v: c.value, tip: c.helpTip || "" }; }
@@ -2197,7 +2221,7 @@
         var k, c, it;
         for (k = 0; k < g.children.length; k++) {
             c = g.children[k];
-            if (c.type === "statictext") { st.label = c.text; continue; }
+            if (c.type === "statictext") { if (!c.ruValueLabel) { st.label = c.text; } continue; }
             if (c.type === "group") { brLeaves(c, items, st); continue; }
             it = brItem(c, st.label);
             if (it) { items.push(it); st.label = ""; }
@@ -2245,6 +2269,7 @@
                     var c = BR.ctl[id];
                     if (c.type === "edittext") { c.text = String(value); if (c.onChange) { c.onChange(); } }
                     else if (c.type === "dropdownlist") { c.selection = Number(value); if (c.onChange) { c.onChange(); } }
+                    else if (c.type === "slider") { c.value = Math.max(c.minvalue, Math.min(c.maxvalue, Number(value))); if (c.onChange) { c.onChange(); } }
                     else if (typeof c.value === "boolean") { c.value = (String(value) === "true"); if (c.onToggle) { c.onToggle(); } }
                     return "ok";
                 } catch (e) { return "err: " + e; }
