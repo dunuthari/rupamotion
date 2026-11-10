@@ -904,6 +904,9 @@
 
     // A layer is a "shape" when it is a shape layer with a rectangle, ellipse or path to move; everything else (pictures, footage,
     // solids, pre-comps, text, shape layers with other content) is an "image": it is morphed with a mask.
+    // shape and text layers are not `instanceof AVLayer` in After Effects (only footage, solids and pre-comps are), so check all three
+    function isMorphLayer(L) { return (L instanceof ShapeLayer) || (L instanceof TextLayer) || (L instanceof AVLayer); }
+
     function morphKind(L) {
         if (L instanceof ShapeLayer) {
             var c = contentsOf(L);
@@ -935,7 +938,7 @@
     function doMorph(o) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = comp.selectedLayers;
-        if (sel.length !== 2 || !(sel[0] instanceof AVLayer) || !(sel[1] instanceof AVLayer)) {
+        if (sel.length !== 2 || !isMorphLayer(sel[0]) || !isMorphLayer(sel[1])) {
             alert("Select exactly 2 layers (shapes, pictures, footage, solids or text): the layer to morph and the layer it should become.", NAME);
             return;
         }

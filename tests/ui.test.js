@@ -1252,7 +1252,7 @@ function buildTextIcon(sentence, atIndex, opts) {
 // Shape morph: shape/image in any combination (shapes morph their points, pictures get a mask)
 {
   const B = $g.global.RuBridge, R = {};
-  g.ShapeLayer.prototype = Object.create(g.AVLayer.prototype);
+  // like After Effects: shape and text layers are NOT instanceof AVLayer
   const meta = JSON.parse(B.meta()), fi = meta.features.find(f => f.name === 'Shape morph').i;
   const items = () => { const out = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => out.push(i)); }); })(JSON.parse(B.feature(fi))); return out; };
   const byLabel = (label) => items().find(i => (i.label || i.text) === label);
@@ -1325,6 +1325,16 @@ function buildTextIcon(sentence, atIndex, opts) {
   const end = mk.keys[1].v.vertices[0];
   R['image -> shape (circle): the mask ends round: its first point is the top middle of the picture'] = near(end[0], 200) && near(end[1], 0) && near(mk.keys[1].v.vertices[2][0], 350) && circ.enabled === false;
   R['image -> shape: the picture is not faded'] = srcP.transform.opacity.numKeys === 0;
+
+  // text layers count as pictures; text is not instanceof AVLayer either
+  comp = mkComp();
+  const txt = comp.layers.addText('Hello'); Object.setPrototypeOf(txt, g.TextLayer.prototype); txt.name = 'words'; txt.index = 2; txt.transform.position.value = [300, 300];
+  txt.sourceRectAtTime = () => ({ left: 0, top: -40, width: 200, height: 50 });
+  const tgtShape = shapeL(comp, 'box', 1, 'rect', [1000, 500], [300, 100], 20);
+  R['shape layers are not instanceof AVLayer (as in After Effects)'] = !(tgtShape instanceof g.AVLayer) && !(txt instanceof g.AVLayer);
+  morph(comp, tgtShape, txt);
+  R['text -> shape: the text gets a mask and scale/position keys'] = txt.property('ADBE Mask Parade').children.length === 1 && txt.transform.scale.numKeys === 2;
+  R['two shape layers are accepted (the reported bug)'] = (() => { const c2 = mkComp(); const a = shapeL(c2, 'a', 1, 'ellipse', [900, 300], [150, 150]), b = shapeL(c2, 'b', 2, 'rect', [200, 300], [100, 160], 0); morph(c2, a, b); return b.property('ADBE Root Vectors Group').children[0].property('ADBE Vector Rect Size').numKeys === 2; })();
 
   // bad selections
   comp = mkComp(); const one = imgL(comp, 'x', 1, [0, 0], 10, 10); let alerts = 0; comp.selectedLayers = [one];
