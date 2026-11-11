@@ -719,7 +719,7 @@
         chips.appendChild(el("button", { class: "chip", type: "button", role: "tab", text: x.name, title: x.name, "aria-selected": String(x.name === top), onclick: function () { pick(g, x.name); } }));
       });
       if (kids.length) {
-        var sub = el("div", { class: "chips", style: "grid-column:1/-1;margin-top:4px;padding-top:10px;border-top:1px solid var(--hairline)" });
+        var sub = el("div", { class: "chips chips-sub", style: "grid-column:1/-1" });
         [top].concat(kids.map(function (k) { return k.name; })).forEach(function (nm) {
           sub.appendChild(el("button", { class: "chip", type: "button", role: "tab", text: nm, title: nm, "aria-selected": String(nm === f.name), onclick: function () { pick(g, nm); } }));
         });

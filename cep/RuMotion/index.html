@@ -110,15 +110,18 @@
   /* Feature chips */
   /* fixed-height area with its own scrollbar, like the panel's viewport */
   .content.scroll { height: 476px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
-  .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  /* feature tabs: one segmented control, the open segment is raised */
+  .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--card); border: 1px solid var(--hairline); border-radius: 10px; padding: 3px; }
   .chips[hidden] { display: none; }
   .chip {
-    appearance: none; font: inherit; font-size: 12px; cursor: pointer;
-    height: 28px; padding: 0 10px; border-radius: 999px;
-    border: 1px solid var(--hairline); background: var(--card); color: var(--label);
+    appearance: none; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    height: 28px; padding: 0 8px; border-radius: 7px;
+    border: none; background: transparent; color: var(--hint);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .chip[aria-selected="true"] { background: var(--tint); border-color: var(--tint); color: var(--primary); font-weight: 700; }
+  .chips-sub { margin: 2px -3px -3px; border-radius: 0 0 8px 8px; border-width: 1px 0 0; background: var(--surface); }
+  .chip:hover { color: var(--text); }
+  .chip[aria-selected="true"] { background: var(--surface); color: var(--primary); box-shadow: 0 1px 0 rgba(0,0,0,.4), 0 0 0 1px var(--hairline); }
 
   /* Form rows */
   .row { display: grid; grid-template-columns: 116px 1fr; align-items: center; gap: 6px; min-height: 30px; }
@@ -1533,7 +1536,7 @@
         chips.appendChild(el("button", { class: "chip", type: "button", role: "tab", text: x.name, title: x.name, "aria-selected": String(x.name === top), onclick: function () { pick(g, x.name); } }));
       });
       if (kids.length) {
-        var sub = el("div", { class: "chips", style: "grid-column:1/-1;margin-top:4px;padding-top:10px;border-top:1px solid var(--hairline)" });
+        var sub = el("div", { class: "chips chips-sub", style: "grid-column:1/-1" });
         [top].concat(kids.map(function (k) { return k.name; })).forEach(function (nm) {
           sub.appendChild(el("button", { class: "chip", type: "button", role: "tab", text: nm, title: nm, "aria-selected": String(nm === f.name), onclick: function () { pick(g, nm); } }));
         });
