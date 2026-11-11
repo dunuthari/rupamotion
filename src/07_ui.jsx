@@ -1073,23 +1073,17 @@
     // ---------------- Animation ----------------
 
     feature("Animate", "Shape morph", function (p) {
-        hint(p, "Select 2 layers, playhead at the start. Each can be a shape or a picture (image, footage, solid, text): the plugin works out which is which, so shape to shape, shape to image, image to image and image to shape all work.");
+        hint(p, "Select 2 layers, playhead at the start, then click Morph. Any mix of shapes, pictures, footage, solids and text works. The first layer winds up, swoops over to the second one while taking its size, and the second layer lands in its place with a bounce.");
         var from = drop(p, "Morph from:", ["Lower layer", "Upper layer"], 0, "Lower layer = the layer at the bottom of the two.");
-        var fit = drop(p, "Picture in the new shape:", ["Stretch to the new shape", "Fill the new shape", "Keep its size"], 0, "Stretch: the picture takes the second layer's width and height. Fill: it scales to cover the new shape and is cropped. Keep: it keeps its size and is cropped.");
-        var fade = check(p, "Cross-fade to the second picture", true, "When the second layer is a picture: the first one fades into it. Off: the first picture stays and the second layer is hidden.");
-        var colr = check(p, "Morph fill color", true, "Between two shapes.");
-        var hide = check(p, "Hide target layer", true, "Hides the second layer when it is a shape. A second picture always fades in.");
-        var pre = check(p, "Put morph in a new composition", true);
+        var pre = check(p, "Put morph in a new composition", false);
         var bo = subPanel(p, "Bounce");
-        hint(bo, "How the morph settles after it lands. The same three sliders are on the layer as effects, so you can change them later.");
-        var amp = sliderRow(bo, "Amplitude:", 0, 200, 26, 1, " %", 0, "How far it swings past the target.");
-        var frq = sliderRow(bo, "Frequency:", 5, 60, 12, 10, "", 2, "How fast it swings (swings per second).");
-        var dec = sliderRow(bo, "Decay (sec):", 2, 40, 10, 10, "", 2, "How quickly the swinging fades out.");
+        hint(bo, "How the morph settles after it lands. The same three sliders are on both layers as effects, so you can change them later.");
+        var amp = sliderRow(bo, "Amplitude:", 0, 200, 100, 1, " %", 0, "How strong the bounce is.");
+        var frq = sliderRow(bo, "Frequency:", 5, 60, 15, 10, "", 2, "How fast it swings (swings per second).");
+        var dec = sliderRow(bo, "Decay (sec):", 2, 40, 10, 10, "", 2, "How long the swinging takes to fade out.");
         btn(p, "Morph", function () {
             run("Shape morph", function () {
-                var fi = fit.selection.index;
-                doMorph({ fromLower: from.selection.index === 0, fit: fi === 1 ? "fill" : (fi === 2 ? "keep" : "stretch"), fade: fade.value, color: colr.value, hide: hide.value, precomp: pre.value,
-                    amp: amp.get(), freq: frq.get(), decay: dec.get() });
+                doMorph({ fromLower: from.selection.index === 0, precomp: pre.value, amp: amp.get(), freq: frq.get(), decay: dec.get() });
             });
         });
     });

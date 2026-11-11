@@ -1249,22 +1249,21 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`captions word style: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
-// Shape morph: shape/image in any combination, the four-key motion with pull-back, roving middle, linear arrival and the bounce sliders
+// Shape morph: any two layers; wind-up, swoop, scale dip, stretch, lean, bounce, and a swap at the arrival
 {
   const B = $g.global.RuBridge, R = {};
-  // like After Effects: shape and text layers are NOT instanceof AVLayer
   const meta = JSON.parse(B.meta()), fi = meta.features.find(f => f.name === 'Shape morph').i;
   const items = () => { const out = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => out.push(i)); }); })(JSON.parse(B.feature(fi))); return out; };
   const byLabel = (label) => items().find(i => (i.label || i.text) === label);
   const setv = (label, v) => { const it = byLabel(label); if (!it) throw new Error('no control: ' + label); return B.set(it.id, v); };
   const near = (a, b, e) => Math.abs(a - b) < (e || 1e-6);
   const mkComp = () => { const { comp } = fakeBuild(); app.project.activeItem = comp; comp.time = 1; return comp; };
-  const shapeL = (comp, name, index, kind, pos, size, round) => {
+  const shapeL = (comp, name, index, pos, size) => {
     const L = comp.layers.addShape(); Object.setPrototypeOf(L, g.ShapeLayer.prototype); L.name = name; L.index = index;
-    const r = L.property('ADBE Root Vectors Group').addProperty(kind === 'rect' ? 'ADBE Vector Shape - Rect' : 'ADBE Vector Shape - Ellipse');
-    if (kind === 'rect') { r.property('ADBE Vector Rect Size').value = size; r.property('ADBE Vector Rect Position').value = pos; r.property('ADBE Vector Rect Roundness').value = round || 0; }
-    else { r.property('ADBE Vector Ellipse Size').value = size; r.property('ADBE Vector Ellipse Position').value = pos; }
-    L.sourceRectAtTime = () => ({ left: pos[0] - size[0] / 2, top: pos[1] - size[1] / 2, width: size[0], height: size[1] });
+    const r = L.property('ADBE Root Vectors Group').addProperty('ADBE Vector Shape - Rect');
+    r.property('ADBE Vector Rect Size').value = size; r.property('ADBE Vector Rect Position').value = [0, 0]; r.property('ADBE Vector Rect Roundness').value = 0;
+    L.transform.position.value = pos;
+    L.sourceRectAtTime = () => ({ left: -size[0] / 2, top: -size[1] / 2, width: size[0], height: size[1] });
     return L;
   };
   const imgL = (comp, name, index, pos, w, h) => {
@@ -1275,102 +1274,47 @@ function buildTextIcon(sentence, atIndex, opts) {
   };
   const morph = (comp, a, b) => { comp.selectedLayers = [a, b]; B.click(byLabel('Morph').id); };
   const fxOf = (L, name) => { const fx = L.nodes['ADBE Effect Parade']; return fx && fx.children.find(c => c.name === name); };
-  const reset = () => { setv('Put morph in a new composition', 'false'); setv('Hide target layer', 'true'); setv('Cross-fade to the second picture', 'true'); setv('Picture in the new shape:', '0'); setv('Morph from:', '0'); setv('Amplitude:', '26'); setv('Frequency:', '12'); setv('Decay (sec):', '10'); };
-  reset();
-  const T = [1, 1.16, 1.4, 1.64], PM = -0.06 + 1.06 * (0.24 / 0.48);
-  const keyTimes = (prop) => prop.keys.map(k => k.t);
+  const times = (prop) => prop.keys.map(k => Math.round((k.t - 1) * 100) / 100).join();
+  setv('Put morph in a new composition', 'false'); setv('Morph from:', '0'); setv('Amplitude:', '100'); setv('Frequency:', '15'); setv('Decay (sec):', '10');
 
-  R['the card has a Bounce section with three draggable sliders (Amplitude 26 %, Frequency 1.20, Decay 1.00)'] = ['Amplitude:', 'Frequency:', 'Decay (sec):'].every(l => byLabel(l) && byLabel(l).k === 's')
-    && byLabel('Amplitude:').v === 26 && byLabel('Frequency:').v === 12 && byLabel('Frequency:').div === 10 && byLabel('Decay (sec):').v === 10 && byLabel('Decay (sec):').dec === 2 && byLabel('Amplitude:').unit === ' %';
-  R['slider values travel through the bridge (clamped to their range)'] = (setv('Amplitude:', '999'), byLabel('Amplitude:').v === 200) && (setv('Amplitude:', '26'), byLabel('Amplitude:').v === 26);
+  R['the card has only Morph from, the composition switch and three bounce sliders (100 %, 1.50, 1.00)'] = byLabel('Amplitude:').k === 's' && byLabel('Amplitude:').v === 100 && byLabel('Frequency:').v === 15 && byLabel('Decay (sec):').v === 10
+    && !byLabel('Picture in the new shape:') && !byLabel('Morph fill color') && !byLabel('Hide target layer');
 
-  // shape -> shape
+  // the reference move: 1000 px to the right
   let comp = mkComp();
-  let top = shapeL(comp, 'target', 1, 'rect', [800, 400], [200, 100], 10), low = shapeL(comp, 'source', 2, 'rect', [200, 200], [100, 100], 0);
-  morph(comp, top, low);
-  const rs = low.property('ADBE Root Vectors Group').children[0], sz = rs.property('ADBE Vector Rect Size'), ps = rs.property('ADBE Vector Rect Position');
-  R['four keys on the rectangle size at 0, 0.16, 0.40 and 0.64 s'] = sz.numKeys === 4 && keyTimes(sz).every((x, i) => near(x, T[i])) && ps.numKeys === 4;
-  R['key values: start, a pull-back of 6 % away from the target (width 94), the roving middle on the straight line, the arrival (200)'] = near(sz.keys[0].v[0], 100) && near(sz.keys[1].v[0], 100 + 100 * -0.06) && near(sz.keys[2].v[0], 100 + 100 * PM) && near(sz.keys[3].v[0], 200) && near(ps.keys[3].v[0], 800) && near(ps.keys[1].v[0], 200 + 600 * -0.06);
-  R['easy ease on the first two keys, a roving middle key, a linear arrival'] = sz.keys[0].outT === 'B' && sz.keys[1].inT === 'B' && sz.keys[1].outT === 'B' && sz.keys[3].inT === 'L' && sz.keys[0].out[0].influence === 33;
-  R['the bounce expression reads the three slider effects and the speed at the last key'] = /Ru Morph Bounce/.test(sz.expression) && /effect\("Ru Morph Amplitude"\)\("Slider"\)/.test(sz.expression) && /Ru Morph Frequency/.test(sz.expression) && /Ru Morph Decay/.test(sz.expression) && /velocityAtTime/.test(sz.expression) && !/\bvalue\+/.test(sz.expression) && /add\(value,mul\(v,/.test(sz.expression);
-  R['the slider effects are on the first layer with 26, 1.2 and 1.0'] = fxOf(low, 'Ru Morph Amplitude').property(1).value === 26 && near(fxOf(low, 'Ru Morph Frequency').property(1).value, 1.2) && near(fxOf(low, 'Ru Morph Decay').property(1).value, 1);
-  R['the second layer is hidden and there is no mask'] = top.enabled === false && (!low.nodes['ADBE Mask Parade'] || low.nodes['ADBE Mask Parade'].children.length === 0);
-  setv('Amplitude:', '100'); setv('Frequency:', '15'); setv('Decay (sec):', '20');
-  comp = mkComp(); top = shapeL(comp, 't', 1, 'rect', [800, 400], [200, 100], 10); low = shapeL(comp, 's', 2, 'rect', [200, 200], [100, 100], 0); morph(comp, top, low);
-  R['changed sliders go onto the layer (100 %, 1.5, 2.0)'] = fxOf(low, 'Ru Morph Amplitude').property(1).value === 100 && near(fxOf(low, 'Ru Morph Frequency').property(1).value, 1.5) && near(fxOf(low, 'Ru Morph Decay').property(1).value, 2);
-  reset();
+  const tgt = imgL(comp, 'pin', 1, [1300, 500], 300, 150), src = imgL(comp, 'boy', 2, [300, 500], 400, 300);
+  tgt.transform.rotation.value = 10;
+  morph(comp, tgt, src);
+  const P = src.transform.position, S = src.transform.scale, tr = fxOf(src, 'Ru Morph Transform');
+  R['position: four keys at 0, 0.16, 0.38 and 0.64 s'] = P.numKeys === 4 && times(P) === '0,0.16,0.38,0.64';
+  R['pull-back: 5 % back and 9.1 % to the side (50 px left, 91 px up)'] = near(P.keys[1].v[0], 250) && near(P.keys[1].v[1], 409);
+  R['third key just past the start on the other side (20 % of the pull-back), last key on the second layer\'s centre'] = near(P.keys[2].v[0], 310) && near(P.keys[2].v[1], 518.2) && near(P.keys[3].v[0], 1300) && near(P.keys[3].v[1], 500);
+  R['position eases: quick out of the start (5 %), long ease into and out of the pull-back (90 %), linear arrival'] = P.keys[0].out[0].influence === 5 && P.keys[1].in[0].influence === 90 && P.keys[1].out[0].influence === 90 && P.keys[3].inT === 'L';
+  R['position bounce: amplitude / 2000, decay = 5 / slider, speed just before the key, vector-safe'] = /Ru Morph Amplitude"\)\("Slider"\)\/2000/.test(P.expression) && /decay=5\/dc/.test(P.expression) && /velocityAtTime\(key\(n\)\.time-thisComp\.frameDuration\/10\)/.test(P.expression) && /add\(value,mul\(v,/.test(P.expression);
+  R['scale: 100 -> 80 -> 100 at 0.08, 0.40 and 0.72 s, bounce amplitude / 200'] = times(S) === '0.08,0.4,0.72' && S.keys[0].v[0] === 100 && near(S.keys[1].v[0], 80) && S.keys[2].v[0] === 100 && S.keys[2].inT === 'L' && /\/200;/.test(S.expression);
+  R['layer rotation goes to the second layer\'s rotation (0 -> 10) from 0 to 0.64 s, no bounce'] = times(src.transform.rotation) === '0,0.64' && src.transform.rotation.keys[1].v === 10 && src.transform.rotation.expression === '';
+  R['Transform effect: Scale Width 75 % and Scale Height 50 % (the second layer\'s size) from 0 to 0.64 s, slow start (95 %), no bounce'] = !!tr && times(tr.property(5)) === '0,0.64' && near(tr.property(5).keys[1].v, 75) && near(tr.property(4).keys[1].v, 50) && tr.property(4).keys[0].out[0].influence === 95 && tr.property(4).expression === '';
+  R['Transform effect: lean 0 -> 18 -> 0 degrees at 0.16, 0.48 and 0.80 s with bounce amplitude / 300; anchor and position follow the layer anchor'] = times(tr.property(8)) === '0.16,0.48,0.8' && tr.property(8).keys[1].v === 18 && /\/300;/.test(tr.property(8).expression) && /transform\.anchorPoint/.test(tr.property(1).expression) && /transform\.anchorPoint/.test(tr.property(2).expression) && tr.property(3).value === 0;
+  R['the first layer shows until the arrival key, the second from then on'] = /time<p\.key\(4\)\.time/.test(src.transform.opacity.expression) && /time>=p\.key\(4\)\.time/.test(tgt.transform.opacity.expression);
+  R['the second layer flies the same path and lands on its own position, with the same dip and lean but no stretch'] = tgt.transform.position.numKeys === 4 && near(tgt.transform.position.keys[3].v[0], 1300) && near(tgt.transform.position.keys[1].v[0], 250) && near(tgt.transform.scale.keys[1].v[0], 80)
+    && fxOf(tgt, 'Ru Morph Transform').property(8).keys[1].v === 18 && fxOf(tgt, 'Ru Morph Transform').property(4).numKeys === 0 && tgt.transform.rotation.numKeys === 0;
+  R['both layers get the three slider effects (100, 1.5, 1.0)'] = [src, tgt].every(L => fxOf(L, 'Ru Morph Amplitude').property(1).value === 100 && near(fxOf(L, 'Ru Morph Frequency').property(1).value, 1.5) && near(fxOf(L, 'Ru Morph Decay').property(1).value, 1));
 
-  // shape -> image
+  // moving left mirrors the lean; shapes use comp-space points in the effect
   comp = mkComp();
-  const pic = imgL(comp, 'photo', 1, [1200, 600], 200, 100), shp = shapeL(comp, 'dot', 2, 'ellipse', [300, 300], [80, 80]);
-  morph(comp, pic, shp);
-  const es = shp.property('ADBE Root Vectors Group').children[0];
-  R['shape -> image: the ellipse is keyed to the picture\'s size (200 x 100) and centre (1200, 600)'] = es.property('ADBE Vector Ellipse Size').numKeys === 4 && near(es.property('ADBE Vector Ellipse Size').keys[3].v[0], 200) && near(es.property('ADBE Vector Ellipse Size').keys[3].v[1], 100) && near(es.property('ADBE Vector Ellipse Position').keys[3].v[0], 1200);
-  R['shape -> image: the picture fades in while the shape fades out, and the picture stays visible'] = pic.transform.opacity.keys.length === 3 && pic.transform.opacity.keys[0].v === 0 && pic.transform.opacity.keys[2].v === 100 && shp.transform.opacity.keys[2].v === 0 && pic.enabled !== false;
+  const a = shapeL(comp, 'target', 1, [200, 300], [100, 100]), b = shapeL(comp, 'source', 2, [900, 300], [200, 100]);
+  morph(comp, a, b);
+  R['two shape layers are accepted; moving left leans the other way (-18) and winds up downwards'] = b.transform.position.numKeys === 4 && fxOf(b, 'Ru Morph Transform').property(8).keys[1].v === -18 && b.transform.position.keys[1].v[1] > 300 && near(fxOf(b, 'Ru Morph Transform').property(5).keys[1].v, 50);
+  R['shape layers: the effect anchor is given in comp space'] = /thisLayer\.toComp\(transform\.anchorPoint\)/.test(fxOf(b, 'Ru Morph Transform').property(1).expression);
+  morph(comp, a, b);
+  R['a second Morph does not stack effects'] = b.nodes['ADBE Effect Parade'].children.filter(c => c.name === 'Ru Morph Transform').length === 1 && b.nodes['ADBE Effect Parade'].children.filter(c => c.name === 'Ru Morph Amplitude').length === 1;
 
-  // image -> image, stretch (default): non-uniform scale to the target's proportions, no mask
-  comp = mkComp();
-  let tgt = imgL(comp, 'second', 1, [1200, 600], 200, 100), srcI = imgL(comp, 'first', 2, [300, 300], 400, 300);
-  morph(comp, tgt, srcI);
-  R['image -> image (stretch): scale ends at 50 % wide and 33.3 % high (the target\'s proportions), four keys with the bounce'] = srcI.transform.scale.numKeys === 4 && near(srcI.transform.scale.keys[3].v[0], 50) && near(srcI.transform.scale.keys[3].v[1], 100 / 3, 1e-4) && /Ru Morph Bounce/.test(srcI.transform.scale.expression);
-  R['image -> image (stretch): the picture lands on the target\'s centre, with a pull-back key first'] = near(srcI.transform.position.keys[3].v[0], 1200) && near(srcI.transform.position.keys[3].v[1], 600) && near(srcI.transform.position.keys[1].v[0], 300 + 900 * -0.06) && /Ru Morph Bounce/.test(srcI.transform.position.expression);
-  R['image -> image (stretch): no mask is needed'] = !srcI.nodes['ADBE Mask Parade'] || srcI.nodes['ADBE Mask Parade'].children.length === 0;
-  R['image -> image: cross-fade (second in, first out); the second picture stays on'] = tgt.transform.opacity.keys[0].v === 0 && tgt.transform.opacity.keys[2].v === 100 && srcI.transform.opacity.keys[2].v === 0 && tgt.enabled !== false;
-  R['image -> image: rotation untouched when both are straight'] = srcI.transform.rotation.numKeys === 0;
-
-  // rotation follows the second layer
-  comp = mkComp(); tgt = imgL(comp, 'second', 1, [1200, 600], 200, 100); tgt.transform.rotation.value = 10; srcI = imgL(comp, 'first', 2, [300, 300], 400, 300);
-  morph(comp, tgt, srcI);
-  R['rotation: four keys from 0 to the second layer\'s 10 degrees'] = srcI.transform.rotation.numKeys === 4 && near(srcI.transform.rotation.keys[0].v, 0) && near(srcI.transform.rotation.keys[3].v, 10) && near(srcI.transform.rotation.keys[1].v, -0.6);
-
-  // fill: uniform, mask crops
-  setv('Picture in the new shape:', '1');
-  comp = mkComp(); tgt = imgL(comp, 'second', 1, [1200, 600], 200, 100); srcI = imgL(comp, 'first', 2, [300, 300], 400, 300);
-  morph(comp, tgt, srcI);
-  let mask = srcI.property('ADBE Mask Parade').children[0], mk = mask.property('ADBE Mask Shape');
-  R['image -> image (fill): scale ends at 50 % (covers 200 x 100) on the target\'s centre; the mask has four keys'] = near(srcI.transform.scale.keys[3].v[0], 50) && mask.name === 'Ru Morph Mask' && mk.numKeys === 4 && near(srcI.transform.position.keys[3].v[0], 1200);
-  R['image -> image (fill): the mask ends as the target\'s box in the picture\'s own space (400 x 200)'] = near(mk.keys[3].v.vertices[0][0], 0) && near(mk.keys[3].v.vertices[0][1], 50) && near(mk.keys[0].v.vertices[0][0], 0) && near(mk.keys[0].v.vertices[1][0], 400);
-  R['the mask path has no bounce expression (paths have no speed)'] = mk.expression === '';
-
-  // keep its size
-  setv('Picture in the new shape:', '2');
-  comp = mkComp(); tgt = imgL(comp, 'second', 1, [1200, 600], 200, 100); srcI = imgL(comp, 'first', 2, [300, 300], 400, 300);
-  morph(comp, tgt, srcI); mk = srcI.property('ADBE Mask Parade').children[0].property('ADBE Mask Shape');
-  R['image -> image (keep its size): scale stays 100 %, the picture moves to the target\'s centre, the mask crops it to 200 x 100'] = near(srcI.transform.scale.keys[3].v[0], 100) && near(srcI.transform.position.keys[3].v[0], 1200) && near(mk.keys[3].v.vertices[0][0], 100) && near(mk.keys[3].v.vertices[0][1], 100);
-  setv('Picture in the new shape:', '0');
-
-  // cross-fade off
-  setv('Cross-fade to the second picture', 'false');
-  comp = mkComp(); tgt = imgL(comp, 'second', 1, [1200, 600], 200, 100); srcI = imgL(comp, 'first', 2, [300, 300], 400, 300);
-  morph(comp, tgt, srcI);
-  R['image -> image without cross-fade: no opacity keys, the second layer is hidden'] = tgt.transform.opacity.numKeys === 0 && srcI.transform.opacity.numKeys === 0 && tgt.enabled === false;
-  setv('Cross-fade to the second picture', 'true');
-
-  // image -> shape: stretch to the circle's box, the mask rounds it
-  comp = mkComp();
-  const circ = shapeL(comp, 'circle', 1, 'ellipse', [1000, 500], [200, 200]), srcP = imgL(comp, 'photo', 2, [300, 300], 400, 300);
-  morph(comp, circ, srcP);
-  mk = srcP.property('ADBE Mask Parade').children[0].property('ADBE Mask Shape');
-  R['image -> shape (circle): stretched to 50 % x 66.7 %, the mask ends round (rounded to the full height of the picture)'] = near(srcP.transform.scale.keys[3].v[0], 50) && near(srcP.transform.scale.keys[3].v[1], 200 / 3, 1e-4) && mk.numKeys === 4 && near(mk.keys[3].v.vertices[0][0], 150) && near(mk.keys[3].v.vertices[0][1], 0) && circ.enabled === false;
-  R['image -> shape: the picture is not faded'] = srcP.transform.opacity.numKeys === 0;
-
-  // text, two shapes
-  comp = mkComp();
-  const txt = comp.layers.addText('Hello'); Object.setPrototypeOf(txt, g.TextLayer.prototype); txt.name = 'words'; txt.index = 2; txt.transform.position.value = [300, 300];
-  txt.sourceRectAtTime = () => ({ left: 0, top: -40, width: 200, height: 50 });
-  const tgtShape = shapeL(comp, 'box', 1, 'rect', [1000, 500], [300, 100], 20);
-  R['shape and text layers are not instanceof AVLayer (as in After Effects)'] = !(tgtShape instanceof g.AVLayer) && !(txt instanceof g.AVLayer);
-  morph(comp, tgtShape, txt);
-  R['text -> shape: the text is stretched onto the box and gets a rounded mask'] = txt.property('ADBE Mask Parade').children.length === 1 && txt.transform.scale.numKeys === 4;
-  R['two shape layers are accepted'] = (() => { const c2 = mkComp(); const a = shapeL(c2, 'a', 1, 'ellipse', [900, 300], [150, 150]), b = shapeL(c2, 'b', 2, 'rect', [200, 300], [100, 160], 0); morph(c2, a, b); return b.property('ADBE Root Vectors Group').children[0].property('ADBE Vector Rect Size').numKeys === 4; })();
-
-  // bad selections
   comp = mkComp(); const one = imgL(comp, 'x', 1, [0, 0], 10, 10); comp.selectedLayers = [one];
   B.click(byLabel('Morph').id);
-  R['one layer selected: nothing changes'] = one.property('ADBE Mask Parade').children.length === 0 && one.transform.position.numKeys === 0;
+  R['one layer selected: nothing changes'] = one.transform.position.numKeys === 0;
   app.project.activeItem = null;
   const bad = Object.keys(R).filter(k2 => !R[k2]);
-  console.log(`shape morph (shape / image): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+  console.log(`shape morph: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
 // Transcript editor: list the captions, apply edited words and times, splits, joins and empty captions
