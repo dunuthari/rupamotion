@@ -210,11 +210,28 @@
 
     function animDur(comp) { return num(style.duration, 18, 2, 600) * comp.frameDuration; }
 
+    // Order of the selected layers for staggered tools: 0 top to bottom (layer index), 1 bottom to top, 2 selection order,
+    // 3 left to right (comp position). Set for one call by withOrder(); the default is top to bottom.
+    var SEL_ORDER = 0;
+    var ORDER_LABELS = ["Top to bottom", "Bottom to top", "Selection order", "Left to right"];
+    function withOrder(mode, fn) { var prev = SEL_ORDER; SEL_ORDER = mode; try { fn(); } finally { SEL_ORDER = prev; } }
+    function orderLayers(list, mode) {
+        if (mode === 2 || list.length < 2) { return list; }
+        var keyed = [], i;
+        for (i = 0; i < list.length; i++) {
+            var L = list[i], k = L.index;
+            if (mode === 3) { try { k = compBounds(L, 0).left; } catch (e) { try { k = L.transform.position.value[0]; } catch (e2) {} } }
+            keyed.push({ k: k, n: i, L: L });
+        }
+        keyed.sort(function (a, b) { return (a.k - b.k) * (mode === 1 ? -1 : 1) || (a.n - b.n); });
+        for (i = 0; i < keyed.length; i++) { list[i] = keyed[i].L; }
+        return list;
+    }
     function selLayers(comp, min, msg) {
         var s = comp.selectedLayers, out = [];
         if (s.length < min) { alert(msg, NAME); return null; }
         for (var i = 0; i < s.length; i++) { out.push(s[i]); }
-        return out;
+        return orderLayers(out, SEL_ORDER);
     }
 
     function stamp(comp) { return String(comp.numLayers + 1); }

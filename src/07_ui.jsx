@@ -735,6 +735,23 @@
             ["Smart Null", function () { run("Smart Null", doSmartNull); }, "50×50 null at the comp center (or the selection's center), parents selected layers"]
         ]);
 
+        var an = subPanel(p, "Anchor point");
+        var anKf = drop(an, "If keyframed:", ["Insert keyframe at playhead", "Move all keyframes"], 0, "What to do when the anchor or position already has keyframes.");
+        (function () {
+            var marks = [["\u2196", 0, 0, "top left"], ["\u2191", 0.5, 0, "top"], ["\u2197", 1, 0, "top right"],
+                ["\u2190", 0, 0.5, "left"], ["\u2022", 0.5, 0.5, "centre"], ["\u2192", 1, 0.5, "right"],
+                ["\u2199", 0, 1, "bottom left"], ["\u2193", 0.5, 1, "bottom"], ["\u2198", 1, 1, "bottom right"]];
+            var row3 = null, i;
+            for (i = 0; i < marks.length; i++) {
+                if (i % 3 === 0) { row3 = btnRow(an); }
+                (function (m) {
+                    btn(row3, m[0], function () { run("Anchor " + m[3], function () { doAnchor(m[1], m[2], anKf.selection.index); }); },
+                        "Anchor point to the " + m[3] + " of the layer. The layer stays where it is on screen.", "secondary");
+                })(marks[i]);
+            }
+        })();
+        hint(an, "Selected layers keep their place; only the pivot moves.");
+
         var dup = subPanel(p, "Smart Duplicate");
         var dupN = field(dup, "Copies:", "1", 4);
         var dupMode = drop(dup, "Precomp copies:", ["Linked — edits affect all", "Independent — own comp"], 1,
@@ -775,26 +792,31 @@
             "How far animations overshoot before settling.\n5 = subtle, 10 = default, 30 = very springy.");
         bPct.onChange = function () { bPct.text = String(num(bPct.text, 10, 1, 60)); putS("quick_bounce_pct", bPct.text); };
         var dist = field(p, "Slide distance (px):", "200", 5);
+        var many = subPanel(p, "Several layers");
+        var stg = field(many, "Stagger (frames):", "0", 4, "With several layers selected, each one starts this many frames after the previous. 0 = all at once.");
+        var ord = drop(many, "Order:", ORDER_LABELS, 0, "Which layer goes first.");
+        hint(many, "Applies to In, Out and Move below.");
+        function stag() { return num(stg.text, 0, 0, 120); }
 
-        // Runs an animation action with the Quick Actions bounce state
+        // Runs an animation action with the Quick Actions bounce state and the chosen layer order
         function anim(label, fn) {
-            return function () { run(label, function () { withBounce(qb, fn, num(bPct.text, 10, 1, 60)); }); };
+            return function () { run(label, function () { withOrder(ord.selection.index, function () { withBounce(qb, fn, num(bPct.text, 10, 1, 60)); }); }); };
         }
         function slide(dir, label) {
             return anim(label, function () {
-                doMove(dir, { mode: "in", offscreen: false, distance: num(dist.text, 200, 1, 20000), fade: true, stagger: 0 });
+                doMove(dir, { mode: "in", offscreen: false, distance: num(dist.text, 200, 1, 20000), fade: true, stagger: stag() });
             });
         }
         var secIn = subPanel(p, "In");
         grid(secIn, [
-            ["Fade In", anim("Fade In", function () { doFade(true, 0, qb); })],
-            ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: 0 }); })],
-            ["Blur Fade In", anim("Blur Fade In", function () { doBlurFade(0, qb, true); }), "Fades in from a blur"]
+            ["Fade In", anim("Fade In", function () { doFade(true, stag(), qb); })],
+            ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: stag() }); })],
+            ["Blur Fade In", anim("Blur Fade In", function () { doBlurFade(stag(), qb, true); }), "Fades in from a blur"]
         ]);
         var secOut = subPanel(p, "Out");
         grid(secOut, [
-            ["Fade Out", anim("Fade Out", function () { doFade(false, 0, qb); })],
-            ["Blur Fade Out", anim("Blur Fade Out", function () { doBlurFade(0, qb, false); }), "Blurs out and fades away"]
+            ["Fade Out", anim("Fade Out", function () { doFade(false, stag(), qb); })],
+            ["Blur Fade Out", anim("Blur Fade Out", function () { doBlurFade(stag(), qb, false); }), "Blurs out and fades away"]
         ]);
         var secMove = subPanel(p, "Move");
         grid(secMove, [
@@ -1091,10 +1113,12 @@
     feature("Animate", "Pop", function (p) {
         var fade = check(p, "Fade opacity too", true);
         var center = check(p, "Scale from layer center", true, "Moves the anchor point to the layer's center first.");
+        var stg = field(p, "Stagger (frames):", "0", 4, "With several layers selected, each one pops this many frames after the previous. 0 = all at once.");
+        var ord = drop(p, "Order:", ORDER_LABELS, 0, "Which layer goes first.");
         hint(p, "Springs past the end size and settles. Edit freq / decay / amp in the scale expression to tune.");
         var r = btnRow(p);
         function go(mode) {
-            run("Pop " + mode, function () { doPop(mode, { fade: fade.value, center: center.value, stagger: 0, smooth: true }); });
+            run("Pop " + mode, function () { withOrder(ord.selection.index, function () { doPop(mode, { fade: fade.value, center: center.value, stagger: num(stg.text, 0, 0, 120), smooth: true }); }); });
         }
         btn(r, "Pop Up", function () { go("up"); });
         btn(r, "Pop Out", function () { go("out"); });
@@ -1239,6 +1263,22 @@
             builtin("Blur Out", doBlurOut, "The layer blurs out and shrinks a little (any layer)."),
             builtin("Delete Out", doDeleteOut, "The letters disappear from the right, with blur.")
         ]);
+
+        // Number counter: a formatted count-up driven by a keyframed slider
+        var nc = subPanel(p, "Number counter");
+        hint(nc, "Select a text layer. Its text counts From -> To through a Ru Counter slider with two keys at the playhead (1 s apart): drag the second key to retime.");
+        var ncFrom = field(nc, "From:", "0", 7), ncTo = field(nc, "To:", "1240", 7);
+        var ncDec = drop(nc, "Decimals:", ["0", "1", "2"], 0);
+        var ncPre = field(nc, "Prefix:", "", 4, "Text before the number, e.g. $"), ncSuf = field(nc, "Suffix:", "", 4, "Text after the number, e.g. %");
+        var ncSep = check(nc, "Thousands separator (1,240)", true);
+        var ncK = check(nc, "Short form (3.2k, 1.4M)", false);
+        var ncCurve = drop(nc, "Curve:", ["Ease out", "Linear", "Ease in-out"], 0);
+        btn(nc, "Number counter", function () {
+            run("Number counter", function () {
+                doCounter({ from: num(ncFrom.text, 0, -1e12, 1e12), to: num(ncTo.text, 100, -1e12, 1e12), dec: ncDec.selection.index,
+                    prefix: ncPre.text, suffix: ncSuf.text, sep: ncSep.value, k: ncK.value, curve: ncCurve.selection.index });
+            });
+        }, "Turns the selected text layer into a counting number. Keeps its font, size and colour.");
 
         // Presets: the embedded .ffx animation presets
         var pre = subPanel(p, "Presets");

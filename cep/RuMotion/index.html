@@ -1264,6 +1264,7 @@
   }
 
   // ---------- Text > Effects and Text + Icon: a live stage that plays the effect before it is added ----------
+  function ctlByLabel(label) { for (var id in ctlMap) { if (ctlMap[id].item && (ctlMap[id].item.label === label || ctlMap[id].item.text === label)) { return ctlMap[id]; } } return null; }
   function pvClamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
   function pvOut(u) { u = pvClamp(u, 0, 1); return 1 - Math.pow(1 - u, 3); }
   function pvSet(e, o) { e.style.opacity = o.o === undefined ? 1 : o.o; e.style.transform = o.t || ""; e.style.filter = o.b ? "blur(" + o.b + "px)" : ""; e.style.color = o.c || ""; }
@@ -1278,6 +1279,14 @@
     "SaaS Text Preset 1": { unit: "w", two: 1, roll: 1, f: function (e, i, n, t, line, k) { var u = pvOut((t - 0.5 - k * 0.08) / 0.2); pvSet(e, { t: "translateY(" + ((line === 0 ? -u : 1 - u) * 125) + "%)" }); } },
     "Two-Line Stack": { unit: "w", two: 1, f: function (e, i, n, t, line, k) { if (line === 0) { pvSet(e, {}); return; } var u = pvOut((t - 0.5 - k * 0.08) / 0.25); pvSet(e, { o: u, t: "translateY(" + (10 * (1 - u)) + "px)" }); } },
     "Word Highlight": { unit: "w", f: function (e, i, n, t) { var a = 0.2 + i * 0.4; pvSet(e, { c: (t >= a && t < a + 0.4) ? "#2EC4B6" : "" }); } },
+    "Number counter": { unit: "a", f: function (e, i, n, t) {
+      var v = function (l, d) { var m = ctlByLabel(l); return m ? m.node.value : d; }, on = function (l) { var m = ctlByLabel(l); return m ? m.node.getAttribute("aria-checked") === "true" : false; };
+      var from = +v("From:", 0) || 0, to = +v("To:", 1240) || 0, dec = +v("Decimals:", 0) || 0, sep = on("Thousands separator (1,240)"), kk = on("Short form (3.2k, 1.4M)"), c = +v("Curve:", 0) || 0;
+      var u = pvClamp((t - 0.2) / 1, 0, 1), ea = c === 1 ? u : c === 2 ? (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2) : 1 - Math.pow(1 - u, 3), x = from + (to - from) * ea, s;
+      if (kk && Math.abs(x) >= 1000) { var m = Math.abs(x) >= 1e6; s = (x / (m ? 1e6 : 1e3)).toFixed(dec > 0 ? dec : 1) + (m ? "M" : "k"); }
+      else { s = x.toFixed(dec); if (sep) { var p = s.split("."); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ","); s = p.join("."); } }
+      e.textContent = v("Prefix:", "") + s + v("Suffix:", ""); pvSet(e, { o: 1 });
+    } },
     "Hero Zoom": { unit: "a", f: function (e, i, n, t) { var u = pvOut(t / 1); pvSet(e, { o: pvClamp(t / 0.35, 0, 1), t: "scale(" + (3.2 - 2.2 * u) + ")", b: 14 * (1 - u) }); } },
     "Hero Blur": { unit: "a", f: function (e, i, n, t) { var u = pvOut(t / 0.9); pvSet(e, { o: u, t: "scale(" + (0.94 + 0.06 * u) + ")", b: 9 * (1 - u) }); } },
     "Blur Out": { unit: "a", f: function (e, i, n, t) { var u = pvClamp((t - 0.8) / 0.55, 0, 1); pvSet(e, { o: 1 - u, t: "scale(" + (1 - 0.08 * u) + ")", b: 9 * u }); } },

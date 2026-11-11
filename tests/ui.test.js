@@ -1386,3 +1386,52 @@ function buildTextIcon(sentence, atIndex, opts) {
   const bad = Object.keys(R).filter(k2 => !R[k2]);
   console.log(`transcript editor: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
+
+// Anchor point, Number counter and the stagger order of selected layers
+{
+  const B = $g.global.RuBridge, R = {};
+  const meta = JSON.parse(B.meta());
+  const fi = (name) => meta.features.find(f => f.name === name).i;
+  const items = (i) => { const out = []; (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(x => out.push(x)); }); })(JSON.parse(B.feature(i))); return out; };
+  const byLabel = (i, label) => items(i).find(x => (x.label || x.text) === label);
+  const near = (a, b, e) => Math.abs(a - b) < (e || 1e-6);
+  const lay = fi('Layer operations'), fx = fi('Effects'), quick = fi('Quick');
+  // anchor: a 200 x 100 layer at 200% with its anchor at the centre moves it to the bottom right without moving on screen
+  const { comp } = fakeBuild(); app.project.activeItem = comp; comp.time = 1;
+  const L = comp.layers.add({}); Object.setPrototypeOf(L, g.AVLayer.prototype); L.name = 'box';
+  L.sourceRectAtTime = () => ({ left: 0, top: 0, width: 200, height: 100 });
+  L.transform.anchorPoint.value = [100, 50]; L.transform.position.value = [500, 300]; L.transform.scale.value = [200, 200];
+  comp.selectedLayers = [L];
+  R['nine anchor buttons'] = items(lay).filter(x => x.k === 'b' && /^[↖↑↗←•→↙↓↘]$/.test(x.text)).length === 9;
+  R['anchor click ok'] = B.click(byLabel(lay, '↘').id) === 'ok';
+  R['anchor at bottom right'] = near(L.transform.anchorPoint.value[0], 200) && near(L.transform.anchorPoint.value[1], 100);
+  R['position shifted through scale'] = near(L.transform.position.value[0], 700) && near(L.transform.position.value[1], 400);
+  // keyframed position: insert a key at the playhead (default) leaves the other key alone
+  const K = comp.layers.add({}); Object.setPrototypeOf(K, g.AVLayer.prototype); K.sourceRectAtTime = () => ({ left: 0, top: 0, width: 100, height: 100 });
+  K.transform.anchorPoint.value = [50, 50]; K.transform.position.setValueAtTime(0, [0, 0]); K.transform.position.setValueAtTime(2, [100, 0]);
+  comp.selectedLayers = [K]; B.click(byLabel(lay, '↖').id);
+  R['keyed: new key at playhead'] = K.transform.position.numKeys === 3 && near(K.transform.position.keyValue(2)[0], -50) && near(K.transform.anchorPoint.value[0], 0);
+  R['keyed: other keys untouched'] = near(K.transform.position.keyValue(1)[0], 0) && near(K.transform.position.keyValue(3)[0], 100);
+  // counter: a text layer gets a Ru Counter slider with two keys and a formatting expression
+  const T = comp.layers.addText('0'); Object.setPrototypeOf(T, g.TextLayer.prototype); comp.selectedLayers = [T];
+  B.set(byLabel(fx, 'To:').id, '3200'); B.set(byLabel(fx, 'Prefix:').id, '$'); B.set(byLabel(fx, 'Short form (3.2k, 1.4M)').id, 'true');
+  R['counter click ok'] = B.click(byLabel(fx, 'Number counter').id) === 'ok';
+  const sl = T.property('ADBE Effect Parade').property('Ru Counter');
+  R['counter slider keys'] = !!sl && sl.property(1).numKeys === 2 && near(sl.property(1).keyValue(2), 3200) && near(sl.property(1).keyTime(2) - sl.property(1).keyTime(1), 1);
+  const ex = T.property('ADBE Text Properties').property('ADBE Text Document').expression || '';
+  R['counter expression'] = /Ru Counter/.test(ex) && /"\$" \+ fmt\(v\)/.test(ex) && /kk = true/.test(ex) && !/[^\x00-\x7f]/.test(ex);
+  // the expression's formatting, run here as plain JS with the slider stubbed
+  const run = (e, v) => { const ls = e.replace(/^\/\/.*\n/, '').replace(/\.value/, '').split('\n'); ls[ls.length - 1] = 'return ' + ls[ls.length - 1]; return Function('effect', ls.join('\n'))(() => () => v); };
+  R['format 1,240'] = run(ex.replace('kk = true', 'kk = false'), 1240) === '$1,240';
+  R['format 3.2k'] = run(ex, 3200) === '$3.2k';
+  R['format 1.4M'] = run(ex, 1400000) === '$1.4M';
+  // stagger order: bottom to top makes the lowest layer start first
+  const a = comp.layers.add({}), b = comp.layers.add({}); [a, b].forEach(x => Object.setPrototypeOf(x, g.AVLayer.prototype));
+  a.index = 1; b.index = 2; comp.selectedLayers = [a, b];
+  B.set(byLabel(quick, 'Stagger (frames):').id, '5'); B.set(byLabel(quick, 'Order:').id, '1');
+  B.click(byLabel(quick, 'Fade In').id);
+  R['bottom to top: lower layer first'] = near(b.transform.opacity.keyTime(1), 1) && near(a.transform.opacity.keyTime(1), 1 + 5 * comp.frameDuration);
+  app.project.activeItem = null;
+  const bad = Object.keys(R).filter(k2 => !R[k2]);
+  console.log(`anchor / counter / order: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}

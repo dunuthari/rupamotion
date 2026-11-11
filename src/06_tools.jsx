@@ -542,6 +542,48 @@
         }
     }
 
+    // Anchor point: moves the anchor of the selected layers to a spot of their own box (ix, iy in 0 / 0.5 / 1 of width / height)
+    // and shifts the position by the same amount through the layer's scale and rotation, so nothing moves on screen.
+    // kfMode: 0 = keyframed layers get a new key at the playhead, 1 = every existing key is shifted.
+    function anchorShift(L, d, tt) {
+        var s = L.transform.scale.valueAtTime(tt, false), rot = 0;
+        try { rot = (L.threeDLayer ? L.transform.zRotation : L.transform.rotation).valueAtTime(tt, false); } catch (e) {}
+        var a = rot * Math.PI / 180, x = d[0] * s[0] / 100, y = d[1] * s[1] / 100;
+        return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+    }
+    function anchorMoveProp(prop, delta, kfMode, t, dim) {   // delta: function (time) -> [dx, dy]; dim: 0 / 1 for a separated axis, -1 for both
+        var i, v, d;
+        function plus(val, dd) {
+            if (!(val instanceof Array)) { return val + (dim === 1 ? dd[1] : dd[0]); }
+            var o = val.slice(0); o[0] += dd[0]; o[1] += dd[1]; return o;
+        }
+        if (prop.numKeys === 0) { prop.setValue(plus(prop.value, delta(t))); return; }
+        if (kfMode === 0) { prop.setValueAtTime(t, plus(prop.valueAtTime(t, false), delta(t))); return; }
+        var vals = [];
+        for (i = 1; i <= prop.numKeys; i++) { v = prop.keyTime(i); vals.push([v, plus(prop.keyValue(i), delta(v))]); }
+        for (i = 0; i < vals.length; i++) { prop.setValueAtTime(vals[i][0], vals[i][1]); }
+    }
+    function doAnchor(ix, iy, kfMode) {
+        var comp = activeComp(); if (!comp) { return; }
+        var t = comp.time, n = 0;
+        eachSelected(comp, "Select at least one layer.", function (L) {
+            var r;
+            try { r = L.sourceRectAtTime(t, false); } catch (e) { r = null; }
+            if (!r || !(r.width > 0) || !(r.height > 0)) { try { r = { left: 0, top: 0, width: L.width, height: L.height }; } catch (e2) { return; } }
+            var ap = L.transform.anchorPoint, tr = L.transform, old = ap.valueAtTime(t, false);
+            var ax = r.left + r.width * ix, ay = r.top + r.height * iy, d = [ax - old[0], ay - old[1]];
+            if (Math.abs(d[0]) < 1e-6 && Math.abs(d[1]) < 1e-6) { n++; return; }
+            var shift = function (tt) { return anchorShift(L, d, tt); };
+            if (tr.position.dimensionsSeparated) {
+                anchorMoveProp(tr.xPosition, shift, kfMode, t, 0);
+                anchorMoveProp(tr.yPosition, shift, kfMode, t, 1);
+            } else { anchorMoveProp(tr.position, shift, kfMode, t, -1); }
+            anchorMoveProp(ap, function () { return d; }, kfMode, t, -1);
+            n++;
+        });
+        return n;
+    }
+
     function doFade(fadeIn, stagger, bounce) {
         var comp = activeComp(); if (!comp) { return; }
         var d = animDur(comp), fr = comp.frameDuration;
