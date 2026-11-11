@@ -301,6 +301,23 @@
   .pv-ti span { display: inline-block; }
   .pv-ico { width: 1.1em; height: 1.1em; }
   .btn.pv-on { border-color: var(--primary); background: var(--tint); color: var(--primary); }
+  .an-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px); background-size: 24px 24px; }
+  .an-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.08); z-index: 2; }
+  .an-bar i { display: block; height: 100%; width: 0; background: var(--primary); }
+  .an-lay { position: absolute; left: 50%; top: 50%; width: 96px; height: 60px; margin: -30px 0 0 -48px; border-radius: 12px; background: var(--primary); display: flex; flex-direction: column; gap: 6px; padding: 12px; will-change: transform, opacity, filter; }
+  .an-lay i { display: block; height: 6px; border-radius: 3px; background: rgba(16,16,16,.55); }
+  .an-lay i:nth-child(1) { width: 60%; } .an-lay i:nth-child(2) { width: 100%; } .an-lay i:nth-child(3) { width: 80%; }
+  .an-lay.an-small { width: 72px; height: 44px; padding: 9px 10px; margin-top: -22px; }
+  .an-lay.an-circle { width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; padding: 0; }
+  .an-lay.an-square { width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 14px; background: #F1F2F4; padding: 0; }
+  .an-rows { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; gap: 7px; width: 62%; }
+  .an-rows .an-lay { position: static; margin: 0; width: 100%; height: 26px; padding: 0 10px; border-radius: 7px; flex-direction: row; align-items: center; background: #F1F2F4; }
+  .an-rows .an-lay i { height: 6px; margin: 0; }
+  .an-rows .an-lay i:nth-child(1) { width: 14px; height: 14px; border-radius: 50%; flex: none; background: var(--primary); border: 2px solid rgba(16,16,16,.5); }
+  .an-rows .an-lay i:nth-child(2) { width: 45%; } .an-rows .an-lay i:nth-child(3) { width: 20%; margin-left: auto; }
+  .an-photo { position: absolute; inset: 0; background: linear-gradient(160deg, #7a5cff 0%, #c158be 45%, #ff8a5c 100%); will-change: transform; }
+  .an-photo::after { content: ""; position: absolute; left: 14%; bottom: 18%; width: 40%; height: 12%; border-radius: 8px; background: rgba(255,255,255,.85); }
+  .an-photo::before { content: ""; position: absolute; left: 14%; bottom: 34%; width: 26%; height: 7%; border-radius: 6px; background: rgba(255,255,255,.55); }
   .ted-plus:hover { border-color: var(--primary); color: var(--primary); }
   .cap-status { display: grid; gap: 6px; }
   .cap-status .bar { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
@@ -961,7 +978,7 @@
     }
     if (ctx.hexRow && /^Pick/.test(k)) { return []; }   // the colour swatch replaces the Pick… button
     n = el("button", { class: "btn" + (item.v === "primary" ? " primary" : ""), type: "button", text: item.text, title: item.tip || "" });
-    if (ctx.fx) { ctx.fx.add(item, n); n.addEventListener("click", function () { ctx.fx.select(item, n); }); }   // Text > Effects: a click previews, Apply adds
+    if (ctx.fx && (!ctx.fx.wants || ctx.fx.wants(item))) { ctx.fx.add(item, n); n.addEventListener("click", function () { ctx.fx.select(item, n); }); }   // Text > Effects / Animate: a click previews, Apply adds
     else { n.addEventListener("click", function () { press(item, n); }); }
     ctlMap[item.id] = { item: item, node: n };
     return [n];
@@ -1373,6 +1390,116 @@
     requestAnimationFrame(frame);
   }
 
+  // Animate: a lime sample layer at the top of every Animate card plays the effect in a loop and follows the card's own
+  // controls (found by label). Quick / Pop / Move in / out: a click on an effect button only previews it (`wants`), the added
+  // Apply button sends the real click; the other three cards have one action button, so the stage just shows the settings.
+  function anOut(u) { u = pvClamp(u, 0, 1); return u >= 1 ? 1 : 1 - Math.pow(2, -10 * u); }
+  function anBounce(u, amt) { if (u >= 1) return 1; return anOut(u) + amt * Math.sin(u * Math.PI * 2.2) * Math.exp(-u * 4); }
+  var AN_FX = {
+    "Quick": { pick: /^(Fade In|Scale Pop|Blur Fade In|Fade Out|Blur Fade Out|Slide (Left|Right|Up|Down) \(\+Fade\))$/, first: "Fade In", layers: 1,
+      f: function (c, t, lay, name) {
+        var bon = c.bool("Bounce effect"), pct = c.num("Bounce (%):", 10), dist = pvClamp(c.num("Slide distance (px):", 200), 0, 2000) / 400 * 100;
+        var u = pvClamp(t / 0.9, 0, 1), e = bon ? anBounce(u, pct / 100) : anOut(u), x = 0, y = 0, s = 1, op = 1, bl = 0;
+        if (name === "Fade In") { op = e; }
+        else if (name === "Scale Pop") { s = 0.2 + 0.8 * e; op = pvClamp(u * 3, 0, 1); }
+        else if (name === "Blur Fade In") { op = e; bl = (1 - anOut(u)) * 12; }
+        else if (name === "Fade Out") { op = 1 - e; }
+        else if (name === "Blur Fade Out") { op = 1 - e; bl = anOut(u) * 12; }
+        else if (name.indexOf("Slide") === 0) {
+          var dx = name.indexOf("Left") > 0 ? 1 : name.indexOf("Right") > 0 ? -1 : 0, dy = name.indexOf("Up") > 0 ? 1 : name.indexOf("Down") > 0 ? -1 : 0;
+          x = dx * dist * (1 - e); y = dy * dist * (1 - e); op = pvClamp(u * 2, 0, 1);
+        }
+        anSet(lay[0], x, y, s, op, bl);
+        return u;
+      } },
+    "Pop": { pick: /^Pop (Up|Out)$/, first: "Pop Up", layers: 1,
+      f: function (c, t, lay, name) {
+        var fade = c.bool("Fade opacity too"), u = pvClamp(t / 1.0, 0, 1), e = anBounce(u, 0.18);
+        if (name === "Pop Up") { anSet(lay[0], 0, 0, Math.max(0, e), fade ? pvClamp(u * 4, 0, 1) : 1, 0); }
+        else { anSet(lay[0], 0, 0, Math.max(0.001, 1 - e), fade ? 1 - pvClamp(u * 1.3, 0, 1) : 1, 0); }
+        return u;
+      } },
+    "Move in / out": { pick: /^[←↑↓→]$/, first: "←", layers: 3, small: true,
+      name: function (c, b) { return "Move " + (c.sel("Mode:") === 1 ? "out " : "in ") + b; },
+      f: function (c, t, lay, name) {
+        var out = c.sel("Mode:") === 1, d = c.sel("Distance:") === 0 ? 260 : pvClamp(c.num("Custom (px):", 300), 0, 2000) / 400 * 100;
+        var fade = c.bool("Fade opacity too"), stag = pvClamp(c.num("Stagger (frames):", 0), 0, 120) / 25;
+        var a = name.charAt(name.length - 1), dx = a === "←" ? -1 : a === "→" ? 1 : 0, dy = a === "↑" ? -1 : a === "↓" ? 1 : 0, sg = out ? 1 : -1;
+        lay.forEach(function (l, i) {
+          var u = pvClamp((t - i * stag) / 0.9, 0, 1), e = anOut(u), k = out ? e : 1 - e;
+          anSet(l, dx * d * k * sg, dy * d * k * sg, 1, fade ? (out ? 1 - e : e) : 1, 0);
+        });
+        return pvClamp(t / 1.2, 0, 1);
+      } },
+    "Shape morph": { layers: 0, build: function (st) {
+        var a = el("div", { class: "an-lay an-circle" }), b = el("div", { class: "an-lay an-square" });
+        a.style.marginLeft = "-96px"; b.style.marginLeft = "34px"; st.appendChild(b); st.appendChild(a); return [a, b];
+      },
+      f: function (c, T, lay) {
+        var amp = c.num("Amplitude:", 100) / 100, frq = c.num("Frequency:", 1.5), dec = Math.max(0.1, c.num("Decay (sec):", 1)), D = 130, x, y, s, rot, u, e, tb;
+        if (T < 0.16) { u = T / 0.16; e = 1 - Math.pow(1 - u, 2); x = -e * D * 0.05; y = e * 12; }
+        else if (T < 0.64) { u = (T - 0.16) / 0.48; e = u * u * (3 - 2 * u); x = -D * 0.05 + (D + D * 0.05) * e; y = 12 * (1 - e) - Math.sin(e * Math.PI) * 22; }
+        else { tb = T - 0.64; x = D + amp * 14 * Math.sin(frq * 2 * Math.PI * tb) / Math.exp(5 / dec * tb); y = 0; }
+        s = T < 0.08 ? 1 : T < 0.40 ? 1 - 0.2 * ((T - 0.08) / 0.32) : T < 0.72 ? 0.8 + 0.2 * ((T - 0.40) / 0.32) : 1;
+        if (T >= 0.72) { tb = T - 0.72; s = 1 + amp * 0.08 * Math.sin(frq * 2 * Math.PI * tb) / Math.exp(5 / dec * tb); }
+        rot = T < 0.16 ? 0 : T < 0.48 ? 18 * ((T - 0.16) / 0.32) : T < 0.80 ? 18 * (1 - (T - 0.48) / 0.32) : 0;
+        var show = T < 0.64, r = show ? pvClamp((T - 0.2) / 0.44, 0, 1) : 1;
+        lay[0].style.opacity = show ? 1 : 0; lay[1].style.opacity = show ? 0.18 : 1;
+        lay[0].style.transform = "translate(" + x + "px," + y + "px) rotate(" + rot + "deg) scale(" + (s * (1 + 0.3 * r)) + ")";
+        lay[0].style.borderRadius = (50 - 36 * r) + "%";
+        lay[1].style.transform = "translate(" + (x - D) + "px," + y + "px) rotate(" + rot + "deg) scale(" + s + ")";
+        return pvClamp(T / 1.6, 0, 1);
+      } },
+    "UI list stagger": { layers: 0, build: function (st) {
+        var rows = [0, 1, 2, 3].map(function () { return anLayer(); }), box = el("div", { class: "an-rows" }, rows); st.appendChild(box); return rows;
+      },
+      f: function (c, t, lay) {
+        var off = pvClamp(c.num("Slide up (px):", 40), 0, 500) / 400 * 100, stag = pvClamp(c.num("Stagger (frames):", 2), 0, 60) / 25, fade = c.bool("Fade opacity too");
+        lay.forEach(function (r, i) { var u = pvClamp((t - i * stag) / 0.7, 0, 1), e = anOut(u); r.style.transform = "translateY(" + (off * (1 - e)) + "px)"; r.style.opacity = fade ? e : 1; });
+        return pvClamp(t / 1.2, 0, 1);
+      } },
+    "Hold push-in": { layers: 0, build: function (st) { var ph = el("div", { class: "an-photo" }); st.appendChild(ph); return [ph]; },
+      f: function (c, t, lay) { var u = t / 2.4; lay[0].style.transform = "scale(" + (1 + pvClamp(c.num("Amount (%):", 5), 0, 100) / 100 * u) + ")"; return u; } }
+  };
+  function anLayer() { return el("div", { class: "an-lay" }, [el("i"), el("i"), el("i")]); }
+  function anSet(l, x, y, s, o, b) { l.style.transform = "translate(" + x + "px," + y + "px) scale(" + s + ")"; l.style.opacity = o; l.style.filter = b ? "blur(" + b + "px)" : ""; }
+  function buildAnimPreview(view, data, title) {
+    var fx = AN_FX[title], ids = {}, cur = null, btns = [], lay = [], t0 = performance.now();
+    (function w(c) { c.kids.forEach(function (k) { if (k.t === "card") { w(k.card); } else if (k.items) { k.items.forEach(function (it) { ids[it.label || it.text] = it.id; }); } }); })(data);
+    function node(label) { var m = ctlMap[ids[label]]; return m ? m.node : null; }
+    var c = {
+      num: function (label, d) { var n = node(label); if (!n) return d; var v = parseFloat(n.value); if (isNaN(v)) return d; var m = ctlMap[ids[label]]; return m.item.k === "s" ? v / m.item.div : v; },
+      bool: function (label) { var n = node(label); return n ? n.getAttribute("aria-checked") === "true" : false; },
+      sel: function (label) { var n = node(label); return n ? (+n.value || 0) : 0; }
+    };
+    var nameEl = el("span", { class: "pv-name", text: title }), bar = el("i");
+    var stage = el("div", { class: "pv-stage an-stage", role: "img", "aria-label": "Preview of " + title }, [el("div", { class: "an-grid" }), nameEl, el("div", { class: "an-bar" }, [bar])]);
+    if (fx.build) { lay = fx.build(stage); }
+    else { for (var i = 0; i < fx.layers; i++) { var l = anLayer(); if (fx.small) { l.classList.add("an-small"); l.style.marginLeft = ((i - 1) * 86 - 36) + "px"; } stage.appendChild(l); lay.push(l); } }
+    var applyB = fx.pick ? el("button", { class: "btn primary", type: "button", text: "Choose an effect above" }) : null;
+    if (applyB) { applyB.disabled = true; applyB.addEventListener("click", function () { if (cur) { press(cur, applyB); } }); }
+    function label() { return !cur ? title : (fx.name ? fx.name(c, cur.text) : cur.text); }
+    function frame(now) {
+      if (!stage.isConnected && now - t0 > 3000) { return; }
+      var t = ((now - t0) / 1000) % 2.4, nm = label();
+      if (nameEl.textContent !== nm) { nameEl.textContent = nm; if (applyB && cur) { applyB.textContent = "Apply " + nm; } }
+      bar.style.width = (pvClamp(fx.f(c, t, lay, nm), 0, 1) * 100) + "%";
+      requestAnimationFrame(frame);
+    }
+    view.appendChild(stage);
+    requestAnimationFrame(frame);
+    return {
+      wants: function (item) { return !!(fx.pick && fx.pick.test(item.text)); },
+      add: function (item, n) { btns.push(n); n.classList.remove("primary"); if (item.text === fx.first) { cur = item; n.classList.add("pv-on"); applyB.disabled = false; applyB.textContent = "Apply " + label(); } },
+      select: function (item, n) { cur = item; btns.forEach(function (b) { b.classList.toggle("pv-on", b === n); }); applyB.disabled = false; applyB.textContent = "Apply " + label(); t0 = performance.now(); },
+      finish: function () {
+        if (!applyB) { return; }
+        view.appendChild(el("div", { class: "btns one" }, [applyB]));
+        view.appendChild(el("p", { class: "hint", text: "Clicking an effect only plays it here. Apply adds it to the selected layer(s) at the playhead." }));
+      }
+    };
+  }
+
   function drawCurve(canvas, c, big) {
     var d = window.devicePixelRatio || 1, w = canvas.clientWidth || canvas.width, h = canvas.clientHeight || canvas.height;
     if (big) { canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); }
@@ -1474,6 +1601,7 @@
       var ctx = { flow: data.title === "Easing curves" };
       if (data.title === "Effects" && META.features[i].group === "Text") { ctx.fx = buildFxPreview(view); }
       if (data.title === "Text + Icon") { buildTiPreview(view, data); }
+      if (META.features[i].group === "Animate" && AN_FX[data.title]) { ctx.fx = buildAnimPreview(view, data, data.title); }
       renderKids(data, view, ctx);
       if (ctx.fx) { ctx.fx.finish(); }
       if (ctx.graph) { graphRef = ctx.graph; drawGraph(); }

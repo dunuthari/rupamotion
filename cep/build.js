@@ -82,6 +82,23 @@ const extra = `<style>
   .pv-ti span { display: inline-block; }
   .pv-ico { width: 1.1em; height: 1.1em; }
   .btn.pv-on { border-color: var(--primary); background: var(--tint); color: var(--primary); }
+  .an-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px); background-size: 24px 24px; }
+  .an-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.08); z-index: 2; }
+  .an-bar i { display: block; height: 100%; width: 0; background: var(--primary); }
+  .an-lay { position: absolute; left: 50%; top: 50%; width: 96px; height: 60px; margin: -30px 0 0 -48px; border-radius: 12px; background: var(--primary); display: flex; flex-direction: column; gap: 6px; padding: 12px; will-change: transform, opacity, filter; }
+  .an-lay i { display: block; height: 6px; border-radius: 3px; background: rgba(16,16,16,.55); }
+  .an-lay i:nth-child(1) { width: 60%; } .an-lay i:nth-child(2) { width: 100%; } .an-lay i:nth-child(3) { width: 80%; }
+  .an-lay.an-small { width: 72px; height: 44px; padding: 9px 10px; margin-top: -22px; }
+  .an-lay.an-circle { width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; padding: 0; }
+  .an-lay.an-square { width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 14px; background: #F1F2F4; padding: 0; }
+  .an-rows { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; gap: 7px; width: 62%; }
+  .an-rows .an-lay { position: static; margin: 0; width: 100%; height: 26px; padding: 0 10px; border-radius: 7px; flex-direction: row; align-items: center; background: #F1F2F4; }
+  .an-rows .an-lay i { height: 6px; margin: 0; }
+  .an-rows .an-lay i:nth-child(1) { width: 14px; height: 14px; border-radius: 50%; flex: none; background: var(--primary); border: 2px solid rgba(16,16,16,.5); }
+  .an-rows .an-lay i:nth-child(2) { width: 45%; } .an-rows .an-lay i:nth-child(3) { width: 20%; margin-left: auto; }
+  .an-photo { position: absolute; inset: 0; background: linear-gradient(160deg, #7a5cff 0%, #c158be 45%, #ff8a5c 100%); will-change: transform; }
+  .an-photo::after { content: ""; position: absolute; left: 14%; bottom: 18%; width: 40%; height: 12%; border-radius: 8px; background: rgba(255,255,255,.85); }
+  .an-photo::before { content: ""; position: absolute; left: 14%; bottom: 34%; width: 26%; height: 7%; border-radius: 6px; background: rgba(255,255,255,.55); }
   .ted-plus:hover { border-color: var(--primary); color: var(--primary); }
   .cap-status { display: grid; gap: 6px; }
   .cap-status .bar { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
