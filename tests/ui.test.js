@@ -1410,8 +1410,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   const K = comp.layers.add({}); Object.setPrototypeOf(K, g.AVLayer.prototype); K.sourceRectAtTime = () => ({ left: 0, top: 0, width: 100, height: 100 });
   K.transform.anchorPoint.value = [50, 50]; K.transform.position.setValueAtTime(0, [0, 0]); K.transform.position.setValueAtTime(2, [100, 0]);
   comp.selectedLayers = [K]; B.click(byLabel(lay, '↖').id);
-  R['keyed: new key at playhead'] = K.transform.position.numKeys === 3 && near(K.transform.position.keyValue(2)[0], -50) && near(K.transform.anchorPoint.value[0], 0);
-  R['keyed: other keys untouched'] = near(K.transform.position.keyValue(1)[0], 0) && near(K.transform.position.keyValue(3)[0], 100);
+  R['keyed: no new key, every key shifted'] = K.transform.position.numKeys === 2 && near(K.transform.position.keyValue(1)[0], -50) && near(K.transform.position.keyValue(2)[0], 50) && near(K.transform.anchorPoint.value[0], 0);
   // counter: a text layer gets a Ru Counter slider with two keys and a formatting expression
   const T = comp.layers.addText('0'); Object.setPrototypeOf(T, g.TextLayer.prototype); comp.selectedLayers = [T];
   B.set(byLabel(fx, 'To:').id, '3200'); B.set(byLabel(fx, 'Prefix:').id, '$'); B.set(byLabel(fx, 'Short form (3.2k, 1.4M)').id, 'true');

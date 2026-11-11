@@ -736,7 +736,6 @@
         ]);
 
         var an = subPanel(p, "Anchor point");
-        var anKf = drop(an, "If keyframed:", ["Insert keyframe at playhead", "Move all keyframes"], 0, "What to do when the anchor or position already has keyframes.");
         (function () {
             var marks = [["\u2196", 0, 0, "top left"], ["\u2191", 0.5, 0, "top"], ["\u2197", 1, 0, "top right"],
                 ["\u2190", 0, 0.5, "left"], ["\u2022", 0.5, 0.5, "centre"], ["\u2192", 1, 0.5, "right"],
@@ -745,8 +744,8 @@
             for (i = 0; i < marks.length; i++) {
                 if (i % 3 === 0) { row3 = btnRow(an); }
                 (function (m) {
-                    btn(row3, m[0], function () { run("Anchor " + m[3], function () { doAnchor(m[1], m[2], anKf.selection.index); }); },
-                        "Anchor point to the " + m[3] + " of the layer. The layer stays where it is on screen.", "secondary");
+                    btn(row3, m[0], function () { run("Anchor " + m[3], function () { doAnchor(m[1], m[2], 1); }); },
+                        "Anchor point to the " + m[3] + " of the layer. The layer stays where it is on screen; keyframes are shifted with it.", "secondary");
                 })(marks[i]);
             }
         })();
