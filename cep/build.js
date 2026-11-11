@@ -39,7 +39,7 @@ const extra = `<style>
   .ted-text:focus { border-color: var(--primary); }
   .ted-plus { align-self: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--hairline); background: transparent; color: var(--label); display: grid; place-items: center; cursor: pointer; padding: 0; }
   .ted-plus svg { width: 12px; height: 12px; }
-  .cs-stage { aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; position: relative; border: 1px solid var(--hairline); background: linear-gradient(135deg, #4a5a58, #2d3a3f 55%, #59482f); --hl: #E8A23A; --hl-text: #fff; --rad: 10px; --dim: .45; }
+  .cs-stage { position: sticky; top: 0; z-index: 6; box-shadow: 0 10px 18px -8px rgba(0,0,0,.6); aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; border: 1px solid var(--hairline); background: linear-gradient(135deg, #4a5a58, #2d3a3f 55%, #59482f); --hl: #E8A23A; --hl-text: #fff; --rad: 10px; --dim: .45; }
   .cs-stage::after { content: ""; position: absolute; inset: 0; background: radial-gradient(80% 60% at 50% 100%, rgba(0,0,0,.55), transparent); pointer-events: none; }
   .cs-caps { position: absolute; left: 0; right: 0; bottom: 12%; z-index: 2; display: flex; justify-content: center; padding: 0 6%; }
   .cs-line { display: flex; flex-wrap: wrap; justify-content: center; gap: .1em .28em; font-family: "Poppins", "Segoe UI", system-ui, sans-serif; font-weight: 700; font-size: 22px; color: #fff; line-height: 1.35; }
@@ -70,7 +70,7 @@ const extra = `<style>
   .cs-seg { display: flex; gap: 6px; }
   .cs-seg button { font: inherit; font-size: 12px; font-weight: 700; color: var(--label); background: var(--surface); border: 1px solid var(--hairline); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
   .cs-seg button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); background: var(--tint); }
-  .pv-stage { aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; position: relative; border: 1px solid var(--hairline); background: linear-gradient(135deg, #34383f, #1d1f24); display: grid; place-items: center; }
+  .pv-stage { position: sticky; top: 0; z-index: 6; box-shadow: 0 10px 18px -8px rgba(0,0,0,.6); aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; border: 1px solid var(--hairline); background: linear-gradient(135deg, #34383f, #1d1f24); display: grid; place-items: center; }
   .pv-txt { font-family: "Poppins", "Segoe UI", system-ui, sans-serif; font-weight: 700; font-size: 20px; color: #fff; text-align: center; line-height: 1.25; padding: 0 6%; }
   .pv-ln { display: block; white-space: nowrap; }
   .pv-clip { overflow: hidden; height: 1.25em; }

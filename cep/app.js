@@ -457,7 +457,16 @@
     "Words Drop": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.12) / 0.35); pvSet(e, { o: u, t: "translateY(" + (-20 * (1 - u)) + "px)" }); } },
     "Words Slide": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.12) / 0.35); pvSet(e, { o: u, t: "translateX(" + (24 * (1 - u)) + "px)" }); } },
     "Color Fade Out": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvClamp((t - 0.6 - i * 0.04) / 0.4, 0, 1); pvSet(e, { o: 1 - u, c: u > 0 ? "#E8A23A" : "" }); } },
-    "Snap": { guess: 1, unit: "w", f: PV_SNAP }, "Snap 2": { guess: 1, unit: "w", f: PV_SNAP }, "Snapping": { guess: 1, unit: "c", f: PV_SNAP }
+    "Snap": { guess: 1, unit: "w", f: PV_SNAP }, "Snap 2": { guess: 1, unit: "w", f: PV_SNAP }, "Snapping": { guess: 1, unit: "c", f: PV_SNAP },
+    // the next four are rebuilt from the settings stored in their .ffx files (which properties, based on words / letters / lines, how far)
+    "SaaS Style 3": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.14) / 0.45); pvSet(e, { o: u, b: 8 * (1 - u), t: "translateX(" + (22 * (1 - u)) + "px)" }); } },
+    "SaaS Style 4": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.14) / 0.45); pvSet(e, { o: u, t: "translateX(" + (-30 * (1 - u)) + "px)" }); e.style.letterSpacing = (-0.08 * (1 - u)) + "em"; } },
+    "SaaS Style 5": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvOut((t - 0.1) / 0.6), c = pvOut((t - 0.1 - i * 0.03) / 0.3); pvSet(e, { o: c, b: 7 * (1 - u), t: "translateY(" + (16 * (1 - u)) + "px)" }); } },
+    "Motion Type": { guess: 1, unit: "c", f: function (e, i, n, t) {
+      var u = pvOut((t - 0.1 - i * 0.04) / 0.4), x = pvClamp((t - 2.0 - i * 0.03) / 0.3, 0, 1);
+      if (x > 0) { pvSet(e, { o: 1 - x, t: "translateY(" + (-10 * x) + "px) scale(" + (1 - 0.4 * x) + ")" }); }
+      else { pvSet(e, { o: u > 0 ? 1 : 0, t: "translateY(" + (34 * (1 - u)) + "px) rotate(" + (20 * (1 - u)) + "deg)" }); }
+    } }
   };
   function buildFxPreview(view) {
     var cur = null, units = [], caret = null, t0 = performance.now(), btns = [];
@@ -470,7 +479,7 @@
       var fx = cur ? PV_FX[cur.text] : null, s = (sample.value || "").replace(/^\s+|\s+$/g, "") || "Make it move", lines, parts;
       txt.innerHTML = ""; units = []; caret = null;
       nameEl.textContent = cur ? cur.text : "Preview";
-      noteEl.textContent = !cur ? "" : (!fx ? "no preview for this preset" : (fx.guess ? "approximate" : ""));
+      noteEl.textContent = !cur ? "" : (!fx ? "no preview yet" : (fx.guess ? "approximate" : ""));
       lines = (fx && fx.two) ? [s, "Then make it land"] : [s];
       lines.forEach(function (L, li) {
         var ln = el("span", { class: "pv-ln" + (fx && fx.roll ? " pv-clip" : "") }), k = 0;
