@@ -286,6 +286,18 @@
   .cs-seg { display: flex; gap: 6px; }
   .cs-seg button { font: inherit; font-size: 12px; font-weight: 700; color: var(--label); background: var(--surface); border: 1px solid var(--hairline); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
   .cs-seg button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); background: var(--tint); }
+  .pv-stage { aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; position: relative; border: 1px solid var(--hairline); background: linear-gradient(135deg, #34383f, #1d1f24); display: grid; place-items: center; }
+  .pv-txt { font-family: "Poppins", "Segoe UI", system-ui, sans-serif; font-weight: 700; font-size: 20px; color: #fff; text-align: center; line-height: 1.25; padding: 0 6%; }
+  .pv-ln { display: block; white-space: nowrap; }
+  .pv-clip { overflow: hidden; height: 1.25em; }
+  .pv-u { display: inline-block; white-space: pre; }
+  .pv-caret { display: inline-block; width: 2px; height: 1em; background: #fff; vertical-align: -.12em; margin-left: 2px; }
+  .pv-name { position: absolute; left: 8px; top: 6px; font-size: 11px; font-weight: 700; color: var(--hint); background: rgba(0,0,0,.4); padding: 2px 8px; border-radius: 99px; }
+  .pv-note { position: absolute; right: 8px; top: 8px; font-size: 11px; color: var(--hint); }
+  .pv-ti { display: flex; align-items: center; justify-content: center; font-family: "Poppins", "Segoe UI", system-ui, sans-serif; font-weight: 700; color: #BFC3C8; font-size: 18px; white-space: nowrap; }
+  .pv-ti span { display: inline-block; }
+  .pv-ico { width: 1.1em; height: 1.1em; }
+  .btn.pv-on { border-color: var(--primary); background: var(--tint); color: var(--primary); }
   .ted-plus:hover { border-color: var(--primary); color: var(--primary); }
   .cap-status { display: grid; gap: 6px; }
   .cap-status .bar { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
@@ -946,7 +958,8 @@
     }
     if (ctx.hexRow && /^Pick/.test(k)) { return []; }   // the colour swatch replaces the Pick… button
     n = el("button", { class: "btn" + (item.v === "primary" ? " primary" : ""), type: "button", text: item.text, title: item.tip || "" });
-    n.addEventListener("click", function () { press(item, n); });
+    if (ctx.fx) { ctx.fx.add(item, n); n.addEventListener("click", function () { ctx.fx.select(item, n); }); }   // Text > Effects: a click previews, Apply adds
+    else { n.addEventListener("click", function () { press(item, n); }); }
     ctlMap[item.id] = { item: item, node: n };
     return [n];
   }
@@ -1230,6 +1243,124 @@
     return box;
   }
 
+  // ---------- Text > Effects and Text + Icon: a live stage that plays the effect before it is added ----------
+  function pvClamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function pvOut(u) { u = pvClamp(u, 0, 1); return 1 - Math.pow(1 - u, 3); }
+  function pvSet(e, o) { e.style.opacity = o.o === undefined ? 1 : o.o; e.style.transform = o.t || ""; e.style.filter = o.b ? "blur(" + o.b + "px)" : ""; e.style.color = o.c || ""; }
+  // unit: c letters, w words, a whole text; two: needs two lines; f(el, i, n, t, line, k). Built-in effects use their real timings;
+  // the .ffx presets are guesses from their names (their files cannot be read here).
+  var PV_BOUNCE = function (e, i, n, t) { var x = pvClamp((t - 0.1 - i * 0.05) / 0.5, 0, 1), y = x < 1 ? (1 - x) * -22 * Math.abs(Math.cos(x * 7)) : 0; pvSet(e, { o: pvClamp(x * 4, 0, 1), t: "translateY(" + y + "px)" }); };
+  var PV_SNAP = function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.1) / 0.15); pvSet(e, { o: u > 0 ? 1 : 0, t: "scale(" + (1.5 - 0.5 * u) + ")" }); };
+  var PV_FX = {
+    "Typewriter": { unit: "c", caret: 1, f: function (e, i, n, t) { pvSet(e, { o: t >= 0.3 + i / 14 ? 1 : 0 }); } },
+    "Typewriter Block": { unit: "w", f: function (e, i, n, t) { var a = 0.3 + i / 6; pvSet(e, { o: t >= a ? 1 : 0, c: t < a + 0.5 ? "#4285F4" : "" }); } },
+    "Letter Blur": { unit: "c", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.035) / 0.28); pvSet(e, { o: u, b: 10 * (1 - u), t: "translateY(" + (10 * (1 - u)) + "px)" }); } },
+    "SaaS Text Preset 1": { unit: "w", two: 1, roll: 1, f: function (e, i, n, t, line, k) { var u = pvOut((t - 0.5 - k * 0.08) / 0.2); pvSet(e, { t: "translateY(" + ((line === 0 ? -u : 1 - u) * 125) + "%)" }); } },
+    "Two-Line Stack": { unit: "w", two: 1, f: function (e, i, n, t, line, k) { if (line === 0) { pvSet(e, {}); return; } var u = pvOut((t - 0.5 - k * 0.08) / 0.25); pvSet(e, { o: u, t: "translateY(" + (10 * (1 - u)) + "px)" }); } },
+    "Word Highlight": { unit: "w", f: function (e, i, n, t) { var a = 0.2 + i * 0.4; pvSet(e, { c: (t >= a && t < a + 0.4) ? "#2EC4B6" : "" }); } },
+    "Hero Zoom": { unit: "a", f: function (e, i, n, t) { var u = pvOut(t / 1); pvSet(e, { o: pvClamp(t / 0.35, 0, 1), t: "scale(" + (3.2 - 2.2 * u) + ")", b: 14 * (1 - u) }); } },
+    "Hero Blur": { unit: "a", f: function (e, i, n, t) { var u = pvOut(t / 0.9); pvSet(e, { o: u, t: "scale(" + (0.94 + 0.06 * u) + ")", b: 9 * (1 - u) }); } },
+    "Blur Out": { unit: "a", f: function (e, i, n, t) { var u = pvClamp((t - 0.8) / 0.55, 0, 1); pvSet(e, { o: 1 - u, t: "scale(" + (1 - 0.08 * u) + ")", b: 9 * u }); } },
+    "Delete Out": { unit: "c", f: function (e, i, n, t) { pvSet(e, { o: t >= 1 + (n - 1 - i) * 0.03 ? 0 : 1 }); } },
+    "One by One": { guess: 1, unit: "c", f: function (e, i, n, t) { pvSet(e, { o: pvOut((t - 0.1 - i * 0.06) / 0.2) }); } },
+    "Bounce Text": { guess: 1, unit: "c", f: PV_BOUNCE },
+    "Bouncing Text": { guess: 1, unit: "c", f: PV_BOUNCE },
+    "Bouncy Color Fade": { guess: 1, unit: "c", f: function (e, i, n, t) { PV_BOUNCE(e, i, n, t); e.style.color = (t > 0.1 + i * 0.05 && t < 0.7 + i * 0.05) ? "#E8A23A" : ""; } },
+    "Letters Drop": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.04) / 0.3); pvSet(e, { o: u, t: "translateY(" + (-20 * (1 - u)) + "px)" }); } },
+    "Letters Slide": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.04) / 0.3); pvSet(e, { o: u, t: "translateX(" + (20 * (1 - u)) + "px)" }); } },
+    "Words Drop": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.12) / 0.35); pvSet(e, { o: u, t: "translateY(" + (-20 * (1 - u)) + "px)" }); } },
+    "Words Slide": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.12) / 0.35); pvSet(e, { o: u, t: "translateX(" + (24 * (1 - u)) + "px)" }); } },
+    "Color Fade Out": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvClamp((t - 0.6 - i * 0.04) / 0.4, 0, 1); pvSet(e, { o: 1 - u, c: u > 0 ? "#E8A23A" : "" }); } },
+    "Snap": { guess: 1, unit: "w", f: PV_SNAP }, "Snap 2": { guess: 1, unit: "w", f: PV_SNAP }, "Snapping": { guess: 1, unit: "c", f: PV_SNAP }
+  };
+  function buildFxPreview(view) {
+    var cur = null, units = [], caret = null, t0 = performance.now(), btns = [];
+    var nameEl = el("span", { class: "pv-name", text: "" }), noteEl = el("span", { class: "pv-note", text: "" }), txt = el("div", { class: "pv-txt" });
+    var stage = el("div", { class: "pv-stage", role: "img", "aria-label": "Preview of the selected text effect" }, [nameEl, noteEl, txt]);
+    var sample = el("input", { type: "text", value: store("pv_text", "Make it move"), maxlength: "28", "aria-label": "Preview text" });
+    var applyB = el("button", { class: "btn primary", type: "button", text: "Choose an effect above" });
+    applyB.disabled = true;
+    function build() {
+      var fx = cur ? PV_FX[cur.text] : null, s = (sample.value || "").replace(/^\s+|\s+$/g, "") || "Make it move", lines, parts;
+      txt.innerHTML = ""; units = []; caret = null;
+      nameEl.textContent = cur ? cur.text : "Preview";
+      noteEl.textContent = !cur ? "" : (!fx ? "no preview for this preset" : (fx.guess ? "approximate" : ""));
+      lines = (fx && fx.two) ? [s, "Then make it land"] : [s];
+      lines.forEach(function (L, li) {
+        var ln = el("span", { class: "pv-ln" + (fx && fx.roll ? " pv-clip" : "") }), k = 0;
+        if (fx && fx.roll && li === 1) { ln.style.marginTop = "-1.25em"; }
+        parts = !fx || fx.unit === "a" ? [L] : (fx.unit === "c" ? L.split("") : L.split(/(\s+)/));
+        parts.forEach(function (p) {
+          var sp = el("span", { class: "pv-u", text: p }); ln.appendChild(sp);
+          if (fx && fx.unit === "w" && /^\s+$/.test(p)) { return; }
+          units.push({ el: sp, line: li, k: k++ });
+        });
+        txt.appendChild(ln);
+      });
+      if (fx && fx.caret) { caret = el("span", { class: "pv-caret" }); txt.lastChild.appendChild(caret); }
+      t0 = performance.now();
+    }
+    function frame(now) {
+      if (!stage.isConnected && now - t0 > 3000) { return; }
+      var fx = cur ? PV_FX[cur.text] : null, t = ((now - t0) / 1000) % 3.2, n = units.length, i;
+      if (fx) { for (i = 0; i < n; i++) { fx.f(units[i].el, i, n, t, units[i].line, units[i].k); } }
+      if (caret) { caret.style.opacity = (Math.floor((t - 0.3) * 14) + 1 < n) ? 1 : (Math.floor(t * 1000 / 400) % 2 ? 0 : 1); }
+      requestAnimationFrame(frame);
+    }
+    sample.style.width = "100%";
+    sample.addEventListener("input", function () { put("pv_text", sample.value); build(); });
+    applyB.addEventListener("click", function () { if (cur) { press(cur, applyB); } });
+    view.appendChild(stage);
+    view.appendChild(el("div", { class: "row" }, [el("span", { class: "lbl", text: "Preview text" }), el("div", { class: "ctl" }, [sample])]));
+    build(); requestAnimationFrame(frame);
+    return {
+      add: function (item, node) { btns.push(node); node.classList.remove("primary"); },
+      select: function (item, node) {
+        cur = item;
+        btns.forEach(function (b) { b.classList.toggle("pv-on", b === node); });
+        applyB.disabled = false; applyB.textContent = "Apply " + item.text;
+        build();
+      },
+      finish: function () {
+        view.appendChild(el("div", { class: "btns one" }, [applyB]));
+        view.appendChild(el("p", { class: "hint", text: "Clicking an effect only plays it here. Apply adds it to the selected text layer(s) at the playhead." }));
+      }
+    };
+  }
+
+  // Text + Icon: the words slide apart and grow and the icon slot opens; it follows the Sentence and Icon position controls
+  function buildTiPreview(view, data) {
+    var sentId = -1, whereId = -1, line = el("div", { class: "pv-ti" }), stage = el("div", { class: "pv-stage", role: "img", "aria-label": "Preview of Text + Icon" }, [el("span", { class: "pv-name", text: "Preview" }), line]);
+    (function w(c) { c.kids.forEach(function (k) { if (k.t === "card") { w(k.card); } else if (k.items) { k.items.forEach(function (it) { if (it.label === "Sentence:") sentId = it.id; if (it.label === "Icon position:") whereId = it.id; }); } }); })(data);
+    var key = "", words = [], ico = null, t0 = performance.now();
+    function star() {
+      var s = el("span", { class: "pv-ico" });
+      s.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%"><path fill="currentColor" d="M12 2c1 5 4 8 10 10-6 2-9 5-10 10-1-5-4-8-10-10 6-2 9-5 10-10z"/></svg>';
+      return s;
+    }
+    function build(sent, at) {
+      var w = sent.replace(/^\s+|\s+$/g, "").split(/\s+/).filter(Boolean).slice(0, 6);
+      if (!w.length) { w = ["feature", "requests"]; }
+      at = pvClamp(at, 0, w.length);
+      line.innerHTML = ""; words = []; ico = star();
+      w.forEach(function (x, i) { if (i === at) { line.appendChild(ico); } var s = el("span", { text: x }); s.style.margin = "0 .14em"; line.appendChild(s); words.push({ el: s, side: i < at ? -1 : 1 }); });
+      if (at >= w.length) { line.appendChild(ico); }
+      t0 = performance.now();
+    }
+    function frame(now) {
+      if (!stage.isConnected && now - t0 > 3000) { return; }
+      var sN = ctlMap[sentId] && ctlMap[sentId].node, wN = ctlMap[whereId] && ctlMap[whereId].node;
+      var sent = sN ? sN.value : "feature requests", at = wN ? (+wN.value || 0) : 1, k = sent + "|" + at;
+      if (k !== key) { key = k; build(sent, at); }
+      var t = ((now - t0) / 1000) % 3, u = pvOut((t - 0.3) / 0.8);
+      words.forEach(function (o) { o.el.style.transform = "translateX(" + (-o.side * 12 * (1 - u)) + "px) scale(" + (0.86 + 0.14 * u) + ")"; });
+      if (ico) { ico.style.width = (1.1 * u) + "em"; ico.style.opacity = u; ico.style.margin = "0 " + (0.2 * u) + "em"; }
+      requestAnimationFrame(frame);
+    }
+    view.appendChild(stage);
+    requestAnimationFrame(frame);
+  }
+
   function drawCurve(canvas, c, big) {
     var d = window.devicePixelRatio || 1, w = canvas.clientWidth || canvas.width, h = canvas.clientHeight || canvas.height;
     if (big) { canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); }
@@ -1256,7 +1387,7 @@
       if (k.t === "card" && k.card.title === "Style" && JSON.stringify(k.card).indexOf("\"Look:\"") >= 0) { parent.appendChild(buildCapStyle(k.card)); return; }
       if (k.t === "card") {
         var sub = el("div", { class: "card" }, [el("h3", { text: k.card.title })]);
-        var c2 = { flow: ctx.flow };
+        var c2 = { flow: ctx.flow, fx: ctx.fx };
         renderKids(k.card, sub, c2);
         parent.appendChild(sub);
         return;
@@ -1299,7 +1430,7 @@
       }
       var hexRow = items.some(function (it) { return it.k === "f" && isHex(it.v); });
       var ctl = el("div", { class: "ctl" });
-      var rctx = { flow: ctx.flow, hexRow: hexRow, small: fields.length >= 3 };
+      var rctx = { flow: ctx.flow, fx: ctx.fx, hexRow: hexRow, small: fields.length >= 3 };
       items.forEach(function (it, i) {
         if (i > 0 && it.label) { ctl.appendChild(el("span", { class: "lbl", text: it.label, style: "color:var(--label);font-size:12px" })); }
         makeItem(it, rctx).forEach(function (n) { ctl.appendChild(n); });
@@ -1329,7 +1460,10 @@
       if (!data) { view.appendChild(el("p", { class: "hint", text: "Could not read this card from After Effects: " + String(r).slice(0, 160) })); return; }
       view.appendChild(el("h2", { text: data.title }));
       var ctx = { flow: data.title === "Easing curves" };
+      if (data.title === "Effects" && META.features[i].group === "Text") { ctx.fx = buildFxPreview(view); }
+      if (data.title === "Text + Icon") { buildTiPreview(view, data); }
       renderKids(data, view, ctx);
+      if (ctx.fx) { ctx.fx.finish(); }
       if (ctx.graph) { graphRef = ctx.graph; drawGraph(); }
       put("feature", META.features[i].name);
     });

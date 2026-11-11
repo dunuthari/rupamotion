@@ -70,6 +70,18 @@ const extra = `<style>
   .cs-seg { display: flex; gap: 6px; }
   .cs-seg button { font: inherit; font-size: 12px; font-weight: 700; color: var(--label); background: var(--surface); border: 1px solid var(--hairline); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
   .cs-seg button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); background: var(--tint); }
+  .pv-stage { aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; position: relative; border: 1px solid var(--hairline); background: linear-gradient(135deg, #34383f, #1d1f24); display: grid; place-items: center; }
+  .pv-txt { font-family: "Poppins", "Segoe UI", system-ui, sans-serif; font-weight: 700; font-size: 20px; color: #fff; text-align: center; line-height: 1.25; padding: 0 6%; }
+  .pv-ln { display: block; white-space: nowrap; }
+  .pv-clip { overflow: hidden; height: 1.25em; }
+  .pv-u { display: inline-block; white-space: pre; }
+  .pv-caret { display: inline-block; width: 2px; height: 1em; background: #fff; vertical-align: -.12em; margin-left: 2px; }
+  .pv-name { position: absolute; left: 8px; top: 6px; font-size: 11px; font-weight: 700; color: var(--hint); background: rgba(0,0,0,.4); padding: 2px 8px; border-radius: 99px; }
+  .pv-note { position: absolute; right: 8px; top: 8px; font-size: 11px; color: var(--hint); }
+  .pv-ti { display: flex; align-items: center; justify-content: center; font-family: "Poppins", "Segoe UI", system-ui, sans-serif; font-weight: 700; color: #BFC3C8; font-size: 18px; white-space: nowrap; }
+  .pv-ti span { display: inline-block; }
+  .pv-ico { width: 1.1em; height: 1.1em; }
+  .btn.pv-on { border-color: var(--primary); background: var(--tint); color: var(--primary); }
   .ted-plus:hover { border-color: var(--primary); color: var(--primary); }
   .cap-status { display: grid; gap: 6px; }
   .cap-status .bar { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
