@@ -399,35 +399,8 @@
         }
     }
 
-    function doListStagger(o) {
-        var comp = activeComp(); if (!comp) { return; }
-        var sel = selLayers(comp, 1, "Select the UI layers (rows) to stagger."); if (!sel) { return; }
-        var t0 = comp.time, fr = comp.frameDuration, d = animDur(comp);
-        sel.sort(function (a, b) {
-            var ya = a.transform.position.valueAtTime(t0, false)[1], yb = b.transform.position.valueAtTime(t0, false)[1];
-            return (ya === yb) ? a.index - b.index : ya - yb;
-        });
-        for (var i = 0; i < sel.length; i++) {
-            var L = sel[i], t = t0 + i * o.stagger * fr;
-            ensureBounce(L);
-            var pp = L.transform.position;
-            if (pp.dimensionsSeparated) {
-                var y = L.transform.yPosition.valueAtTime(t, false);
-                setKeys(L.transform.yPosition, [[t, y + o.offset], [t + d, y]], { bounce: true });
-            } else {
-                var p = pp.valueAtTime(t, false), s = [p[0], p[1] + o.offset];
-                if (p.length === 3) { s.push(p[2]); }
-                setKeys(pp, [[t, s], [t + d, p]], { bounce: true });
-            }
-            if (o.fade) {
-                var op = L.transform.opacity.valueAtTime(t, false) || 100;
-                setKeys(L.transform.opacity, [[t, 0], [t + d * 0.6, op]]);
-            }
-            mb(L);
-        }
-    }
-
-    function doPushIn(amount, fromPlayhead) {
+    // out = true: the layer starts larger and settles on its own size (slow zoom out)
+    function doPushIn(amount, fromPlayhead, out) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = selLayers(comp, 1, "Select the layers or scene precomps to push in."); if (!sel) { return; }
         for (var i = 0; i < sel.length; i++) {
@@ -436,6 +409,7 @@
             var t1 = Math.min(L.outPoint, comp.duration);
             if (t1 - t0 < comp.frameDuration * 2) { continue; }
             var s = L.transform.scale.valueAtTime(t0, false);
-            setKeys(L.transform.scale, [[t0, s], [t1, scaled(s, 1 + amount / 100)]], { curve: { first: 33, last: 33 } });
+            var big = scaled(s, 1 + amount / 100);
+            setKeys(L.transform.scale, out ? [[t0, big], [t1, s]] : [[t0, s], [t1, big]], { curve: { first: 33, last: 33 } });
         }
     }

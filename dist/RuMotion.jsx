@@ -391,8 +391,8 @@
         L.push("    var t1 = key(i).time, t2 = key(i + 1).time;");
         L.push("    var p = (time - t1) / (t2 - t1);");
         L.push("    var ov = Math.max(0.01, Math.min(0.6, s / 100));");
-        L.push("    var d = -Math.log(ov) / 0.4;");
-        L.push("    var e = 1 - Math.exp(-d * p) * Math.cos(2.5 * Math.PI * p);");
+        L.push("    var d = -Math.log(ov / 0.936) / 0.4;");
+        L.push("    var e = 1 - Math.exp(-d * p) * Math.cos(2.5 * Math.PI * p) * (1 - p * p * p);");
         if (isShape) {
             L.push("    var a1 = thisProperty.points(t1), a2 = thisProperty.points(t2);");
             L.push("    if (a1.length == a2.length) {");
@@ -1185,35 +1185,8 @@
         }
     }
 
-    function doListStagger(o) {
-        var comp = activeComp(); if (!comp) { return; }
-        var sel = selLayers(comp, 1, "Select the UI layers (rows) to stagger."); if (!sel) { return; }
-        var t0 = comp.time, fr = comp.frameDuration, d = animDur(comp);
-        sel.sort(function (a, b) {
-            var ya = a.transform.position.valueAtTime(t0, false)[1], yb = b.transform.position.valueAtTime(t0, false)[1];
-            return (ya === yb) ? a.index - b.index : ya - yb;
-        });
-        for (var i = 0; i < sel.length; i++) {
-            var L = sel[i], t = t0 + i * o.stagger * fr;
-            ensureBounce(L);
-            var pp = L.transform.position;
-            if (pp.dimensionsSeparated) {
-                var y = L.transform.yPosition.valueAtTime(t, false);
-                setKeys(L.transform.yPosition, [[t, y + o.offset], [t + d, y]], { bounce: true });
-            } else {
-                var p = pp.valueAtTime(t, false), s = [p[0], p[1] + o.offset];
-                if (p.length === 3) { s.push(p[2]); }
-                setKeys(pp, [[t, s], [t + d, p]], { bounce: true });
-            }
-            if (o.fade) {
-                var op = L.transform.opacity.valueAtTime(t, false) || 100;
-                setKeys(L.transform.opacity, [[t, 0], [t + d * 0.6, op]]);
-            }
-            mb(L);
-        }
-    }
-
-    function doPushIn(amount, fromPlayhead) {
+    // out = true: the layer starts larger and settles on its own size (slow zoom out)
+    function doPushIn(amount, fromPlayhead, out) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = selLayers(comp, 1, "Select the layers or scene precomps to push in."); if (!sel) { return; }
         for (var i = 0; i < sel.length; i++) {
@@ -1222,7 +1195,8 @@
             var t1 = Math.min(L.outPoint, comp.duration);
             if (t1 - t0 < comp.frameDuration * 2) { continue; }
             var s = L.transform.scale.valueAtTime(t0, false);
-            setKeys(L.transform.scale, [[t0, s], [t1, scaled(s, 1 + amount / 100)]], { curve: { first: 33, last: 33 } });
+            var big = scaled(s, 1 + amount / 100);
+            setKeys(L.transform.scale, out ? [[t0, big], [t1, s]] : [[t0, s], [t1, big]], { curve: { first: 33, last: 33 } });
         }
     }
 
@@ -15693,7 +15667,7 @@
         return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
     }
     function anchorMoveProp(prop, delta, kfMode, t, dim) {   // delta: function (time) -> [dx, dy]; dim: 0 / 1 for a separated axis, -1 for both
-        var i, v, d;
+        var i, v;
         function plus(val, dd) {
             if (!(val instanceof Array)) { return val + (dim === 1 ? dd[1] : dd[0]); }
             var o = val.slice(0); o[0] += dd[0]; o[1] += dd[1]; return o;
@@ -15737,7 +15711,7 @@
         });
     }
 
-    // fadeIn (default true): blur 40 -> 0 and opacity 0 -> 100; false: blur 0 -> 40 and opacity 100 -> 0
+    // fadeIn (default true): blur 80 -> 0 and opacity 0 -> 100; false: blur 0 -> 80 and opacity 100 -> 0
     function doBlurFade(stagger, bounce, fadeIn) {
         var comp = activeComp(); if (!comp) { return; }
         var d = animDur(comp), fr = comp.frameDuration, isIn = (fadeIn !== false);
@@ -15750,10 +15724,10 @@
             var bp = L.property("ADBE Effect Parade").property("Ru Blur Fade").property(1);
             var op = L.transform.opacity.valueAtTime(t, false) || 100;
             if (isIn) {
-                setKeys(bp, [[t, 40], [t + d, 0]]);
+                setKeys(bp, [[t, 80], [t + d, 0]]);
                 setKeys(L.transform.opacity, [[t, 0], [t + d * 0.7, op]]);
             } else {
-                setKeys(bp, [[t, 0], [t + d, 40]]);
+                setKeys(bp, [[t, 0], [t + d, 80]]);
                 setKeys(L.transform.opacity, [[t + d * 0.3, op], [t + d, 0]]);
             }
             if (bounce) { fadeBounce(L, t, d, isIn); }
@@ -16364,7 +16338,7 @@
     };
     // tab order in the left rail, and chip order inside a tab (features not listed keep their registration order, after the listed ones)
     var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
-    var CHIP_ORDER = ["Quick", "Move in / out", "Pop", "Shape morph", "UI list stagger", "Hold push-in",
+    var CHIP_ORDER = ["Quick", "Shape morph", "Hold push-in",
         "Effects", "Text + Icon", "Captions", "Zoom cut", "Swipe cut", "Shape wipe",
         "Smart shape", "Pill button", "Frosted glass", "AI glow button", "Fake cursor", "Avatar bubble", "Audio waveform", "Liquid-glass button", "Stock grid wall"];
 
@@ -16883,53 +16857,37 @@
         var many = subPanel(p, "Several layers");
         var stg = field(many, "Stagger (frames):", "0", 4, "With several layers selected, each one starts this many frames after the previous. 0 = all at once.");
         var ord = drop(many, "Order:", ORDER_LABELS, 0, "Which layer goes first.");
-        hint(many, "Applies to In, Out and Move below.");
         function stag() { return num(stg.text, 0, 0, 120); }
+
+        // One switch decides whether the buttons below bring the layer in or take it out
+        var mode = drop(p, "Mode:", ["In", "Out"], 0, "In: the layer arrives at the playhead. Out: the layer leaves at the playhead.");
+        function isIn() { return !mode.selection || mode.selection.index === 0; }
+        function tag(label) { return label + (isIn() ? " In" : " Out"); }
 
         // Runs an animation action with the Quick Actions bounce state and the chosen layer order
         function anim(label, fn) {
-            return function () { run(label, function () { withOrder(ord.selection.index, function () { withBounce(qb, fn, num(bPct.text, 10, 1, 60)); }); }); };
+            return function () { run(tag(label), function () { withOrder(ord.selection.index, function () { withBounce(qb, fn, num(bPct.text, 10, 1, 60)); }); }); };
         }
         function slide(dir, label) {
             return anim(label, function () {
-                doMove(dir, { mode: "in", offscreen: false, distance: num(dist.text, 200, 1, 20000), fade: true, stagger: stag() });
+                doMove(dir, { mode: isIn() ? "in" : "out", offscreen: false, distance: num(dist.text, 200, 1, 20000), fade: true, stagger: stag() });
             });
         }
-        var secIn = subPanel(p, "In");
-        grid(secIn, [
-            ["Fade In", anim("Fade In", function () { doFade(true, stag(), qb); })],
-            ["Scale Pop", anim("Scale Pop", function () { doPop("up", { fade: true, center: "auto", stagger: stag() }); })],
-            ["Blur Fade In", anim("Blur Fade In", function () { doBlurFade(stag(), qb, true); }), "Fades in from a blur"]
+        var fx = subPanel(p, "Effect");
+        grid(fx, [
+            ["Fade", anim("Fade", function () { doFade(isIn(), stag(), qb); }), "Opacity in or out"],
+            ["Scale Pop", anim("Scale Pop", function () { doPop(isIn() ? "up" : "out", { fade: true, center: "auto", stagger: stag(), smooth: true }); }), "Springs up from nothing, or shrinks away"],
+            ["Blur Fade", anim("Blur Fade", function () { doBlurFade(stag(), qb, isIn()); }), "Fades through a blur"]
         ]);
-        var secOut = subPanel(p, "Out");
-        grid(secOut, [
-            ["Fade Out", anim("Fade Out", function () { doFade(false, stag(), qb); })],
-            ["Blur Fade Out", anim("Blur Fade Out", function () { doBlurFade(stag(), qb, false); }), "Blurs out and fades away"]
+        var mv = subPanel(p, "Slide (+Fade)");
+        hint(mv, "Arrow = direction of travel.");
+        grid(mv, [
+            ["Slide Left", slide([-1, 0], "Slide Left"), "Slides travelling left and fades"],
+            ["Slide Right", slide([1, 0], "Slide Right"), "Slides travelling right and fades"],
+            ["Slide Up", slide([0, -1], "Slide Up"), "Slides travelling up and fades"],
+            ["Slide Down", slide([0, 1], "Slide Down"), "Slides travelling down and fades"]
         ]);
-        var secMove = subPanel(p, "Move");
-        grid(secMove, [
-            ["Slide Left (+Fade)", slide([-1, 0], "Slide Left (+Fade)"), "Slides in, travelling left, and fades in"],
-            ["Slide Right (+Fade)", slide([1, 0], "Slide Right (+Fade)"), "Slides in, travelling right, and fades in"],
-            ["Slide Up (+Fade)", slide([0, -1], "Slide Up (+Fade)"), "Slides in, travelling up, and fades in"],
-            ["Slide Down (+Fade)", slide([0, 1], "Slide Down (+Fade)"), "Slides in, travelling down, and fades in"]
-        ]);
-        hint(p, "Bounce applies to In, Out and Move. Uses Duration and Curve from the Style group.");
-
-        var secTools = subPanel(p, "Tools");
-        var gdir = drop(secTools, "Gradient direction:", ["Horizontal", "Vertical", "Diagonal"], 0, "Direction for Lock Gradient.");
-        grid(secTools, [
-            ["Reverse Keys", function () { run("Reverse Keys", doReverseKeys); }, "Reverses selected keyframed properties (or all on the selected layers)"],
-            ["Lock Gradient", function () { run("Lock Gradient", function () { doLockGradient(gdir.selection.index); }); }, "Gradient that stays locked to the layer: it moves, scales and rotates with it"]
-        ]);
-
-        var ball = subPanel(p, "Bounce the ball effect");
-        hint(ball, "Keyframed layers bounce like a ball after each key.");
-        var ballAmt = field(ball, "Amount (%):", getS("quick_ball", "10"), 4,
-            "How far it bounces after each keyframe.\n5 = small settle, 10 = default, 30+ = big rubber-ball bounce.");
-        ballAmt.onChange = function () { ballAmt.text = String(num(ballAmt.text, 10, 1, 100)); putS("quick_ball", ballAmt.text); };
-        btn(ball, "Bounce the ball effect", function () {
-            run("Bounce the ball effect", function () { doBouncePhysics(num(ballAmt.text, 10, 1, 100)); });
-        }, "Adds a ball-like bounce after every keyframe of the selected layers (position, scale, rotation) or selected keyframed properties.");
+        hint(p, "Bounce applies to every button. Uses Duration and Curve from the Style group.");
     });
 
     // ---------------- Flow ----------------
@@ -17198,69 +17156,17 @@
         });
     });
 
-    feature("Animate", "Pop", function (p) {
-        var fade = check(p, "Fade opacity too", true);
-        var center = check(p, "Scale from layer center", true, "Moves the anchor point to the layer's center first.");
-        var stg = field(p, "Stagger (frames):", "0", 4, "With several layers selected, each one pops this many frames after the previous. 0 = all at once.");
-        var ord = drop(p, "Order:", ORDER_LABELS, 0, "Which layer goes first.");
-        hint(p, "Springs past the end size and settles. Edit freq / decay / amp in the scale expression to tune.");
-        var r = btnRow(p);
-        function go(mode) {
-            run("Pop " + mode, function () { withOrder(ord.selection.index, function () { doPop(mode, { fade: fade.value, center: center.value, stagger: num(stg.text, 0, 0, 120), smooth: true }); }); });
-        }
-        btn(r, "Pop Up", function () { go("up"); });
-        btn(r, "Pop Out", function () { go("out"); });
-    });
-
-    feature("Animate", "Move in / out", function (p) {
-        var mode = drop(p, "Mode:", ["In", "Out"], 0);
-        var dist = drop(p, "Distance:", ["Off screen", "Custom"], 0);
-        var px = field(p, "Custom (px):", "300", 5, "Used when Distance is Custom.");
-        // The custom distance only applies when Distance is "Custom": grey it out otherwise
-        function syncCustom() {
-            var on = !!dist.selection && dist.selection.index === 1;
-            px.enabled = on;
-            try { px.parent.children[0].enabled = on; } catch (e) {}
-        }
-        dist.onChange = syncCustom;
-        syncCustom();
-        var fade = check(p, "Fade opacity too", false);
-        var stag = field(p, "Stagger (frames):", "0", 4, STAGGER_TIP);
-        hint(p, "Arrow = direction of travel:");
-        var r = btnRow(p);
-        function go(dir) {
-            run("Move", function () {
-                doMove(dir, {
-                    mode: mode.selection.index === 0 ? "in" : "out", offscreen: dist.selection.index === 0,
-                    distance: num(px.text, 300, 1, 20000), fade: fade.value, stagger: num(stag.text, 0, 0, 120)
-                });
-            });
-        }
-        btn(r, "←", function () { go([-1, 0]); });
-        btn(r, "↑", function () { go([0, -1]); });
-        btn(r, "↓", function () { go([0, 1]); });
-        btn(r, "→", function () { go([1, 0]); });
-    });
-
-    feature("Animate", "UI list stagger", function (p) {
-        hint(p, "Select imported UI rows. Animates top to bottom.");
-        var off = field(p, "Slide up (px):", "40", 5);
-        var stag = field(p, "Stagger (frames):", "2", 4, STAGGER_TIP);
-        var fade = check(p, "Fade opacity too", true);
-        btn(p, "Stagger selected layers", function () {
-            run("UI list stagger", function () {
-                doListStagger({ offset: num(off.text, 40, 0, 2000), stagger: num(stag.text, 2, 0, 60), fade: fade.value });
-            });
-        });
-    });
-
     feature("Animate", "Hold push-in", function (p) {
-        hint(p, "Slow scale-up on holds (100% → 105%).");
+        hint(p, "Slow zoom on holds. Push in: 100% -> 105%. Push out: 105% -> 100%.");
         var amt = field(p, "Amount (%):", "5", 4);
         var range = drop(p, "Range:", ["Whole layer", "Playhead to layer end"], 0);
-        btn(p, "Push in selected", function () {
-            run("Hold push-in", function () { doPushIn(num(amt.text, 5, 0.5, 100), range.selection.index === 1); });
-        });
+        var r = btnRow(p);
+        btn(r, "Push in", function () {
+            run("Hold push-in", function () { doPushIn(num(amt.text, 5, 0.5, 100), range.selection.index === 1, false); });
+        }, "Grows slowly over the hold.");
+        btn(r, "Push out", function () {
+            run("Hold push-out", function () { doPushIn(num(amt.text, 5, 0.5, 100), range.selection.index === 1, true); });
+        }, "Starts larger and settles on the layer's own size.");
     });
 
     // ---------------- Transitions ----------------

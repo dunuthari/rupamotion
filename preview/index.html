@@ -335,12 +335,11 @@
     { group: "Animate", name: "Quick", ui: [
       T("Bounce effect", true, "ON: every animation below bounces. OFF: clean eased motion."),
       F("Bounce (%):", "10", { tip: "How far animations overshoot before settling. 5 = subtle, 10 = default, 30 = very springy." }), F("Slide distance (px):", "200"),
-      C("In", [GRID([["Fade In"], ["Scale Pop"], ["Blur Fade In"]])]),
-      C("Out", [GRID([["Fade Out"], ["Blur Fade Out"]])]),
-      C("Move", [GRID([["Slide Left (+Fade)"], ["Slide Right (+Fade)"], ["Slide Up (+Fade)"], ["Slide Down (+Fade)"]])]),
-      H("Bounce applies to In, Out and Move. Uses Duration and Curve from the Style group."),
-      C("Tools", [D("Gradient direction:", ["Horizontal", "Vertical", "Diagonal"]), GRID([["Reverse Keys"], ["Lock Gradient"]])]),
-      C("Bounce the ball effect", [H("Keyframed layers bounce like a ball after each key."), F("Amount (%):", "10", { tip: "How far it bounces after each keyframe. 5 = small settle, 10 = default, 30+ = big rubber-ball bounce." }), B("Bounce the ball effect", "Added the ball bounce.")])
+      C("Several layers", [F("Stagger (frames):", "0"), D("Order:", ["Top to bottom", "Bottom to top", "Selection order", "Left to right"])]),
+      D("Mode:", ["In", "Out"]),
+      C("Effect", [GRID([["Fade"], ["Scale Pop"], ["Blur Fade"]])]),
+      C("Slide (+Fade)", [H("Arrow = direction of travel."), GRID([["Slide Left"], ["Slide Right"], ["Slide Up"], ["Slide Down"]])]),
+      H("Bounce applies to every button. Uses Duration and Curve from the Style group.")
     ]},
     { group: "Flow", name: "Easing curves", ui: [["flow"]] },
     { group: "Camera", name: "Camera", ui: [
@@ -354,10 +353,7 @@
       ROW([["Create shape", "Created the shape.", true], ["Update selected", "Updated the selected shapes."]])
     ]},
     { group: "Animate", name: "Shape morph", ui: [H("Select 2 shape layers, playhead at the start."), D("Morph from:", ["Lower layer", "Upper layer"]), T("Morph fill color", true), T("Hide target layer", true), T("Put morph in a new composition", true), B("Morph", "Morphed the shapes.")] },
-    { group: "Animate", name: "Pop", ui: [T("Fade opacity too", true), T("Scale from layer center", true), H("Springs past the end size and settles. Edit freq / decay / amp in the scale expression to tune."), ROW([["Pop Up"], ["Pop Out"]])] },
-    { group: "Animate", name: "Move in / out", ui: [D("Mode:", ["In", "Out"]), D("Distance:", ["Off screen", "Custom"]), F("Custom (px):", "300", { enabledWhen: 1, tip: "Used when Distance is Custom." }), T("Fade opacity too", false), F("Stagger (frames):", "0"), H("Arrow = direction of travel:"), ROW([["←", "Move left"], ["↑", "Move up"], ["↓", "Move down"], ["→", "Move right"]], "four")] },
-    { group: "Animate", name: "UI list stagger", ui: [H("Select imported UI rows. Animates top to bottom."), F("Slide up (px):", "40"), F("Stagger (frames):", "2", { tip: STAGGER_TIP }), T("Fade opacity too", true), B("Stagger selected layers", "Staggered the rows.")] },
-    { group: "Animate", name: "Hold push-in", ui: [H("Slow scale-up on holds (100% → 105%)."), F("Amount (%):", "5"), D("Range:", ["Whole layer", "Playhead to layer end"]), B("Push in selected", "Added the push-in.")] },
+    { group: "Animate", name: "Hold push-in", ui: [H("Slow zoom on holds. Push in: 100% → 105%. Push out: 105% → 100%."), F("Amount (%):", "5"), D("Range:", ["Whole layer", "Playhead to layer end"]), ROW([["Push in", "Added the push-in."], ["Push out", "Added the push-out."]])] },
     { group: "Transitions", name: "Zoom cut", ui: [H("Select 2 clips, or put the playhead on the cut."), F("Frames each side:", "6"), F("Intensity (×):", "3"), F("Blur (shutter °):", "270"), ROW([["Zoom In"], ["Zoom Out"]])] },
     { group: "Transitions", name: "Swipe cut", ui: [H("Select the outgoing + incoming clips, or put the playhead on the cut."), H("Adds 3 linked nulls: Out, In and a Move null at the cut."), F("Frames each side:", "15", { tip: "How long the whoosh lasts on each side of the cut." }), F("Distance (%):", "27", { tip: "How far the clips slide. 27% is about 520 px on a 1920 frame, so both stay on screen. 100% = a full screen." }), F("Blur (shutter °):", "300", { tip: "Raises the comp's shutter angle to at least this, for motion blur." }), ROW([["←", "Swipe left"], ["↑", "Swipe up"], ["↓", "Swipe down"], ["→", "Swipe right"]], "four")] },
     { group: "Transitions", name: "Shape wipe", ui: [H("Select 2 clips, or put the playhead on the cut."), D("Shape:", ["Circle", "Triangle"]), D("Grow from:", ["Center", "Left", "Right", "Top", "Bottom"]), T("Blue accent shape leads the reveal", true), F("Accent lead (frames):", "3"), B("Add shape wipe", "Added the shape wipe.")] },
@@ -385,7 +381,7 @@
   ];
 
   var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
-  var CHIP_ORDER = ["Quick", "Move in / out", "Pop", "Shape morph", "UI list stagger", "Hold push-in", "Effects", "Text + Icon", "Zoom cut", "Swipe cut", "Shape wipe",
+  var CHIP_ORDER = ["Quick", "Shape morph", "Hold push-in", "Effects", "Text + Icon", "Zoom cut", "Swipe cut", "Shape wipe",
     "Smart shape", "Pill button", "Frosted glass", "AI glow button", "Fake cursor", "Avatar bubble", "Audio waveform", "Liquid-glass button", "Stock grid wall"];
   function rank(list, n) { var i = list.indexOf(n); return i < 0 ? list.length : i; }
   FEATURES = FEATURES.map(function (f, i) { return [f, i]; }).sort(function (a, b) { return rank(CHIP_ORDER, a[0].name) - rank(CHIP_ORDER, b[0].name) || a[1] - b[1]; }).map(function (x) { return x[0]; });

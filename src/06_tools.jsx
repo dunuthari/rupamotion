@@ -557,7 +557,7 @@
         return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
     }
     function anchorMoveProp(prop, delta, kfMode, t, dim) {   // delta: function (time) -> [dx, dy]; dim: 0 / 1 for a separated axis, -1 for both
-        var i, v, d;
+        var i, v;
         function plus(val, dd) {
             if (!(val instanceof Array)) { return val + (dim === 1 ? dd[1] : dd[0]); }
             var o = val.slice(0); o[0] += dd[0]; o[1] += dd[1]; return o;
@@ -601,7 +601,7 @@
         });
     }
 
-    // fadeIn (default true): blur 40 -> 0 and opacity 0 -> 100; false: blur 0 -> 40 and opacity 100 -> 0
+    // fadeIn (default true): blur 80 -> 0 and opacity 0 -> 100; false: blur 0 -> 80 and opacity 100 -> 0
     function doBlurFade(stagger, bounce, fadeIn) {
         var comp = activeComp(); if (!comp) { return; }
         var d = animDur(comp), fr = comp.frameDuration, isIn = (fadeIn !== false);
@@ -614,10 +614,10 @@
             var bp = L.property("ADBE Effect Parade").property("Ru Blur Fade").property(1);
             var op = L.transform.opacity.valueAtTime(t, false) || 100;
             if (isIn) {
-                setKeys(bp, [[t, 40], [t + d, 0]]);
+                setKeys(bp, [[t, 80], [t + d, 0]]);
                 setKeys(L.transform.opacity, [[t, 0], [t + d * 0.7, op]]);
             } else {
-                setKeys(bp, [[t, 0], [t + d, 40]]);
+                setKeys(bp, [[t, 0], [t + d, 80]]);
                 setKeys(L.transform.opacity, [[t + d * 0.3, op], [t + d, 0]]);
             }
             if (bounce) { fadeBounce(L, t, d, isIn); }

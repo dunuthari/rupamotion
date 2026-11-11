@@ -239,9 +239,9 @@ function runPop(label) {
   const layer = { transform: { scale: sc, opacity: op }, motionBlur: false, containingComp: {} };
   const comp = new g.CompItem(); comp.selectedLayers = [layer]; comp.time = 1; comp.frameDuration = 1 / 24;
   app.project.activeItem = comp;
-  const btn = walk(root).filter(n => n.type === 'button' && n.text === label)[0];
-  const centerT = walk(root).filter(n => n.type === 'button' && n.text === 'Scale from layer center' && typeof n.value === 'boolean')[0];
-  if (centerT.value) centerT.onClick();
+  const btn = walk(root).filter(n => n.type === 'button' && n.text === 'Scale Pop')[0];
+  const modeD = walk(root).filter(n => n.type === 'dropdownlist' && n.parent && n.parent.children[0] && n.parent.children[0].text === 'Mode:')[0];
+  modeD.selection = modeD.items[label === 'Pop Out' ? 1 : 0];
   btn.onClick();
   app.project.activeItem = null;
   return { sc, op };
@@ -259,7 +259,6 @@ const near2 = (a, b) => Math.abs(a - b) < 1e-6;
     && near2(k[1].in[0].speed, (1 - 0.55) * 100 / (0.25 * dt)) && /Motion Kit smooth bounce/.test(sc.expression);
   console.log(`pop up: ${ok ? 'OK' : 'WRONG'} (arrives at speed ${k[1] && Math.round(k[1].in[0].speed)}/s, smooth bounce on scale)`);
 }
-console.log(`pop group: stagger field removed ${!walk(root).some(n => n.type === 'statictext' && n.text === 'Stagger (frames):' && n.parent && n.parent.parent && n.parent.parent.cardTitle === 'Pop')}`);
 
 // Play the generated expression frame by frame (a small AE shim) and check what the motion actually does
 function playExpr(expr, keys, curve) {
@@ -898,8 +897,10 @@ function buildTextIcon(sentence, atIndex, opts) {
 {
   const R = {};
   const names = walk(root).filter(b => b.type === 'button').map(b => b.text);
-  R['"Blur Fade" is gone, "Blur Fade In" and "Blur Fade Out" are there'] = names.indexOf('Blur Fade') < 0 && names.indexOf('Blur Fade In') >= 0 && names.indexOf('Blur Fade Out') >= 0;
+  R['one "Blur Fade" button, driven by the Mode switch'] = names.filter(n => n === 'Blur Fade').length === 1 && names.indexOf('Blur Fade In') < 0;
+  const modeD = walk(root).filter(n => n.type === 'dropdownlist' && n.parent && n.parent.children[0] && n.parent.children[0].text === 'Mode:')[0];
   function press(label) {
+    modeD.selection = modeD.items[/Out/.test(label) ? 1 : 0]; label = 'Blur Fade';
     const { comp, made } = fakeBuild(); app.project.activeItem = comp; comp.time = 2;
     const L = baseLayer('shape'); L.name = 'Card'; made.push(L); comp.selectedLayers = [L];
     const bb = walk(root).filter(b => b.type === 'button' && b.text === label)[0]; bb.onClick(); app.project.activeItem = null;
@@ -907,8 +908,8 @@ function buildTextIcon(sentence, atIndex, opts) {
     return { L, blur: e && e.children[0].keys, op: L.transform.opacity.keys };
   }
   const i = press('Blur Fade In'), o = press('Blur Fade Out');
-  R['In: blur 40 -> 0 and opacity 0 -> 100'] = i.blur && i.blur[0].v === 40 && i.blur[1].v === 0 && i.op[0].v === 0 && i.op[i.op.length - 1].v === 100;
-  R['Out: blur 0 -> 40 and opacity 100 -> 0'] = o.blur && o.blur[0].v === 0 && o.blur[1].v === 40 && o.op[0].v === 100 && o.op[o.op.length - 1].v === 0;
+  R['In: blur 80 -> 0 and opacity 0 -> 100'] = i.blur && i.blur[0].v === 80 && i.blur[1].v === 0 && i.op[0].v === 0 && i.op[i.op.length - 1].v === 100;
+  R['Out: blur 0 -> 80 and opacity 100 -> 0'] = o.blur && o.blur[0].v === 0 && o.blur[1].v === 80 && o.op[0].v === 100 && o.op[o.op.length - 1].v === 0;
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`blur fade in/out: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
@@ -1016,7 +1017,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   const countKinds = {}; const tally = c => c.kids.forEach(k => { if (k.t === 'card') tally(k.card); else if (k.items) k.items.forEach(i => { countKinds[i.k] = (countKinds[i.k] || 0) + 1; }); else countKinds[k.t] = (countKinds[k.t] || 0) + 1; }); feats.forEach(tally);
   // find the Bounce % field in Quick and write to it; press Fade In
   let fld = null, btnFade = null;
-  (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => { if (i.k === 'f' && /Bounce \(%\)/.test(i.label)) fld = i; if (i.k === 'b' && i.text === 'Fade In') btnFade = i; }); }); })(feats[meta.features.findIndex(f => f.name === 'Quick')]);
+  (function w(c) { c.kids.forEach(k => { if (k.t === 'card') w(k.card); else if (k.items) k.items.forEach(i => { if (i.k === 'f' && /Bounce \(%\)/.test(i.label)) fld = i; if (i.k === 'b' && i.text === 'Fade') btnFade = i; }); }); })(feats[meta.features.findIndex(f => f.name === 'Quick')]);
   const okSet = fld && B.set(fld.id, '15') === 'ok' && B.feature(meta.features.findIndex(f => f.name === 'Quick')).indexOf('"v":"15"') > 0;
   const okClick = btnFade && B.click(btnFade.id) === 'ok';
   console.log(`cep bridge: ${meta.features.length} features, kinds ${JSON.stringify(countKinds)}, set ${!!okSet}, click ${!!okClick}`);
@@ -1428,7 +1429,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   const a = comp.layers.add({}), b = comp.layers.add({}); [a, b].forEach(x => Object.setPrototypeOf(x, g.AVLayer.prototype));
   a.index = 1; b.index = 2; comp.selectedLayers = [a, b];
   B.set(byLabel(quick, 'Stagger (frames):').id, '5'); B.set(byLabel(quick, 'Order:').id, '1');
-  B.click(byLabel(quick, 'Fade In').id);
+  B.click(byLabel(quick, 'Fade').id);
   R['bottom to top: lower layer first'] = near(b.transform.opacity.keyTime(1), 1) && near(a.transform.opacity.keyTime(1), 1 + 5 * comp.frameDuration);
   app.project.activeItem = null;
   const bad = Object.keys(R).filter(k2 => !R[k2]);

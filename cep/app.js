@@ -569,42 +569,24 @@
   // controls (found by label). Quick / Pop / Move in / out: a click on an effect button only previews it (`wants`), the added
   // Apply button sends the real click; the other three cards have one action button, so the stage just shows the settings.
   function anOut(u) { u = pvClamp(u, 0, 1); return u >= 1 ? 1 : 1 - Math.pow(2, -10 * u); }
-  function anBounce(u, amt) { if (u >= 1) return 1; return anOut(u) + amt * Math.sin(u * Math.PI * 2.2) * Math.exp(-u * 4); }
+  function anBounce(u, pct) { if (u >= 1) return 1; var ov = pvClamp(pct / 100, 0.01, 0.6), d = -Math.log(ov / 0.936) / 0.4; return 1 - Math.exp(-d * u) * Math.cos(2.5 * Math.PI * u) * (1 - u * u * u); }
   var AN_FX = {
-    "Quick": { pick: /^(Fade In|Scale Pop|Blur Fade In|Fade Out|Blur Fade Out|Slide (Left|Right|Up|Down) \(\+Fade\))$/, first: "Fade In", layers: 1,
+    "Quick": { pick: /^(Fade|Scale Pop|Blur Fade|Slide (Left|Right|Up|Down))$/, first: "Fade", layers: 1,
+      name: function (c, b) { return b + (c.sel("Mode:") === 1 ? " Out" : " In"); },
       f: function (c, t, lay, name) {
         var bon = c.bool("Bounce effect"), pct = c.num("Bounce (%):", 10), dist = pvClamp(c.num("Slide distance (px):", 200), 0, 2000) / 400 * 100;
-        var u = pvClamp(t / 0.9, 0, 1), e = bon ? anBounce(u, pct / 100) : anOut(u), x = 0, y = 0, s = 1, op = 1, bl = 0;
-        if (name === "Fade In") { op = e; }
-        else if (name === "Scale Pop") { s = 0.2 + 0.8 * e; op = pvClamp(u * 3, 0, 1); }
-        else if (name === "Blur Fade In") { op = e; bl = (1 - anOut(u)) * 12; }
-        else if (name === "Fade Out") { op = 1 - e; }
-        else if (name === "Blur Fade Out") { op = 1 - e; bl = anOut(u) * 12; }
-        else if (name.indexOf("Slide") === 0) {
-          var dx = name.indexOf("Left") > 0 ? 1 : name.indexOf("Right") > 0 ? -1 : 0, dy = name.indexOf("Up") > 0 ? 1 : name.indexOf("Down") > 0 ? -1 : 0;
-          x = dx * dist * (1 - e); y = dy * dist * (1 - e); op = pvClamp(u * 2, 0, 1);
+        var out = /Out$/.test(name), base = name.replace(/ (In|Out)$/, "");
+        var u = pvClamp(t / 0.9, 0, 1), e = bon ? anBounce(u, pct) : anOut(u), k = out ? 1 - e : e, x = 0, y = 0, s = 1, op = 1, bl = 0;
+        if (base === "Fade") { op = k; if (bon) { s = out ? 1 : 0.88 + 0.12 * e; } }
+        else if (base === "Scale Pop") { var ps = anBounce(u, 18); s = out ? Math.max(0.001, 1 - ps) : Math.max(0, ps); op = out ? 1 - pvClamp(u * 1.3, 0, 1) : pvClamp(u * 4, 0, 1); }
+        else if (base === "Blur Fade") { op = k; bl = (out ? anOut(u) : 1 - anOut(u)) * 14; }
+        else {
+          var dx = base.indexOf("Left") > 0 ? 1 : base.indexOf("Right") > 0 ? -1 : 0, dy = base.indexOf("Up") > 0 ? 1 : base.indexOf("Down") > 0 ? -1 : 0;
+          if (out) { dx = -dx; dy = -dy; }
+          x = dx * dist * (1 - k); y = dy * dist * (1 - k); op = out ? 1 - pvClamp((u - 0.5) * 2, 0, 1) : pvClamp(u * 2, 0, 1);
         }
         anSet(lay[0], x, y, s, op, bl);
         return u;
-      } },
-    "Pop": { pick: /^Pop (Up|Out)$/, first: "Pop Up", layers: 1,
-      f: function (c, t, lay, name) {
-        var fade = c.bool("Fade opacity too"), u = pvClamp(t / 1.0, 0, 1), e = anBounce(u, 0.18);
-        if (name === "Pop Up") { anSet(lay[0], 0, 0, Math.max(0, e), fade ? pvClamp(u * 4, 0, 1) : 1, 0); }
-        else { anSet(lay[0], 0, 0, Math.max(0.001, 1 - e), fade ? 1 - pvClamp(u * 1.3, 0, 1) : 1, 0); }
-        return u;
-      } },
-    "Move in / out": { pick: /^[←↑↓→]$/, first: "←", layers: 3, small: true,
-      name: function (c, b) { return "Move " + (c.sel("Mode:") === 1 ? "out " : "in ") + b; },
-      f: function (c, t, lay, name) {
-        var out = c.sel("Mode:") === 1, d = c.sel("Distance:") === 0 ? 260 : pvClamp(c.num("Custom (px):", 300), 0, 2000) / 400 * 100;
-        var fade = c.bool("Fade opacity too"), stag = pvClamp(c.num("Stagger (frames):", 0), 0, 120) / 25;
-        var a = name.charAt(name.length - 1), dx = a === "←" ? -1 : a === "→" ? 1 : 0, dy = a === "↑" ? -1 : a === "↓" ? 1 : 0, sg = out ? 1 : -1;
-        lay.forEach(function (l, i) {
-          var u = pvClamp((t - i * stag) / 0.9, 0, 1), e = anOut(u), k = out ? e : 1 - e;
-          anSet(l, dx * d * k * sg, dy * d * k * sg, 1, fade ? (out ? 1 - e : e) : 1, 0);
-        });
-        return pvClamp(t / 1.2, 0, 1);
       } },
     "Shape morph": { layers: 0, build: function (st) {
         var a = el("div", { class: "an-lay an-circle" }), b = el("div", { class: "an-lay an-square" });
@@ -625,16 +607,8 @@
         lay[1].style.transform = "translate(" + (x - D) + "px," + y + "px) rotate(" + rot + "deg) scale(" + s + ")";
         return pvClamp(T / 1.6, 0, 1);
       } },
-    "UI list stagger": { layers: 0, build: function (st) {
-        var rows = [0, 1, 2, 3].map(function () { return anLayer(); }), box = el("div", { class: "an-rows" }, rows); st.appendChild(box); return rows;
-      },
-      f: function (c, t, lay) {
-        var off = pvClamp(c.num("Slide up (px):", 40), 0, 500) / 400 * 100, stag = pvClamp(c.num("Stagger (frames):", 2), 0, 60) / 25, fade = c.bool("Fade opacity too");
-        lay.forEach(function (r, i) { var u = pvClamp((t - i * stag) / 0.7, 0, 1), e = anOut(u); r.style.transform = "translateY(" + (off * (1 - e)) + "px)"; r.style.opacity = fade ? e : 1; });
-        return pvClamp(t / 1.2, 0, 1);
-      } },
-    "Hold push-in": { layers: 0, build: function (st) { var ph = el("div", { class: "an-photo" }); st.appendChild(ph); return [ph]; },
-      f: function (c, t, lay) { var u = t / 2.4; lay[0].style.transform = "scale(" + (1 + pvClamp(c.num("Amount (%):", 5), 0, 100) / 100 * u) + ")"; return u; } }
+    "Hold push-in": { pick: /^Push (in|out)$/, first: "Push in", layers: 0, build: function (st) { var ph = el("div", { class: "an-photo" }); st.appendChild(ph); return [ph]; },
+      f: function (c, t, lay, name) { var u = t / 2.4, a = pvClamp(c.num("Amount (%):", 5), 0, 100) / 100; lay[0].style.transform = "scale(" + (1 + a * (/out$/.test(name) ? 1 - u : u)) + ")"; return u; } }
   };
   function anLayer() { return el("div", { class: "an-lay" }, [el("i"), el("i"), el("i")]); }
   function anSet(l, x, y, s, o, b) { l.style.transform = "translate(" + x + "px," + y + "px) scale(" + s + ")"; l.style.opacity = o; l.style.filter = b ? "blur(" + b + "px)" : ""; }

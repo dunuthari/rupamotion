@@ -391,8 +391,8 @@
         L.push("    var t1 = key(i).time, t2 = key(i + 1).time;");
         L.push("    var p = (time - t1) / (t2 - t1);");
         L.push("    var ov = Math.max(0.01, Math.min(0.6, s / 100));");
-        L.push("    var d = -Math.log(ov) / 0.4;");
-        L.push("    var e = 1 - Math.exp(-d * p) * Math.cos(2.5 * Math.PI * p);");
+        L.push("    var d = -Math.log(ov / 0.936) / 0.4;");
+        L.push("    var e = 1 - Math.exp(-d * p) * Math.cos(2.5 * Math.PI * p) * (1 - p * p * p);");
         if (isShape) {
             L.push("    var a1 = thisProperty.points(t1), a2 = thisProperty.points(t2);");
             L.push("    if (a1.length == a2.length) {");
