@@ -15607,7 +15607,9 @@
         return null;
     }
 
-    function doFollowPath(seconds, loop, orient) {
+    // front: which way the artwork's front points when the layer is unrotated: 0 right, 1 up, 2 left, 3 down
+    var FRONT_OFFSET = [0, 90, 180, -90];
+    function doFollowPath(seconds, loop, orient, front) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = comp.selectedLayers;
         if (sel.length !== 2) { alert("Select 2 layers: the path (a mask or shape path) and the layer that should follow it.", NAME); return; }
@@ -15640,9 +15642,12 @@
             "if (hasParent) { pt = parent.fromComp(pt); }\n" +
             "(value.length == 3) ? [pt[0], pt[1], value[2]] : [pt[0], pt[1]];";
         if (orient) {
+            var off = FRONT_OFFSET[front || 0] || 0;
             follower.transform.rotation.expression = head +
                 "var tg = p.tangentOnPath(prog);\n" +
-                "radiansToDegrees(Math.atan2(tg[1], tg[0]));";
+                "radiansToDegrees(Math.atan2(tg[1], tg[0]))" + (off ? " + " + off : "") + ";";
+        } else {
+            try { if (follower.transform.rotation.expression.indexOf("Ru Path Progress") >= 0) { follower.transform.rotation.expression = ""; } } catch (e) {}
         }
         mb(follower);
     }
@@ -16856,8 +16861,9 @@
         var fpD = field(fp, "Path time (s):", "3", 4);
         var fpL = check(fp, "Loop along path", true);
         var fpO = check(fp, "Orient along path", false);
+        var fpF = drop(fp, "Front faces:", ["Right", "Up", "Left", "Down"], 0, "Which way the artwork's front points before it is rotated (a car drawn nose-up = Up). Used by Orient along path.");
         btn(fp, "Follow Path", function () {
-            run("Follow Path", function () { doFollowPath(num(fpD.text, 3, 0.1, 600), fpL.value, fpO.value); });
+            run("Follow Path", function () { doFollowPath(num(fpD.text, 3, 0.1, 600), fpL.value, fpO.value, fpF.selection.index); });
         }, "The follower moves along the path, driven by an \"Ru Path Progress\" slider.");
     });
 

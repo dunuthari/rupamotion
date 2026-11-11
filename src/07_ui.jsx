@@ -773,8 +773,9 @@
         var fpD = field(fp, "Path time (s):", "3", 4);
         var fpL = check(fp, "Loop along path", true);
         var fpO = check(fp, "Orient along path", false);
+        var fpF = drop(fp, "Front faces:", ["Right", "Up", "Left", "Down"], 0, "Which way the artwork's front points before it is rotated (a car drawn nose-up = Up). Used by Orient along path.");
         btn(fp, "Follow Path", function () {
-            run("Follow Path", function () { doFollowPath(num(fpD.text, 3, 0.1, 600), fpL.value, fpO.value); });
+            run("Follow Path", function () { doFollowPath(num(fpD.text, 3, 0.1, 600), fpL.value, fpO.value, fpF.selection.index); });
         }, "The follower moves along the path, driven by an \"Ru Path Progress\" slider.");
     });
 

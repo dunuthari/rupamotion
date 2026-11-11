@@ -471,7 +471,9 @@
         return null;
     }
 
-    function doFollowPath(seconds, loop, orient) {
+    // front: which way the artwork's front points when the layer is unrotated: 0 right, 1 up, 2 left, 3 down
+    var FRONT_OFFSET = [0, 90, 180, -90];
+    function doFollowPath(seconds, loop, orient, front) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = comp.selectedLayers;
         if (sel.length !== 2) { alert("Select 2 layers: the path (a mask or shape path) and the layer that should follow it.", NAME); return; }
@@ -504,9 +506,12 @@
             "if (hasParent) { pt = parent.fromComp(pt); }\n" +
             "(value.length == 3) ? [pt[0], pt[1], value[2]] : [pt[0], pt[1]];";
         if (orient) {
+            var off = FRONT_OFFSET[front || 0] || 0;
             follower.transform.rotation.expression = head +
                 "var tg = p.tangentOnPath(prog);\n" +
-                "radiansToDegrees(Math.atan2(tg[1], tg[0]));";
+                "radiansToDegrees(Math.atan2(tg[1], tg[0]))" + (off ? " + " + off : "") + ";";
+        } else {
+            try { if (follower.transform.rotation.expression.indexOf("Ru Path Progress") >= 0) { follower.transform.rotation.expression = ""; } } catch (e) {}
         }
         mb(follower);
     }
