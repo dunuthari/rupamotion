@@ -249,7 +249,7 @@ function runPop(label) {
 const near2 = (a, b) => Math.abs(a - b) < 1e-6;
 {
   const { sc } = runPop('Pop Out'), k = sc.keys, dt = k.length === 2 ? k[1].t - k[0].t : 0;
-  const ok = k.length === 2 && near2(dt, 0.75) && near2(k[0].out[0].influence, 30) && near2(k[0].out[0].speed, 0.36 * -100 / (0.3 * dt))
+  const ok = k.length === 2 && near2(dt, 5.5 / 24) && near2(k[0].out[0].influence, 30) && near2(k[0].out[0].speed, 0.36 * -100 / (0.3 * dt))
     && near2(k[1].in[0].influence, 40) && near2(k[1].in[0].speed, 0) && /Motion Kit smooth bounce/.test(sc.expression) && /clampZero = true/.test(sc.expression);
   console.log(`pop out: ${ok ? 'OK' : 'WRONG'} (2 keys, speed at start ${k[0] && Math.round(k[0].out[0].speed)}, lands at speed ${k[1] && k[1].in[0].speed}, smooth bounce on scale)`);
 }
@@ -910,6 +910,11 @@ function buildTextIcon(sentence, atIndex, opts) {
   const i = press('Blur Fade In'), o = press('Blur Fade Out');
   R['In: blur 80 -> 0 and opacity 0 -> 100'] = i.blur && i.blur[0].v === 80 && i.blur[1].v === 0 && i.op[0].v === 0 && i.op[i.op.length - 1].v === 100;
   R['Out: blur 0 -> 80 and opacity 100 -> 0'] = o.blur && o.blur[0].v === 0 && o.blur[1].v === 80 && o.op[0].v === 100 && o.op[o.op.length - 1].v === 0;
+  // in then out on the same layer: one effect, four blur keys, no blur in between
+  modeD.selection = modeD.items[1]; const bb2 = walk(root).filter(b => b.type === 'button' && b.text === 'Blur Fade')[0];
+  app.project.activeItem = i.L.containingComp || app.project.activeItem; { const { comp } = fakeBuild(); app.project.activeItem = comp; comp.time = 6; comp.selectedLayers = [i.L]; bb2.onClick(); app.project.activeItem = null; }
+  const fxs = i.L.property('ADBE Effect Parade').children.filter(c => c.name === 'Ru Blur Fade');
+  R['second press reuses the one Ru Blur Fade effect'] = fxs.length === 1 && fxs[0].children[0].keys.length === 4 && fxs[0].children[0].keys[1].v === 0 && fxs[0].children[0].keys[2].v === 0;
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`blur fade in/out: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }

@@ -578,12 +578,12 @@
         var out = /Out$/.test(name), base = name.replace(/ (In|Out)$/, "");
         var u = pvClamp(t / 0.9, 0, 1), e = bon ? anBounce(u, pct) : anOut(u), k = out ? 1 - e : e, x = 0, y = 0, s = 1, op = 1, bl = 0;
         if (base === "Fade") { op = k; if (bon) { s = out ? 1 : 0.88 + 0.12 * e; } }
-        else if (base === "Scale Pop") { var ps = anBounce(u, 18); s = out ? Math.max(0.001, 1 - ps) : Math.max(0, ps); op = out ? 1 - pvClamp(u * 1.3, 0, 1) : pvClamp(u * 4, 0, 1); }
+        else if (base === "Scale Pop") { var uq = pvClamp(t / 0.25, 0, 1), ps = anBounce(uq, 18); s = out ? Math.max(0.001, 1 - ps) : Math.max(0, ps); op = out ? 1 - pvClamp(t / 0.2, 0, 1) : pvClamp(t / 0.2, 0, 1); }
         else if (base === "Blur Fade") { op = k; bl = (out ? anOut(u) : 1 - anOut(u)) * 14; }
         else {
           var dx = base.indexOf("Left") > 0 ? 1 : base.indexOf("Right") > 0 ? -1 : 0, dy = base.indexOf("Up") > 0 ? 1 : base.indexOf("Down") > 0 ? -1 : 0;
           if (out) { dx = -dx; dy = -dy; }
-          x = dx * dist * (1 - k); y = dy * dist * (1 - k); op = out ? 1 - pvClamp((u - 0.5) * 2, 0, 1) : pvClamp(u * 2, 0, 1);
+          x = dx * dist * (1 - k); y = dy * dist * (1 - k); op = out ? 1 - pvClamp((u - 0.15) / 0.55, 0, 1) : pvClamp(u * 2, 0, 1);
         }
         anSet(lay[0], x, y, s, op, bl);
         return u;

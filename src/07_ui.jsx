@@ -814,7 +814,7 @@
         var fx = subPanel(p, "Effect");
         grid(fx, [
             ["Fade", anim("Fade", function () { doFade(isIn(), stag(), qb); }), "Opacity in or out"],
-            ["Scale Pop", anim("Scale Pop", function () { doPop(isIn() ? "up" : "out", { fade: true, center: "auto", stagger: stag(), smooth: true }); }), "Springs up from nothing, or shrinks away"],
+            ["Scale Pop", anim("Scale Pop", function () { doPop(isIn() ? "up" : "out", { fade: true, center: "auto", stagger: stag(), smooth: true, frames: 5.5, fadeFrames: 5 }); }), "Springs up from nothing, or shrinks away"],
             ["Blur Fade", anim("Blur Fade", function () { doBlurFade(stag(), qb, isIn()); }), "Fades through a blur"]
         ]);
         var mv = subPanel(p, "Slide (+Fade)");

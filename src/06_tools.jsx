@@ -607,11 +607,15 @@
         var d = animDur(comp), fr = comp.frameDuration, isIn = (fadeIn !== false);
         eachSelected(comp, "Select at least one layer.", function (L, i) {
             var t = comp.time + i * stagger * fr;
-            var e = fxAdd(L, "ADBE Gaussian Blur 2");
-            if (!e) { return; }
-            e.name = "Ru Blur Fade";
-            fxSet(e, 3, 1);
-            var bp = L.property("ADBE Effect Parade").property("Ru Blur Fade").property(1);
+            var fxp = L.property("ADBE Effect Parade"), e = null, k;
+            for (k = 1; k <= fxp.numProperties; k++) { if (fxp.property(k).name === "Ru Blur Fade") { e = fxp.property(k); break; } }
+            if (!e) {
+                e = fxAdd(L, "ADBE Gaussian Blur 2");
+                if (!e) { return; }
+                e.name = "Ru Blur Fade";
+                fxSet(e, 3, 1);
+            }
+            var bp = e.property(1);
             var op = L.transform.opacity.valueAtTime(t, false) || 100;
             if (isIn) {
                 setKeys(bp, [[t, 80], [t + d, 0]]);

@@ -1101,10 +1101,11 @@
         try { prop.expression = smoothBounceExpr(clampZero); } catch (e1) {}
     }
 
+    // o.frames / o.fadeFrames (optional): scale and opacity key spans in frames instead of the Style duration
     function doPop(mode, o) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = selLayers(comp, 1, "Select at least one layer."); if (!sel) { return; }
-        var fr = comp.frameDuration, d = animDur(comp);
+        var fr = comp.frameDuration, d = o.frames ? o.frames * fr : animDur(comp), fd = o.fadeFrames ? o.fadeFrames * fr : 0;
         for (var i = 0; i < sel.length; i++) {
             var L = sel[i];
             if (L instanceof CameraLayer || L instanceof LightLayer) { continue; }
@@ -1133,7 +1134,8 @@
             if (o.fade) {
                 var op = L.transform.opacity.valueAtTime(t, false);
                 if (mode === "up" && op === 0) { op = 100; }
-                if (mode === "up") { setKeys(L.transform.opacity, [[t, 0], [t + d * 0.4, op]]); }
+                if (mode === "up") { setKeys(L.transform.opacity, [[t, 0], [t + (fd || d * 0.4), op]]); }
+                else if (fd) { setKeys(L.transform.opacity, [[t, op], [t + fd, 0]]); }
                 else { setKeys(L.transform.opacity, [[t + d * 0.45, op], [t + d, 0]]); }
             }
             mb(L);
@@ -1179,7 +1181,7 @@
             if (o.fade) {
                 var op = tr.opacity.valueAtTime(t, false) || 100;
                 if (o.mode === "in") { setKeys(tr.opacity, [[t, 0], [t + d * 0.5, op]]); }
-                else { setKeys(tr.opacity, [[t + d * 0.5, op], [t + d, 0]]); }
+                else { setKeys(tr.opacity, [[t + d * 0.15, op], [t + d * 0.7, 0]]); }   // out: gone before the move lands
             }
             mb(L);
         }
@@ -15717,11 +15719,15 @@
         var d = animDur(comp), fr = comp.frameDuration, isIn = (fadeIn !== false);
         eachSelected(comp, "Select at least one layer.", function (L, i) {
             var t = comp.time + i * stagger * fr;
-            var e = fxAdd(L, "ADBE Gaussian Blur 2");
-            if (!e) { return; }
-            e.name = "Ru Blur Fade";
-            fxSet(e, 3, 1);
-            var bp = L.property("ADBE Effect Parade").property("Ru Blur Fade").property(1);
+            var fxp = L.property("ADBE Effect Parade"), e = null, k;
+            for (k = 1; k <= fxp.numProperties; k++) { if (fxp.property(k).name === "Ru Blur Fade") { e = fxp.property(k); break; } }
+            if (!e) {
+                e = fxAdd(L, "ADBE Gaussian Blur 2");
+                if (!e) { return; }
+                e.name = "Ru Blur Fade";
+                fxSet(e, 3, 1);
+            }
+            var bp = e.property(1);
             var op = L.transform.opacity.valueAtTime(t, false) || 100;
             if (isIn) {
                 setKeys(bp, [[t, 80], [t + d, 0]]);
@@ -16876,7 +16882,7 @@
         var fx = subPanel(p, "Effect");
         grid(fx, [
             ["Fade", anim("Fade", function () { doFade(isIn(), stag(), qb); }), "Opacity in or out"],
-            ["Scale Pop", anim("Scale Pop", function () { doPop(isIn() ? "up" : "out", { fade: true, center: "auto", stagger: stag(), smooth: true }); }), "Springs up from nothing, or shrinks away"],
+            ["Scale Pop", anim("Scale Pop", function () { doPop(isIn() ? "up" : "out", { fade: true, center: "auto", stagger: stag(), smooth: true, frames: 5.5, fadeFrames: 5 }); }), "Springs up from nothing, or shrinks away"],
             ["Blur Fade", anim("Blur Fade", function () { doBlurFade(stag(), qb, isIn()); }), "Fades through a blur"]
         ]);
         var mv = subPanel(p, "Slide (+Fade)");

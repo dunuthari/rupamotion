@@ -315,10 +315,11 @@
         try { prop.expression = smoothBounceExpr(clampZero); } catch (e1) {}
     }
 
+    // o.frames / o.fadeFrames (optional): scale and opacity key spans in frames instead of the Style duration
     function doPop(mode, o) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = selLayers(comp, 1, "Select at least one layer."); if (!sel) { return; }
-        var fr = comp.frameDuration, d = animDur(comp);
+        var fr = comp.frameDuration, d = o.frames ? o.frames * fr : animDur(comp), fd = o.fadeFrames ? o.fadeFrames * fr : 0;
         for (var i = 0; i < sel.length; i++) {
             var L = sel[i];
             if (L instanceof CameraLayer || L instanceof LightLayer) { continue; }
@@ -347,7 +348,8 @@
             if (o.fade) {
                 var op = L.transform.opacity.valueAtTime(t, false);
                 if (mode === "up" && op === 0) { op = 100; }
-                if (mode === "up") { setKeys(L.transform.opacity, [[t, 0], [t + d * 0.4, op]]); }
+                if (mode === "up") { setKeys(L.transform.opacity, [[t, 0], [t + (fd || d * 0.4), op]]); }
+                else if (fd) { setKeys(L.transform.opacity, [[t, op], [t + fd, 0]]); }
                 else { setKeys(L.transform.opacity, [[t + d * 0.45, op], [t + d, 0]]); }
             }
             mb(L);
@@ -393,7 +395,7 @@
             if (o.fade) {
                 var op = tr.opacity.valueAtTime(t, false) || 100;
                 if (o.mode === "in") { setKeys(tr.opacity, [[t, 0], [t + d * 0.5, op]]); }
-                else { setKeys(tr.opacity, [[t + d * 0.5, op], [t + d, 0]]); }
+                else { setKeys(tr.opacity, [[t + d * 0.15, op], [t + d * 0.7, 0]]); }   // out: gone before the move lands
             }
             mb(L);
         }
