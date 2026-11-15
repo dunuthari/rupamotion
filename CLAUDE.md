@@ -39,7 +39,7 @@ Author: Tharindu Lakshan (see `ABOUT` in `src/07_ui.jsx`). English UI only. No c
 Workflow agreed with the user: **show a mock-up / preview first (an Artifact page), build only after an explicit "build"**; after building run `npm run check`, `npm run cep`, `npm run installer`, commit with the session trailers, push to the working branch, and send `cep/RuMotion-CEP.zip` (plus `dist/RuMotion.jsx` when the ScriptUI panel changed). Never create a PR unless asked.
 
 ## 4. Naming conventions
-- Everything the tool creates in a project is prefixed **`Ru `**: layers (`Ru Caption 3`, `Ru Swipe · Move`, `Ru Typewriter · Caret 4-12345`), effects (`Ru Bounce`, `Ru Bounce Strength`, `Ru Blur Fade`, `Ru Counter`, `Ru Path Progress`, `Ru Morph Amplitude`), text animators (`Ru Word Active`, `Ru SaaS Roll`), masks (`Ru Roll Window`). Older projects may carry the previous `MK ` prefix; it is still recognised (§15).
+- Everything the tool creates in a project is prefixed **`Ru `**: layers (`Ru Caption 3`, `Ru Swipe · Move`, `Ru Typewriter · Caret 4-12345`), effects (`Ru Bounce`, `Ru Bounce Strength`, `Ru Blur Fade`, `Ru Counter`, `Ru Path Progress`, `Ru Morph Amplitude`), text animators (`Ru Word Active`, `Ru SaaS Roll`), masks (`Ru Roll Window`). Older projects may carry the previous `MK ` prefix; it is still recognised (§14).
 - Expressions the tool writes start with a marker comment (`// Ru Typewriter`, `// Ru Counter`, `// Ru Morph Bounce`, `// Ru Word Style`; the live bounce keeps the historical `Motion Kit` marker on purpose). Tools find and replace their own expressions by these markers.
 - Source files: `NN_topic.jsx`, numbers give the concatenation order; `01_core` opens the IIFE, `07_ui` closes it. One feature = `feature("Group", "Name", build[, parentName])` in `07_ui.jsx`, action wrapped in `run("Label", fn)` (one undo group). Per-feature constants live in a short upper-case object (`TI`, `SS`, `TW`, `TB`, `SR`, `TS`, `NC`, `MORPH`, `CAP`).
 - Helpers: `do<Feature>(...)` performs the action, `draw<Thing>Stage` draws a ScriptUI stage, `build<Thing>` builds a CEP card part, `PV_FX` / `AN_FX` are preview maps keyed by button label / card title.
@@ -110,13 +110,13 @@ Add a feature with `feature("Group", "Name", function (p) { ... })` in `07_ui.js
 - Redraw a custom control with `redraw(ctrl)` (`notify("onDraw")`) or `repaint(ctrl)` (hide/show). Buttons made by
   `styleButton` show a pressed state on mouse down; `btn()` keeps it through the action so quick clicks are visible. Toggles expose `.value` and `.onToggle`.
 
-## 10. Performance notes
+## 9. Performance notes
 - Feature cards are built lazily (`ensureBuilt` in `buildContent`) the first time their chip/tab is shown; tests set `$.global.RuMotionEager = true` to build all of them.
 - Preferences are written only when the saved tab/feature actually changes; tab and chip repaints use `redraw` (no hide/show, which re-lays-out the panel).
 
 - The panel always opens on the first tab (no saved tab, so no preference writes while browsing). The content area is a fixed-height viewport (`setViewH`, min = max) with a scrollbar; ScriptUI never delivers the mouse wheel to panels (`onWheel` is a harmless best-effort), so scrolling is also by dragging any empty area of a card (`hookDrag`) and Up/Down/PageUp/PageDown (`keyScroll`); both unverified in AE. Docked panels re-fit the height with a dead band (`fitScroll`); floating windows keep it fixed. Buttons redraw only from mouse events (`btn` adds none).
 
-## 11. CEP panel (`cep/`)
+## 10. CEP panel (`cep/`)
 `npm run cep` builds `cep/RuMotion/` (manifest, `index.html`, `jsx/RuMotion.jsx`) and `cep/RuMotion-CEP.zip` (with `install.bat` / `install.command`). The HTML panel (`cep/app.js`, CSS and markup taken from `preview/index.html`) draws no logic of its own: `RuMotion.jsx` is loaded with `$.global.RuMotionBridge = true`, builds the ScriptUI panel on a window that is never shown, and `$.global.RuBridge` (`exposeBridge` in `07_ui.jsx`: `meta`, `feature(i)`, `set`, `click`, `cut`) describes each card as JSON (`brCard`) and drives the real controls. So every effect is the same code in both panels and new features appear automatically. Custom-drawn stages (Text + Icon / Star Swipe preview, Flow graph) are not controls: the CEP side redraws the Flow graph and presets itself and skips the stages. Mouse wheel works in CEP. Unverified in AE: evalFile path handling, the debug-mode install, `__adobe_cep__.getSystemPath`. The ScriptUI `dist/RuMotion.jsx` stays the single-file install.
 
 **Live preview stages (CEP only, `cep/app.js`)**: Text > Effects gets `buildFxPreview` (a stage that plays the chosen effect on a sample line, a "Preview text" field saved in localStorage) and Text + Icon gets `buildTiPreview` (words slide apart, icon slot opens; it reads the Sentence field and Icon position dropdown through `ctlMap`). In the Effects card a click on an effect button **only previews** (`ctx.fx`, class `pv-on`); the added *Apply <name>* button sends the real `click(id)`. This is CEP behaviour only: in the ScriptUI panel the buttons still apply at once. `PV_FX` maps button labels to preview animations: built-in effects use their real timings, the `.ffx` presets are **guesses from their names** (`guess: 1`, shown as "approximate"), Motion Type and SaaS Style 3/4/5 are rebuilt from the settings read out of their `.ffx` files (which animator properties, Based On words / letters / lines, offsets; the keyframe timing was not read), also marked approximate; a label without an entry shows "no preview yet". The stages (`.pv-stage`, `.cs-stage`) are `position: sticky; top: 0` so they stay in view while the card scrolls (no `position: relative` on them, it would cancel the pinning). New effect buttons need a `PV_FX` entry to get a preview. **Animate stages** (`buildAnimPreview`, `AN_FX` keyed by card title, CSS `.an-*`): every Animate card gets the same kind of stage with a lime sample layer that loops the effect (2.4 s) and follows the card's own controls, found by label (`c.num/bool/sel`). Quick and Hold push-in: a click on an effect button only previews it (`wants(item)`; the Quick stage reads the Mode switch and uses the same spring as the live bounce expression when Bounce is on) and the added *Apply <name>* button sends the real click; Shape morph has one action button, so its stage just shows the current settings. Distances are scaled to the stage (400 px = the stage width); the previews are illustrations, not the real curves.
@@ -128,13 +128,13 @@ Sinhala captions were tried (Whisper models, then a Google key, then an offline 
 
 **Windows installer** (`installer/`, `npm run installer`): `RuSetup.cs` (C# WinForms, owner-drawn dark/lime window, no console) + `LogoData.cs` (logo polygons generated from `LOGO_SHAPES`) + `ru.ico`; `build.sh` zips `cep/RuMotion` into the exe as resource `RuMotion.zip`, compiles with Mono `mcs` (`apt install mono-mcs mono-devel`) to `cep/RuMotion-Setup.exe` and adds it to `RuMotion-CEP.zip`. Steps = old `install.bat`: extract to `%APPDATA%\Adobe\CEP\extensions\RuMotion`, set `PlayerDebugMode=1` for CSXS 9..13, then Finish (optionally opens After Effects, found under `Program Files\Adobe\Adobe After Effects*`). Website box: set `SITE` in `RuSetup.cs` (empty = hidden). Rebuild after every `npm run cep`. Unsigned (Windows shows Unknown publisher; needs a code-signing certificate). Only tested under Mono + Xvfb (layout and extraction), not on real Windows. Mac installer not built (still `install.command`).
 
-## 12. Design system (dark)
+## 11. Design system (dark)
 page `#1C1D20` · surface `#232428` · card `#2B2D31` · hairline `#3C3E43` · text `#F1F2F4` · label `#BEC0C4` ·
 hint `#90939A` · primary `#DCFA37` (lime; text on it is `onPrimary` `#101010`) · tint `#2A3313`. Pill buttons: primary = solid blue (main action),
 secondary = card fill + hairline (grids, rows). Feature chips: `chip` / `chip-on`. Type: title 15 bold,
 section 13/12 bold, body 12, nav 10. Tokens live in `THEMES` at the top of the design-system block.
 
-## 13. Feature notes (what each tool does and why)
+## 12. Feature notes (what each tool does and why)
 
 ### Text group
 **Text + Icon**: the user types 2–6 words, picks the icon slot (before / between / after words) and optionally browses for an icon file
@@ -173,12 +173,12 @@ A test rebuilds every file in `presets/text` from the built script and compares 
 
 **About window** (`showAbout()`, `ABOUT` in `07_ui.jsx`): a modal dialog (logo at 64 px, name, version, a How it works card, What's inside / Good to know cards, `Made by Tharindu Lakshan · tlakshan10106@gmail.com`, a Get started button). It opens ONCE on the first run: after the panel is built, if the saved setting `about_seen` is not `1` it is set to `1` first and then the dialog opens (so a failure can never bring it back every launch). After that it only opens from the **About** button in the header (which replaced the old "Toolkit" label). Change the version/author/email in `ABOUT`. Whether a modal dialog opens cleanly while After Effects is still loading a docked panel at startup is unverified in AE; it is wrapped in try/catch.
 
-## 14. Brand/motion style (applied by the tools)
+## 13. Brand/motion style (applied by the tools)
 Google Vids look: primary `#4285F4`, secondary `#8AB4F8`, periwinkle `#C5CAE9`, background `#F5F7FF`,
 Google Sans → Inter → Manrope → DM Sans → Outfit. Expo easing by default, motion blur on, soft shadows,
 live bounce via the `Ru Bounce` / `Ru Bounce Strength` effects + `bounceExpr`. Users edit these in Style.
 
-## 15. Naming / compatibility
+## 14. Naming / compatibility
 - Created layers/effects/animators use the `Ru ` prefix (renamed from `MK ` on request, together with the plugin name), and
   expression comments keep the `"Motion Kit"` marker on purpose: `Bounce Physics`' "own expression" check and the live-bounce
   expressions depend on it. Projects made before the rename carry `MK Bounce` / `MK Bounce Strength`: `bounceNames()` still
@@ -190,10 +190,10 @@ live bounce via the `Ru Bounce` / `Ru Bounce Strength` effects + `bounceExpr`. U
   measuring a hand-made version, so keep them unless asked.
 - Settings key is `MotionKit_v1` so saved presets carry over. Don't rename without a migration.
 
-## 16. Testing limits
+## 15. Testing limits
 Tests use a mock ScriptUI/AE object model — they catch syntax, ES3, undefined names, draw-routine and
 navigation errors, but **not** real After Effects behaviour. Verify visual/AE changes inside After Effects.
 
-## 17. preview/
+## 16. preview/
 `preview/index.html` is a standalone browser mock-up of the panel UI (no AE). Run `npx serve preview`.
 Keep it in sync when the panel layout changes.
