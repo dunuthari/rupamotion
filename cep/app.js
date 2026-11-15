@@ -607,7 +607,7 @@
         lay[1].style.transform = "translate(" + (x - D) + "px," + y + "px) rotate(" + rot + "deg) scale(" + s + ")";
         return pvClamp(T / 1.6, 0, 1);
       } },
-    "Hold push-in": { pick: /^Push (in|out)$/, first: "Push in", layers: 0, build: function (st) { var ph = el("div", { class: "an-photo" }); st.appendChild(ph); return [ph]; },
+    "Hold push-in": { pick: /^Push (in|out)$/, first: "Push in", layers: 0, build: function (st) { var sq = el("div", { class: "an-lay an-square" }); sq.style.background = "var(--primary)"; st.appendChild(sq); return [sq]; },
       f: function (c, t, lay, name) { var u = t / 2.4, a = pvClamp(c.num("Amount (%):", 5), 0, 100) / 100; lay[0].style.transform = "scale(" + (1 + a * (/out$/.test(name) ? 1 - u : u)) + ")"; return u; } }
   };
   function anLayer() { return el("div", { class: "an-lay" }, [el("i"), el("i"), el("i")]); }
