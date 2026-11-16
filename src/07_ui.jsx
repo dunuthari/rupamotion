@@ -1190,22 +1190,6 @@
             builtin("Delete Out", doDeleteOut, "The letters disappear from the right, with blur.")
         ]);
 
-        // Number counter: a formatted count-up driven by a keyframed slider
-        var nc = subPanel(p, "Number counter");
-        hint(nc, "Select a text layer. Its text counts From -> To through a Ru Counter slider with two keys at the playhead (1 s apart): drag the second key to retime.");
-        var ncFrom = field(nc, "From:", "0", 7), ncTo = field(nc, "To:", "1240", 7);
-        var ncDec = drop(nc, "Decimals:", ["0", "1", "2"], 0);
-        var ncPre = field(nc, "Prefix:", "", 4, "Text before the number, e.g. $"), ncSuf = field(nc, "Suffix:", "", 4, "Text after the number, e.g. %");
-        var ncSep = check(nc, "Thousands separator (1,240)", true);
-        var ncK = check(nc, "Short form (3.2k, 1.4M)", false);
-        var ncCurve = drop(nc, "Curve:", ["Ease out", "Linear", "Ease in-out"], 0);
-        btn(nc, "Number counter", function () {
-            run("Number counter", function () {
-                doCounter({ from: num(ncFrom.text, 0, -1e12, 1e12), to: num(ncTo.text, 100, -1e12, 1e12), dec: ncDec.selection.index,
-                    prefix: ncPre.text, suffix: ncSuf.text, sep: ncSep.value, k: ncK.value, curve: ncCurve.selection.index });
-            });
-        }, "Turns the selected text layer into a counting number. Keeps its font, size and colour.");
-
         // Presets: the embedded .ffx animation presets
         var pre = subPanel(p, "Presets");
         var items = [], i;
@@ -1216,6 +1200,37 @@
             })(i);
         }
         if (items.length === 0) { hint(pre, "No presets yet. Add .ffx files to presets/text and rebuild."); } else { btnGrid(pre, items); }
+
+        // Number counter (last section): a formatted count-up driven by a keyframed slider. Fields in rows of three
+        // (`grid3`, label above control; the bridge marks the rows as kind "grid"), and its own button applies it.
+        var nc = subPanel(p, "Number counter");
+        function grid3(parent) {
+            var r = parent.add("group");
+            r.orientation = "row"; r.alignChildren = ["left", "top"]; r.spacing = 8; r.isGrid = true;
+            return r;
+        }
+        function cell(r, label) {
+            var c = r.add("group");
+            c.orientation = "column"; c.alignChildren = ["fill", "top"]; c.spacing = 3;
+            c.preferredSize.width = 84;
+            setFg(c.add("statictext", undefined, label), DS.label);
+            return c;
+        }
+        function cellField(r, label, val, tip) { var e = cell(r, label).add("edittext", undefined, val); e.characters = 6; if (tip) { e.helpTip = tip; } return e; }
+        function cellDrop(r, label, its, sel) { var d = cell(r, label).add("dropdownlist", undefined, its); d.selection = sel || 0; return d; }
+        var g1 = grid3(nc), g2 = grid3(nc);
+        var ncFrom = cellField(g1, "From:", "0"), ncTo = cellField(g1, "To:", "1240");
+        var ncDec = cellDrop(g1, "Decimals:", ["0", "1", "2"], 0);
+        var ncPre = cellField(g2, "Prefix:", "", "Text before the number, e.g. $"), ncSuf = cellField(g2, "Suffix:", "", "Text after the number, e.g. %");
+        var ncCurve = cellDrop(g2, "Curve:", ["Ease out", "Linear", "Ease in-out"], 0);
+        var ncSep = check(nc, "Thousands separator", true, "1240 shows as 1,240.");
+        var ncK = check(nc, "Short form (3.2k)", false, "3200 shows as 3.2k, 1400000 as 1.4M.");
+        btn(nc, "Apply number count", function () {
+            run("Number counter", function () {
+                doCounter({ from: num(ncFrom.text, 0, -1e12, 1e12), to: num(ncTo.text, 100, -1e12, 1e12), dec: ncDec.selection.index,
+                    prefix: ncPre.text, suffix: ncSuf.text, sep: ncSep.value, k: ncK.value, curve: ncCurve.selection.index });
+            });
+        }, "Select a text layer. Its text counts From -> To through a Ru Counter slider with two keys at the playhead, 1 s apart: drag the second key to retime. Keeps its font, size and colour.");
     });
 
     // Text size for the preview stage. measureString can fail or return nothing useful on some systems, and then the words
@@ -2050,7 +2065,7 @@
                 if (c.cardTitle !== undefined && c.cardLevel !== undefined) { out.kids.push({ t: "card", card: brCard(c) }); continue; }
                 items = []; st = { label: "" };
                 brLeaves(c, items, st);
-                if (items.length) { out.kids.push({ t: c.isBtnRow ? "btns" : "row", items: items }); }
+                if (items.length) { out.kids.push({ t: c.isBtnRow ? "btns" : (c.isGrid ? "grid" : "row"), items: items }); }
                 continue;
             }
             it = brItem(c, "");

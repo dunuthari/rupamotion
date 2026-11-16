@@ -144,7 +144,8 @@
     }
     if (ctx.hexRow && /^Pick/.test(k)) { return []; }   // the colour swatch replaces the Pick… button
     n = el("button", { class: "btn" + (item.v === "primary" ? " primary" : ""), type: "button", text: item.text, title: item.tip || "" });
-    if (ctx.fx && (!ctx.fx.wants || ctx.fx.wants(item))) { ctx.fx.add(item, n); n.addEventListener("click", function () { ctx.fx.select(item, n); }); }   // Text > Effects / Animate: a click previews, Apply adds
+    if (ctx.fx && ctx.fx.direct && ctx.fx.direct(item)) { n.addEventListener("click", function () { ctx.fx.play(item); press(item, n); }); n.classList.add("primary"); }
+    else if (ctx.fx && (!ctx.fx.wants || ctx.fx.wants(item))) { ctx.fx.add(item, n); n.addEventListener("click", function () { ctx.fx.select(item, n); }); }   // Text > Effects / Animate: a click previews, Apply adds
     else { n.addEventListener("click", function () { press(item, n); }); }
     ctlMap[item.id] = { item: item, node: n };
     return [n];
@@ -432,6 +433,7 @@
   // ---------- Text > Effects and Text + Icon: a live stage that plays the effect before it is added ----------
   function ctlByLabel(label) { for (var id in ctlMap) { if (ctlMap[id].item && (ctlMap[id].item.label === label || ctlMap[id].item.text === label)) { return ctlMap[id]; } } return null; }
   function pvClamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  var DIRECT_FX = { "Apply number count": 1 };   // Text > Effects buttons that apply at once (and play on the stage) instead of only previewing
   function pvOut(u) { u = pvClamp(u, 0, 1); return 1 - Math.pow(1 - u, 3); }
   function pvSet(e, o) { e.style.opacity = o.o === undefined ? 1 : o.o; e.style.transform = o.t || ""; e.style.filter = o.b ? "blur(" + o.b + "px)" : ""; e.style.color = o.c || ""; }
   // unit: c letters, w words, a whole text; two: needs two lines; f(el, i, n, t, line, k). Built-in effects use their real timings;
@@ -445,9 +447,9 @@
     "SaaS Text Preset 1": { unit: "w", two: 1, roll: 1, f: function (e, i, n, t, line, k) { var u = pvOut((t - 0.5 - k * 0.08) / 0.2); pvSet(e, { t: "translateY(" + ((line === 0 ? -u : 1 - u) * 125) + "%)" }); } },
     "Two-Line Stack": { unit: "w", two: 1, f: function (e, i, n, t, line, k) { if (line === 0) { pvSet(e, {}); return; } var u = pvOut((t - 0.5 - k * 0.08) / 0.25); pvSet(e, { o: u, t: "translateY(" + (10 * (1 - u)) + "px)" }); } },
     "Word Highlight": { unit: "w", f: function (e, i, n, t) { var a = 0.2 + i * 0.4; pvSet(e, { c: (t >= a && t < a + 0.4) ? "#2EC4B6" : "" }); } },
-    "Number counter": { unit: "a", f: function (e, i, n, t) {
+    "Apply number count": { name: "Number counter", unit: "a", f: function (e, i, n, t) {
       var v = function (l, d) { var m = ctlByLabel(l); return m ? m.node.value : d; }, on = function (l) { var m = ctlByLabel(l); return m ? m.node.getAttribute("aria-checked") === "true" : false; };
-      var from = +v("From:", 0) || 0, to = +v("To:", 1240) || 0, dec = +v("Decimals:", 0) || 0, sep = on("Thousands separator (1,240)"), kk = on("Short form (3.2k, 1.4M)"), c = +v("Curve:", 0) || 0;
+      var from = +v("From:", 0) || 0, to = +v("To:", 1240) || 0, dec = +v("Decimals:", 0) || 0, sep = on("Thousands separator"), kk = on("Short form (3.2k)"), c = +v("Curve:", 0) || 0;
       var u = pvClamp((t - 0.2) / 1, 0, 1), ea = c === 1 ? u : c === 2 ? (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2) : 1 - Math.pow(1 - u, 3), x = from + (to - from) * ea, s;
       if (kk && Math.abs(x) >= 1000) { var m = Math.abs(x) >= 1e6; s = (x / (m ? 1e6 : 1e3)).toFixed(dec > 0 ? dec : 1) + (m ? "M" : "k"); }
       else { s = x.toFixed(dec); if (sep) { var p = s.split("."); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ","); s = p.join("."); } }
@@ -484,11 +486,12 @@
     var sample = el("input", { type: "text", value: store("pv_text", "Make it move"), maxlength: "28", "aria-label": "Preview text" });
     var applyB = el("button", { class: "btn primary", type: "button", text: "Choose an effect above" });
     applyB.disabled = true;
+    var shown = null;   // what the stage plays: the chosen effect, or a section button that applies itself (Apply number count)
     function build() {
-      var fx = cur ? PV_FX[cur.text] : null, s = (sample.value || "").replace(/^\s+|\s+$/g, "") || "Make it move", lines, parts;
+      var fx = shown ? PV_FX[shown.text] : null, s = (sample.value || "").replace(/^\s+|\s+$/g, "") || "Make it move", lines, parts;
       txt.innerHTML = ""; units = []; caret = null;
-      nameEl.textContent = cur ? cur.text : "Preview";
-      noteEl.textContent = !cur ? "" : (!fx ? "no preview yet" : (fx.guess ? "approximate" : ""));
+      nameEl.textContent = shown ? ((fx && fx.name) || shown.text) : "Preview";
+      noteEl.textContent = !shown ? "" : (!fx ? "no preview yet" : (fx.guess ? "approximate" : ""));
       lines = (fx && fx.two) ? [s, "Then make it land"] : [s];
       lines.forEach(function (L, li) {
         var ln = el("span", { class: "pv-ln" + (fx && fx.roll ? " pv-clip" : "") }), k = 0;
@@ -506,7 +509,7 @@
     }
     function frame(now) {
       if (!stage.isConnected && now - t0 > 3000) { return; }
-      var fx = cur ? PV_FX[cur.text] : null, t = ((now - t0) / 1000) % 3.2, n = units.length, i;
+      var fx = shown ? PV_FX[shown.text] : null, t = ((now - t0) / 1000) % 3.2, n = units.length, i;
       if (fx) { for (i = 0; i < n; i++) { fx.f(units[i].el, i, n, t, units[i].line, units[i].k); } }
       if (caret) { caret.style.opacity = (Math.floor((t - 0.3) * 14) + 1 < n) ? 1 : (Math.floor(t * 1000 / 400) % 2 ? 0 : 1); }
       requestAnimationFrame(frame);
@@ -519,8 +522,10 @@
     build(); requestAnimationFrame(frame);
     return {
       add: function (item, node) { btns.push(node); node.classList.remove("primary"); },
+      direct: function (item) { return DIRECT_FX[item.text] === 1; },
+      play: function (item) { shown = item; btns.forEach(function (b) { b.classList.remove("pv-on"); }); build(); },
       select: function (item, node) {
-        cur = item;
+        cur = item; shown = item;
         btns.forEach(function (b) { b.classList.toggle("pv-on", b === node); });
         applyB.disabled = false; applyB.textContent = "Apply " + item.text;
         build();
@@ -528,6 +533,7 @@
       finish: function () {
         view.appendChild(el("div", { class: "btns one" }, [applyB]));
         view.appendChild(el("p", { class: "hint", text: "Clicking an effect only plays it here. Apply adds it to the selected text layer(s) at the playhead." }));
+        if (this.tail) { view.appendChild(this.tail); }   // the Number counter section sits last, below the main Apply
       }
     };
   }
@@ -679,7 +685,19 @@
         var sub = el("div", { class: "card" }, [el("h3", { text: k.card.title })]);
         var c2 = { flow: ctx.flow, fx: ctx.fx };
         renderKids(k.card, sub, c2);
+        if (ctx.fx && ctx.fx.direct && k.card.title === "Number counter") { ctx.fx.tail = sub; return; }
         parent.appendChild(sub);
+        return;
+      }
+      if (k.t === "grid") {   // fields in columns, label above each control
+        var gd = el("div", { class: "g3" });
+        gd.style.gridTemplateColumns = "repeat(" + k.items.length + ", minmax(0, 1fr))";
+        k.items.forEach(function (it) {
+          var cellEl = el("div", { class: "g3-cell" }, [el("span", { class: "lbl", text: (it.label || "").replace(/:$/, "") })]);
+          makeItem(it, { small: true }).forEach(function (n) { n.style.width = "100%"; cellEl.appendChild(n); });
+          gd.appendChild(cellEl);
+        });
+        parent.appendChild(gd);
         return;
       }
       if (k.t === "btns") {

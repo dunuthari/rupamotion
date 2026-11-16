@@ -1419,8 +1419,8 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['keyed: no new key, every key shifted'] = K.transform.position.numKeys === 2 && near(K.transform.position.keyValue(1)[0], -50) && near(K.transform.position.keyValue(2)[0], 50) && near(K.transform.anchorPoint.value[0], 0);
   // counter: a text layer gets a Ru Counter slider with two keys and a formatting expression
   const T = comp.layers.addText('0'); Object.setPrototypeOf(T, g.TextLayer.prototype); comp.selectedLayers = [T];
-  B.set(byLabel(fx, 'To:').id, '3200'); B.set(byLabel(fx, 'Prefix:').id, '$'); B.set(byLabel(fx, 'Short form (3.2k, 1.4M)').id, 'true');
-  R['counter click ok'] = B.click(byLabel(fx, 'Number counter').id) === 'ok';
+  B.set(byLabel(fx, 'To:').id, '3200'); B.set(byLabel(fx, 'Prefix:').id, '$'); B.set(byLabel(fx, 'Short form (3.2k)').id, 'true');
+  R['counter click ok'] = B.click(byLabel(fx, 'Apply number count').id) === 'ok';
   const sl = T.property('ADBE Effect Parade').property('Ru Counter');
   R['counter slider keys'] = !!sl && sl.property(1).numKeys === 2 && near(sl.property(1).keyValue(2), 3200) && near(sl.property(1).keyTime(2) - sl.property(1).keyTime(1), 1);
   const ex = T.property('ADBE Text Properties').property('ADBE Text Document').expression || '';
