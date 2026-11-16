@@ -1180,7 +1180,11 @@
             }
             if (o.fade) {
                 var op = tr.opacity.valueAtTime(t, false) || 100;
-                if (o.mode === "in") { setKeys(tr.opacity, [[t + d / 6, 0], [t + d * 5 / 6, op]]); }   // in: fade over the middle of the move (3 f in, 3 f before the end of 18 f, from the user's timeline)
+                if (o.mode === "in" && style.bounceOn === "1") {
+                    // in with Bounce on: the fade starts 3 f before the move and is done 10 f in (of 18 f), from the user's timeline
+                    setKeys(tr.opacity, [[Math.max(0, t - d / 6), 0], [t + d * 10 / 18, op]]);
+                }
+                else if (o.mode === "in") { setKeys(tr.opacity, [[t + d / 6, 0], [t + d * 5 / 6, op]]); }   // in, Bounce off: fade over the middle of the move (3 f in, 3 f before the end of 18 f)
                 else { setKeys(tr.opacity, [[t + d * 0.15, op], [t + d * 0.7, 0]]); }   // out: gone before the move lands
             }
             mb(L);
@@ -16872,8 +16876,23 @@
         function stag() { return num(stg.text, 0, 0, 120); }
 
         // One switch decides whether the buttons below bring the layer in or take it out
-        var mode = drop(p, "Mode:", ["In", "Out"], 0, "In: the layer arrives at the playhead. Out: the layer leaves at the playhead.");
-        function isIn() { return !mode.selection || mode.selection.index === 0; }
+        // A two-button switch (In | Out), not a dropdown: the chosen side is the primary button. The bridge sends the row as
+        // kind "seg" so the CEP panel draws it as a segmented switch.
+        var modeIn = true, modeRow = row(p, "Mode:"), modeBtns = [];
+        modeRow.isSeg = true;
+        function paintMode() { for (var mi = 0; mi < modeBtns.length; mi++) { modeBtns[mi].variant = (modeBtns[mi].isIn === modeIn) ? "primary" : "secondary"; redraw(modeBtns[mi]); } }
+        (function () {
+            var defs = [["In", true, "The layer arrives at the playhead."], ["Out", false, "The layer leaves at the playhead."]], di;
+            for (di = 0; di < defs.length; di++) {
+                (function (d) {
+                    var b = styleButton(modeRow.add("button", undefined, d[0]), d[1] ? "primary" : "secondary", 28);
+                    b.preferredSize.width = 64; b.isIn = d[1]; b.helpTip = d[2];
+                    b.onClick = function () { modeIn = d[1]; paintMode(); };
+                    modeBtns.push(b);
+                })(defs[di]);
+            }
+        })();
+        function isIn() { return modeIn; }
         function tag(label) { return label + (isIn() ? " In" : " Out"); }
 
         // Runs an animation action with the Quick Actions bounce state and the chosen layer order
@@ -18145,7 +18164,8 @@
                 if (c.cardTitle !== undefined && c.cardLevel !== undefined) { out.kids.push({ t: "card", card: brCard(c) }); continue; }
                 items = []; st = { label: "" };
                 brLeaves(c, items, st);
-                if (items.length) { out.kids.push({ t: c.isBtnRow ? "btns" : (c.isGrid ? "grid" : "row"), items: items }); }
+                if (c.isSeg && items.length && c.children[0] && c.children[0].type === "statictext") { items[0].label = c.children[0].text; }   // the switch's own label ("Mode:")
+                if (items.length) { out.kids.push({ t: c.isBtnRow ? "btns" : (c.isGrid ? "grid" : (c.isSeg ? "seg" : "row")), items: items }); }
                 continue;
             }
             it = brItem(c, "");

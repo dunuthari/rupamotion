@@ -240,13 +240,17 @@ function runPop(label) {
   const comp = new g.CompItem(); comp.selectedLayers = [layer]; comp.time = 1; comp.frameDuration = 1 / 24;
   app.project.activeItem = comp;
   const btn = walk(root).filter(n => n.type === 'button' && n.text === 'Scale Pop')[0];
-  const modeD = walk(root).filter(n => n.type === 'dropdownlist' && n.parent && n.parent.children[0] && n.parent.children[0].text === 'Mode:')[0];
-  modeD.selection = modeD.items[label === 'Pop Out' ? 1 : 0];
+  setMode(label === 'Pop Out');
   btn.onClick();
   app.project.activeItem = null;
   return { sc, op };
 }
 const near2 = (a, b) => Math.abs(a - b) < 1e-6;
+// Quick's Mode is an In | Out switch (two buttons in the row labelled 'Mode:'), not a dropdown
+function setMode(out) {
+  const b = walk(root).filter(n => n.type === 'button' && n.text === (out ? 'Out' : 'In') && n.parent && n.parent.isSeg)[0];
+  b.onClick();
+}
 {
   const { sc } = runPop('Pop Out'), k = sc.keys, dt = k.length === 2 ? k[1].t - k[0].t : 0;
   const ok = k.length === 2 && near2(dt, 5.5 / 24) && near2(k[0].out[0].influence, 30) && near2(k[0].out[0].speed, 0.36 * -100 / (0.3 * dt))
@@ -898,9 +902,8 @@ function buildTextIcon(sentence, atIndex, opts) {
   const R = {};
   const names = walk(root).filter(b => b.type === 'button').map(b => b.text);
   R['one "Blur Fade" button, driven by the Mode switch'] = names.filter(n => n === 'Blur Fade').length === 1 && names.indexOf('Blur Fade In') < 0;
-  const modeD = walk(root).filter(n => n.type === 'dropdownlist' && n.parent && n.parent.children[0] && n.parent.children[0].text === 'Mode:')[0];
   function press(label) {
-    modeD.selection = modeD.items[/Out/.test(label) ? 1 : 0]; label = 'Blur Fade';
+    setMode(/Out/.test(label)); label = 'Blur Fade';
     const { comp, made } = fakeBuild(); app.project.activeItem = comp; comp.time = 2;
     const L = baseLayer('shape'); L.name = 'Card'; made.push(L); comp.selectedLayers = [L];
     const bb = walk(root).filter(b => b.type === 'button' && b.text === label)[0]; bb.onClick(); app.project.activeItem = null;
@@ -911,7 +914,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['In: blur 80 -> 0 and opacity 0 -> 100'] = i.blur && i.blur[0].v === 80 && i.blur[1].v === 0 && i.op[0].v === 0 && i.op[i.op.length - 1].v === 100;
   R['Out: blur 0 -> 80 and opacity 100 -> 0'] = o.blur && o.blur[0].v === 0 && o.blur[1].v === 80 && o.op[0].v === 100 && o.op[o.op.length - 1].v === 0;
   // in then out on the same layer: one effect, four blur keys, no blur in between
-  modeD.selection = modeD.items[1]; const bb2 = walk(root).filter(b => b.type === 'button' && b.text === 'Blur Fade')[0];
+  setMode(true); const bb2 = walk(root).filter(b => b.type === 'button' && b.text === 'Blur Fade')[0];
   app.project.activeItem = i.L.containingComp || app.project.activeItem; { const { comp } = fakeBuild(); app.project.activeItem = comp; comp.time = 6; comp.selectedLayers = [i.L]; bb2.onClick(); app.project.activeItem = null; }
   const fxs = i.L.property('ADBE Effect Parade').children.filter(c => c.name === 'Ru Blur Fade');
   R['second press reuses the one Ru Blur Fade effect'] = fxs.length === 1 && fxs[0].children[0].keys.length === 4 && fxs[0].children[0].keys[1].v === 0 && fxs[0].children[0].keys[2].v === 0;
@@ -1443,14 +1446,27 @@ function buildTextIcon(sentence, atIndex, opts) {
     for (let s2 = -0.5; s2 <= 4; s2 += 0.02) { const v2 = +f(() => () => slider, t0 + s2); if (v2 < prev - 1e-9 || v2 > 1000 || v2 < 0) ok = false; prev = v2; last = v2; }
     R['curve ' + cv + ': 0 -> 1000 with the key moved to 3 s, no overshoot'] = ok && last === 1000 && +f(() => () => slider, t0) === 0;
   });
-  // Slide In: the opacity keys sit 1/6 and 5/6 into the move (3 f and 15 f of 18 f), inside the position keys
+  // Quick Mode switch, and the Slide In fade timing with Bounce off / on
   {
-    const S = comp.layers.add({}); Object.setPrototypeOf(S, g.AVLayer.prototype); S.sourceRectAtTime = () => ({ left: 0, top: 0, width: 100, height: 100 });
-    S.transform.position.value = [500, 300]; comp.selectedLayers = [S]; comp.time = 2;
-    B.set(byLabel(quick, 'Mode:').id, '0'); B.set(byLabel(quick, 'Stagger (frames):').id, '0');
-    B.click(byLabel(quick, 'Slide Left').id);
-    const P = S.transform.position, O = S.transform.opacity, d = P.numKeys === 2 ? P.keyTime(2) - P.keyTime(1) : 0;
-    R['slide in: opacity 0 -> full from 1/6 to 5/6 of the move'] = d > 0 && O.numKeys === 2 && near(O.keyTime(1), P.keyTime(1) + d / 6, 1e-6) && near(O.keyTime(2), P.keyTime(1) + d * 5 / 6, 1e-6) && O.keyValue(1) === 0;
+    const segRow = JSON.parse(B.feature(quick)).kids.find(k => k.t === 'seg');
+    R['Mode is an In | Out switch in the bridge (no dropdown)'] = !!segRow && segRow.items.map(x => x.text).join('|') === 'In|Out' && segRow.items[0].label === 'Mode:' && !items(quick).some(x => x.k === 'd' && x.label === 'Mode:');
+    B.click(byLabel(quick, 'Out').id);
+    R['clicking Out makes it the chosen side'] = byLabel(quick, 'Out').v === 'primary' && byLabel(quick, 'Mode:').v === 'secondary';
+    B.click(byLabel(quick, 'Mode:').id);   // the In button carries the row label
+    B.set(byLabel(quick, 'Stagger (frames):').id, '0');
+    const bounceT = byLabel(quick, 'Bounce effect');
+    const slideIn = (bounce) => {
+      const S = comp.layers.add({}); Object.setPrototypeOf(S, g.AVLayer.prototype); S.sourceRectAtTime = () => ({ left: 0, top: 0, width: 100, height: 100 });
+      S.transform.position.value = [500, 300]; comp.selectedLayers = [S]; comp.time = 2;
+      B.set(bounceT.id, bounce ? 'true' : 'false'); B.click(byLabel(quick, 'Slide Left').id);
+      const P = S.transform.position, O = S.transform.opacity;
+      return { t0: P.numKeys === 2 ? P.keyTime(1) : NaN, d: P.numKeys === 2 ? P.keyTime(2) - P.keyTime(1) : 0, O };
+    };
+    const a = slideIn(false);
+    R['slide in, bounce off: opacity 0 -> full from 1/6 to 5/6 of the move'] = a.d > 0 && a.O.numKeys === 2 && near(a.O.keyTime(1), a.t0 + a.d / 6) && near(a.O.keyTime(2), a.t0 + a.d * 5 / 6) && a.O.keyValue(1) === 0;
+    const b2 = slideIn(true);
+    R['slide in, bounce on: fade from 3 f before the move to 10 f in (of 18 f)'] = b2.d > 0 && b2.O.numKeys === 2 && near(b2.O.keyTime(1), b2.t0 - b2.d / 6) && near(b2.O.keyTime(2), b2.t0 + b2.d * 10 / 18) && b2.O.keyValue(1) === 0;
+    B.set(bounceT.id, 'false');
     comp.time = 1;
   }
   // stagger order: bottom to top makes the lowest layer start first

@@ -583,7 +583,7 @@
   function anBounce(u, pct) { if (u >= 1) return 1; var ov = pvClamp(pct / 100, 0.01, 0.6), d = -Math.log(ov / 0.936) / 0.4; return 1 - Math.exp(-d * u) * Math.cos(2.5 * Math.PI * u) * (1 - u * u * u); }
   var AN_FX = {
     "Quick": { pick: /^(Fade|Scale Pop|Blur Fade|Slide (Left|Right|Up|Down))$/, first: "Fade", layers: 1,
-      name: function (c, b) { return b + (c.sel("Mode:") === 1 ? " Out" : " In"); },
+      name: function (c, b) { return b + (c.on("Out") ? " Out" : " In"); },
       f: function (c, t, lay, name) {
         var bon = c.bool("Bounce effect"), pct = c.num("Bounce (%):", 10), dist = pvClamp(c.num("Slide distance (px):", 200), 0, 2000) / 400 * 100;
         var out = /Out$/.test(name), base = name.replace(/ (In|Out)$/, "");
@@ -596,7 +596,7 @@
           // Out = the In slide played backwards (mirrored to the other side), so both modes take the same 0.9 s at the same pace
           var ui = out ? 1 - u : u, ki = out ? anOut(ui) : (bon ? anBounce(ui, pct) : anOut(ui));
           if (out) { dx = -dx; dy = -dy; }
-          x = dx * dist * (1 - ki); y = dy * dist * (1 - ki); op = pvClamp((ui - 1 / 6) / (4 / 6), 0, 1);   // fade over the middle 1/6 .. 5/6 of the move, like the real keys
+          x = dx * dist * (1 - ki); y = dy * dist * (1 - ki); op = (bon && !out) ? pvClamp((ui + 1 / 6) / (10 / 18 + 1 / 6), 0, 1) : pvClamp((ui - 1 / 6) / (4 / 6), 0, 1);   // like the real keys: Bounce on = fade from 3 f before the move to 10 f in; off = 1/6 .. 5/6 of the move
         }
         anSet(lay[0], x, y, s, op, bl);
         return u;
@@ -632,7 +632,8 @@
     var c = {
       num: function (label, d) { var n = node(label); if (!n) return d; var v = parseFloat(n.value); if (isNaN(v)) return d; var m = ctlMap[ids[label]]; return m.item.k === "s" ? v / m.item.div : v; },
       bool: function (label) { var n = node(label); return n ? n.getAttribute("aria-checked") === "true" : false; },
-      sel: function (label) { var n = node(label); return n ? (+n.value || 0) : 0; }
+      sel: function (label) { var n = node(label); return n ? (+n.value || 0) : 0; },
+      on: function (label) { var n = node(label); return n ? n.getAttribute("aria-checked") === "true" : false; }   // a switch side (In / Out)
     };
     var nameEl = el("span", { class: "pv-name", text: title }), bar = el("i");
     var stage = el("div", { class: "pv-stage an-stage", role: "img", "aria-label": "Preview of " + title }, [el("div", { class: "an-grid" }), nameEl, el("div", { class: "an-bar" }, [bar])]);
@@ -654,6 +655,7 @@
       wants: function (item) { return !!(fx.pick && fx.pick.test(item.text)); },
       add: function (item, n) { btns.push(n); n.classList.remove("primary"); if (item.text === fx.first) { cur = item; n.classList.add("pv-on"); applyB.disabled = false; applyB.textContent = "Apply " + label(); } },
       select: function (item, n) { cur = item; btns.forEach(function (b) { b.classList.toggle("pv-on", b === n); }); applyB.disabled = false; applyB.textContent = "Apply " + label(); t0 = performance.now(); },
+      restart: function () { t0 = performance.now(); },
       finish: function () {
         if (!applyB) { return; }
         view.appendChild(el("div", { class: "btns one" }, [applyB]));
@@ -692,6 +694,22 @@
         renderKids(k.card, sub, c2);
         if (ctx.fx && ctx.fx.direct && k.card.title === "Number counter") { ctx.fx.tail = sub; return; }
         parent.appendChild(sub);
+        return;
+      }
+      if (k.t === "seg") {   // In | Out switch: one row, the chosen side raised (same look as the feature chips)
+        var sg = el("div", { class: "seg", role: "radiogroup", "aria-label": (k.items[0].label || "").replace(/:$/, "") });
+        sg.style.gridTemplateColumns = "repeat(" + k.items.length + ", 1fr)";
+        k.items.forEach(function (it) {
+          var b = el("button", { type: "button", role: "radio", class: "seg-b", "aria-checked": String(it.v === "primary"), text: it.text, title: it.tip || "" });
+          b.addEventListener("click", function () {
+            [].forEach.call(sg.children, function (x) { x.setAttribute("aria-checked", String(x === b)); });
+            if (ctx.fx && ctx.fx.restart) { ctx.fx.restart(); }
+            bridge("click(" + it.id + ")", function () { refresh(); });   // quiet: no "done" toast for a switch
+          });
+          ctlMap[it.id] = { item: it, node: b };
+          sg.appendChild(b);
+        });
+        parent.appendChild(el("div", { class: "row" }, [el("span", { class: "lbl", text: k.items[0].label || "" }), sg]));
         return;
       }
       if (k.t === "grid") {   // fields in columns, label above each control
@@ -809,7 +827,8 @@
             else if (it.k === "s") { if (document.activeElement !== m.node) { m.node.value = String(it.v); m.label.textContent = m.shown(it.v); } }
             else if (it.k === "t") { m.node.setAttribute("aria-checked", String(!!it.v)); }
             else if (it.k === "b") {
-              if (m.node.classList.contains("flow-tile")) { m.node.setAttribute("aria-pressed", String(it.v === "primary")); }
+              if (m.node.classList.contains("seg-b")) { m.node.setAttribute("aria-checked", String(it.v === "primary")); }
+              else if (m.node.classList.contains("flow-tile")) { m.node.setAttribute("aria-pressed", String(it.v === "primary")); }
               else { m.node.classList.toggle("primary", it.v === "primary"); if (m.node.textContent !== it.text) m.node.textContent = it.text; }
             }
           });

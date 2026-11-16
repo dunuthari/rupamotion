@@ -394,7 +394,11 @@
             }
             if (o.fade) {
                 var op = tr.opacity.valueAtTime(t, false) || 100;
-                if (o.mode === "in") { setKeys(tr.opacity, [[t + d / 6, 0], [t + d * 5 / 6, op]]); }   // in: fade over the middle of the move (3 f in, 3 f before the end of 18 f, from the user's timeline)
+                if (o.mode === "in" && style.bounceOn === "1") {
+                    // in with Bounce on: the fade starts 3 f before the move and is done 10 f in (of 18 f), from the user's timeline
+                    setKeys(tr.opacity, [[Math.max(0, t - d / 6), 0], [t + d * 10 / 18, op]]);
+                }
+                else if (o.mode === "in") { setKeys(tr.opacity, [[t + d / 6, 0], [t + d * 5 / 6, op]]); }   // in, Bounce off: fade over the middle of the move (3 f in, 3 f before the end of 18 f)
                 else { setKeys(tr.opacity, [[t + d * 0.15, op], [t + d * 0.7, 0]]); }   // out: gone before the move lands
             }
             mb(L);
