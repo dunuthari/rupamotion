@@ -61,8 +61,13 @@
   }
   function loadHost(done) {
     if (!cep) { done(false, "This panel only runs inside After Effects."); return; }
-    var code = "(function(){ try { if ($.global.RuBridge) { return 'ok'; } $.global.RuMotionBridge = true;" +
-      " $.evalFile(new File(" + esc(extFolder() + "/jsx/RuMotion.jsx") + ")); $.global.RuMotionBridge = false;" +
+    // After Effects keeps $.global between panel loads, so a reinstall would keep running the old script until a restart.
+    // Reload whenever the installed RuMotion.jsx is newer than the copy in memory (stamp = the file's modified time).
+    var code = "(function(){ try { var f = new File(" + esc(extFolder() + "/jsx/RuMotion.jsx") + "), m = 0;" +
+      " try { m = f.modified ? f.modified.getTime() : 0; } catch (e0) { m = 0; }" +
+      " if ($.global.RuBridge && $.global.RuBridgeStamp === m) { return 'ok'; }" +
+      " $.global.RuBridge = undefined; $.global.RuMotionBridge = true;" +
+      " $.evalFile(f); $.global.RuMotionBridge = false; $.global.RuBridgeStamp = m;" +
       " return $.global.RuBridge ? 'ok' : 'The script loaded but did not start.'; } catch (e) { $.global.RuMotionBridge = false; return 'Error: ' + e + (e.line ? ' (line ' + e.line + ')' : ''); } })()";
     ev(code, function (r) { done(r === "ok", r); });
   }
