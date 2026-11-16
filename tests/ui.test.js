@@ -1443,6 +1443,16 @@ function buildTextIcon(sentence, atIndex, opts) {
     for (let s2 = -0.5; s2 <= 4; s2 += 0.02) { const v2 = +f(() => () => slider, t0 + s2); if (v2 < prev - 1e-9 || v2 > 1000 || v2 < 0) ok = false; prev = v2; last = v2; }
     R['curve ' + cv + ': 0 -> 1000 with the key moved to 3 s, no overshoot'] = ok && last === 1000 && +f(() => () => slider, t0) === 0;
   });
+  // Slide In: the opacity keys sit 1/6 and 5/6 into the move (3 f and 15 f of 18 f), inside the position keys
+  {
+    const S = comp.layers.add({}); Object.setPrototypeOf(S, g.AVLayer.prototype); S.sourceRectAtTime = () => ({ left: 0, top: 0, width: 100, height: 100 });
+    S.transform.position.value = [500, 300]; comp.selectedLayers = [S]; comp.time = 2;
+    B.set(byLabel(quick, 'Mode:').id, '0'); B.set(byLabel(quick, 'Stagger (frames):').id, '0');
+    B.click(byLabel(quick, 'Slide Left').id);
+    const P = S.transform.position, O = S.transform.opacity, d = P.numKeys === 2 ? P.keyTime(2) - P.keyTime(1) : 0;
+    R['slide in: opacity 0 -> full from 1/6 to 5/6 of the move'] = d > 0 && O.numKeys === 2 && near(O.keyTime(1), P.keyTime(1) + d / 6, 1e-6) && near(O.keyTime(2), P.keyTime(1) + d * 5 / 6, 1e-6) && O.keyValue(1) === 0;
+    comp.time = 1;
+  }
   // stagger order: bottom to top makes the lowest layer start first
   const a = comp.layers.add({}), b = comp.layers.add({}); [a, b].forEach(x => Object.setPrototypeOf(x, g.AVLayer.prototype));
   a.index = 1; b.index = 2; comp.selectedLayers = [a, b];

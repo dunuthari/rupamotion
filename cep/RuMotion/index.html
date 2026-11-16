@@ -1434,7 +1434,7 @@
           // Out = the In slide played backwards (mirrored to the other side), so both modes take the same 0.9 s at the same pace
           var ui = out ? 1 - u : u, ki = out ? anOut(ui) : (bon ? anBounce(ui, pct) : anOut(ui));
           if (out) { dx = -dx; dy = -dy; }
-          x = dx * dist * (1 - ki); y = dy * dist * (1 - ki); op = pvClamp(ui * 2, 0, 1);
+          x = dx * dist * (1 - ki); y = dy * dist * (1 - ki); op = pvClamp((ui - 1 / 6) / (4 / 6), 0, 1);   // fade over the middle 1/6 .. 5/6 of the move, like the real keys
         }
         anSet(lay[0], x, y, s, op, bl);
         return u;

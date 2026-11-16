@@ -1180,7 +1180,7 @@
             }
             if (o.fade) {
                 var op = tr.opacity.valueAtTime(t, false) || 100;
-                if (o.mode === "in") { setKeys(tr.opacity, [[t, 0], [t + d * 0.5, op]]); }
+                if (o.mode === "in") { setKeys(tr.opacity, [[t + d / 6, 0], [t + d * 5 / 6, op]]); }   // in: fade over the middle of the move (3 f in, 3 f before the end of 18 f, from the user's timeline)
                 else { setKeys(tr.opacity, [[t + d * 0.15, op], [t + d * 0.7, 0]]); }   // out: gone before the move lands
             }
             mb(L);
