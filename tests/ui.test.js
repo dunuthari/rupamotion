@@ -309,7 +309,7 @@ function landing(L, movePos, move) {
 }
 function runSwipe(arrow, mutate) {
   const mbT = walk(root).filter(n => n.type === 'button' && n.text === 'Motion blur on animated layers' && typeof n.value === 'boolean')[0];
-  if (!mbT.value) mbT.onClick();   // earlier steps click every toggle; motion blur must be on for this check
+  if (mbT && !mbT.value) mbT.onClick();   // the Style group (and its toggle) was removed; motion blur is on by default
   const outL = fakeRigLayer('Clip A', 0, 5), inL = fakeRigLayer('Clip B', 5, 12), made = [];
   if (mutate) mutate(outL, inL);
   const comp = new g.CompItem(); Object.assign(comp, { selectedLayers: [outL, inL], time: 5, frameDuration: 0.04, width: 1920, height: 1080, duration: 12, shutterAngle: 180,

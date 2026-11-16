@@ -16340,10 +16340,10 @@
 
     var NAV_LABELS = {
         "Layers & Timing": "Layers", "Animate": "Animate", "Text": "Text", "Transitions": "Transitions", "Build": "Build",
-        "Camera": "Camera", "Flow": "Flow", "Style": "Style"
+        "Camera": "Camera", "Flow": "Flow"
     };
     // tab order in the left rail, and chip order inside a tab (features not listed keep their registration order, after the listed ones)
-    var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
+    var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow"];
     var CHIP_ORDER = ["Quick", "Shape morph", "Hold push-in",
         "Effects", "Text + Icon", "Captions", "Zoom cut", "Swipe cut", "Shape wipe",
         "Smart shape", "Pill button", "Frosted glass", "AI glow button", "Fake cursor", "Avatar bubble", "Audio waveform", "Liquid-glass button", "Stock grid wall"];
@@ -16398,12 +16398,6 @@
             rrPath(g, x + 1, y - 9, 8, 8, 2); g.strokePath(p);
             rrPath(g, x - 9, y + 1, 8, 8, 2); g.strokePath(p);
             rrPath(g, x + 1, y + 1, 8, 8, 2); g.strokePath(p);
-        },
-        "Style": function (g, x, y, p, b) {
-            g.newPath(); g.ellipsePath(x - 9, y - 9, 18, 18); g.strokePath(p);
-            g.newPath(); g.ellipsePath(x - 5, y - 5, 4, 4); g.fillPath(b);
-            g.newPath(); g.ellipsePath(x + 1, y - 5, 4, 4); g.fillPath(b);
-            g.newPath(); g.ellipsePath(x - 2, y + 1, 4, 4); g.fillPath(b);
         }
     };
 
@@ -16893,7 +16887,7 @@
             ["Slide Up", slide([0, -1], "Slide Up"), "Slides travelling up and fades"],
             ["Slide Down", slide([0, 1], "Slide Down"), "Slides travelling down and fades"]
         ]);
-        hint(p, "Bounce applies to every button. Uses Duration and Curve from the Style group.");
+        hint(p, "Bounce applies to every button.");
     });
 
     // ---------------- Flow ----------------
@@ -17115,7 +17109,7 @@
         var look = subPanel(p, "Fill & stroke");
         var fillC = colorChooser(look, "Fill color:", "#4285F4", "shape_fill");
         var fillO = field(look, "Fill opacity (%):", "100", 4);
-        var grad = check(look, "Gradient fill (locked to shape)", false, "Uses Gradient start/end colors from Style.");
+        var grad = check(look, "Gradient fill (locked to shape)", false, "Uses the saved gradient start/end colors.");
         var gdir = drop(look, "Gradient direction:", ["Horizontal", "Vertical", "Diagonal"], 2);
         var strk = check(look, "Stroke", false);
         var strkC = colorChooser(look, "Stroke color:", "#1A73E8", "shape_stroke");
@@ -17658,7 +17652,7 @@
         });
     });
 
-    // ---------------- Style ----------------
+    // ---------------- Captions ----------------
 
     // Captions: transcribed by the CEP panel (needs Node and a speech engine), so the card exists only there
     var CAP_PANEL = false;
@@ -17704,50 +17698,8 @@
         });
     }
 
-    feature("Style", "Style", function (p) {
-        hint(p, "These settings apply to every group.");
-        var mo = subPanel(p, "Motion");
-        var cIdx = 0, i;
-        for (i = 0; i < CURVE_IDS.length; i++) { if (CURVE_IDS[i] === style.curve) { cIdx = i; } }
-        var curveDrop = drop(mo, "Curve:", CURVE_LABELS, cIdx);
-        var durF = field(mo, "Duration (frames):", style.duration, 4);
-        var mbC = check(mo, "Motion blur on animated layers", style.motionBlur === "1");
-
-        var bo = subPanel(p, "Bounce");
-        var br = row(bo, null);
-        var bounceB = styleButton(br.add("button", undefined, style.bounceOn === "1" ? "Bounce: ON" : "Bounce: OFF"), style.bounceOn === "1" ? "primary" : "secondary", 30);
-        bounceB.preferredSize.width = 112;
-        bounceB.helpTip = "Live bounce. Select Motion Kit layers (or their precomp) to change them any time.\nWith nothing selected it sets the default for new animations.";
-        setFg(br.add("statictext", undefined, "Strength %:"), DS.label);
-        var bAmt = br.add("edittext", undefined, style.bounceAmt);
-        bAmt.characters = 4;
-
-        var co = subPanel(p, "Brand");
-        hint(co, "Colors, fonts and saved presets.");
-        var styleB = styleButton(co.add("button", undefined, "Colors & fonts…"), "primary");
-
-        curveDrop.onChange = function () { style.curve = CURVE_IDS[curveDrop.selection.index]; saveStyle(); };
-        durF.onChange = function () { style.duration = String(num(durF.text, 18, 2, 600)); durF.text = style.duration; saveStyle(); };
-        mbC.onToggle = function () { style.motionBlur = mbC.value ? "1" : "0"; saveStyle(); };
-        bounceB.onClick = function () {
-            style.bounceOn = (style.bounceOn === "1") ? "0" : "1";
-            bounceB.text = (style.bounceOn === "1") ? "Bounce: ON" : "Bounce: OFF";
-            bounceB.variant = (style.bounceOn === "1") ? "primary" : "secondary";
-            repaint(bounceB);
-            saveStyle();
-            applyBounceToSelection();
-        };
-        bAmt.onChange = function () {
-            style.bounceAmt = String(num(bAmt.text, 10, 1, 60));
-            bAmt.text = style.bounceAmt;
-            saveStyle();
-            applyBounceToSelection();
-        };
-        styleB.onClick = function () { openStyleDialog(); };
-    });
-
     // =====================================================================
-    // Style dialog (colors, fonts, presets)
+    // Colour swatches (used by colorChooser)
     // =====================================================================
 
     function paintSwatch(sw, hexStr) {
@@ -17756,114 +17708,6 @@
             var c = hexToRgb(hexStr);
             sw.graphics.backgroundColor = sw.graphics.newBrush(sw.graphics.BrushType.SOLID_COLOR, [c[0], c[1], c[2], 1]);
         } catch (e) {}
-    }
-
-    function openStyleDialog() {
-        var dlg = new Window("dialog", NAME + " · Style");
-        dlg.orientation = "column";
-        dlg.alignChildren = ["fill", "top"];
-
-        var pr = dlg.add("panel", undefined, "Preset");
-        pr.orientation = "row";
-        pr.alignChildren = ["left", "center"];
-        var names = ["Google Vids"].concat(presetNames());
-        var pDrop = pr.add("dropdownlist", undefined, names);
-        pDrop.selection = 0;
-        var loadB = pr.add("button", undefined, "Load");
-        var delB = pr.add("button", undefined, "Delete");
-
-        var cp = dlg.add("panel", undefined, "Colors");
-        cp.alignChildren = ["fill", "top"];
-        var fields = {};
-        for (var i = 0; i < COLOR_KEYS.length; i++) {
-            (function (key, label) {
-                var g = row(cp, label);
-                var e = g.add("edittext", undefined, style[key]);
-                e.characters = 9;
-                var sw = g.add("group");
-                sw.preferredSize = [26, 18];
-                paintSwatch(sw, style[key]);
-                var pick = g.add("button", undefined, "Pick…");
-                pick.preferredSize.width = 56;
-                e.onChange = function () { paintSwatch(sw, e.text); };
-                pick.onClick = function () {
-                    var c = chooseColor(colorTitle(label), hexToRgb(e.text));
-                    if (c) {
-                        e.text = rgbToHex(c);
-                        paintSwatch(sw, e.text);
-                    }
-                };
-                fields[key] = { edit: e, swatch: sw };
-            })(COLOR_KEYS[i][0], COLOR_KEYS[i][1]);
-        }
-
-        var fp = dlg.add("panel", undefined, "Fonts (PostScript names)");
-        fp.alignChildren = ["fill", "top"];
-        var fReg = row(fp, "Regular:").add("edittext", undefined, style.font); fReg.characters = 22;
-        var fBold = row(fp, "Bold:").add("edittext", undefined, style.fontBold); fBold.characters = 22;
-        var autoB = fp.add("button", undefined, "Auto-detect (Google Sans → Inter → Manrope → DM Sans → Outfit)");
-
-        var sp = dlg.add("panel", undefined, "Save as preset");
-        sp.orientation = "row";
-        var pName = sp.add("edittext", undefined, "My brand");
-        pName.characters = 18;
-        var saveB = sp.add("button", undefined, "Save preset");
-
-        var ok = dlg.add("group");
-        ok.alignment = ["right", "top"];
-        ok.add("button", undefined, "Cancel", { name: "cancel" });
-        var okB = ok.add("button", undefined, "OK", { name: "ok" });
-
-        function collect() {
-            var d = {};
-            for (var k in DEFAULT_STYLE) { d[k] = style[k]; }
-            for (var j = 0; j < COLOR_KEYS.length; j++) {
-                var key = COLOR_KEYS[j][0];
-                d[key] = rgbToHex(hexToRgb(fields[key].edit.text));
-            }
-            d.font = trim(fReg.text) || DEFAULT_STYLE.font;
-            d.fontBold = trim(fBold.text) || DEFAULT_STYLE.fontBold;
-            return d;
-        }
-
-        function fill(d) {
-            for (var j = 0; j < COLOR_KEYS.length; j++) {
-                var key = COLOR_KEYS[j][0];
-                fields[key].edit.text = d[key];
-                paintSwatch(fields[key].swatch, d[key]);
-            }
-            fReg.text = d.font;
-            fBold.text = d.fontBold;
-        }
-
-        loadB.onClick = function () { if (pDrop.selection) { fill(loadPreset(pDrop.selection.text)); } };
-        delB.onClick = function () {
-            if (!pDrop.selection || pDrop.selection.text === "Google Vids") { return; }
-            deletePreset(pDrop.selection.text);
-            pDrop.remove(pDrop.selection.index);
-            pDrop.selection = 0;
-        };
-        autoB.onClick = function () {
-            var f = autoDetectFonts();
-            if (f) { fReg.text = f[0]; fBold.text = f[1]; }
-            else { alert("This version of After Effects can't check installed fonts.\nType the PostScript names instead (e.g. GoogleSans-Regular).", NAME); }
-        };
-        saveB.onClick = function () {
-            var nm = trim(pName.text).replace(/[|]/g, "-");
-            if (savePreset(nm, collect())) {
-                var exists = false;
-                for (var j = 0; j < pDrop.items.length; j++) { if (pDrop.items[j].text === nm) { exists = true; } }
-                if (!exists) { pDrop.add("item", nm); }
-                alert("Preset \"" + nm + "\" saved.", NAME);
-            }
-        };
-        okB.onClick = function () {
-            var d = collect();
-            for (var k in d) { style[k] = d[k]; }
-            saveStyle();
-            dlg.close(1);
-        };
-        dlg.show();
     }
 
     // =====================================================================

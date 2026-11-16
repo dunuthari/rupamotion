@@ -302,8 +302,7 @@
     "Transitions": '<path d="M3 8h17M16 4l4 4-4 4M21 16H4M8 12l-4 4 4 4"/>',
     "Text": '<path d="M4 5h16M12 5v15"/>',
     "UI Kit": '<rect x="1.5" y="6" width="21" height="12" rx="6"/><circle class="dot" cx="7.5" cy="12" r="3"/>',
-    "Media": '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
-    "Style": '<circle cx="12" cy="12" r="9"/><circle class="dot" cx="9" cy="9" r="2"/><circle class="dot" cx="15" cy="9" r="2"/><circle class="dot" cx="12" cy="15" r="2"/>'
+    "Media": '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>'
   };
   var NAV_LABELS = { "Layers & Timing": "Layers" };
 
@@ -339,7 +338,7 @@
       D("Mode:", ["In", "Out"]),
       C("Effect", [GRID([["Fade"], ["Scale Pop"], ["Blur Fade"]])]),
       C("Slide (+Fade)", [H("Arrow = direction of travel."), GRID([["Slide Left"], ["Slide Right"], ["Slide Up"], ["Slide Down"]])]),
-      H("Bounce applies to every button. Uses Duration and Curve from the Style group.")
+      H("Bounce applies to every button.")
     ]},
     { group: "Flow", name: "Easing curves", ui: [["flow"]] },
     { group: "Camera", name: "Camera", ui: [
@@ -371,16 +370,9 @@
     { group: "Build", name: "Audio waveform", ui: [D("Mode:", ["From selected audio", "Idle loop"]), F("Bars:", "24"), F("Max height (px):", "140"), B("Create waveform", "Created the waveform.")] },
     { group: "Build", name: "Liquid-glass button", ui: [F("Label:", "Play", { wide: true }), T("3D depth + camera blur", false), B("Create glass button", "Created the glass button.")] },
     { group: "Build", name: "Stock grid wall", ui: [H("Select clips/images in the Project panel."), F("Columns:", "5"), F("Gap (px):", "24"), F("Corner radius:", "24"), F("Tilt (°):", "-8"), F("Scroll speed (px/s):", "40"), D("Scroll:", ["Up", "Down"]), B("Build grid wall", "Built the grid wall.")] },
-    { group: "Style", name: "Style", ui: [
-      H("These settings apply to every group."),
-      C("Appearance", [["theme"]]),
-      C("Motion", [D("Curve:", ["Expo In/Out", "Apple smooth", "Ease in-out"]), F("Duration (frames):", "18"), T("Motion blur on animated layers", true)]),
-      C("Bounce", [BOUNCE("style")]),
-      C("Brand", [H("Colors, fonts and saved presets."), B("Colors & fonts…", "Opens the Colors & fonts window in After Effects.")])
-    ]}
   ];
 
-  var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow", "Style"];
+  var GROUP_ORDER = ["Layers & Timing", "Animate", "Text", "Transitions", "Build", "Camera", "Flow"];
   var CHIP_ORDER = ["Quick", "Shape morph", "Hold push-in", "Effects", "Text + Icon", "Zoom cut", "Swipe cut", "Shape wipe",
     "Smart shape", "Pill button", "Frosted glass", "AI glow button", "Fake cursor", "Avatar bubble", "Audio waveform", "Liquid-glass button", "Stock grid wall"];
   function rank(list, n) { var i = list.indexOf(n); return i < 0 ? list.length : i; }
