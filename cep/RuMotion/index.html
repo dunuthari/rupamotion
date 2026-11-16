@@ -1416,8 +1416,10 @@
         else if (base === "Blur Fade") { op = k; bl = (out ? anOut(u) : 1 - anOut(u)) * 14; }
         else {
           var dx = base.indexOf("Left") > 0 ? 1 : base.indexOf("Right") > 0 ? -1 : 0, dy = base.indexOf("Up") > 0 ? 1 : base.indexOf("Down") > 0 ? -1 : 0;
+          // Out = the In slide played backwards (mirrored to the other side), so both modes take the same 0.9 s at the same pace
+          var ui = out ? 1 - u : u, ki = out ? anOut(ui) : (bon ? anBounce(ui, pct) : anOut(ui));
           if (out) { dx = -dx; dy = -dy; }
-          x = dx * dist * (1 - k); y = dy * dist * (1 - k); op = out ? 1 - pvClamp((u - 0.15) / 0.55, 0, 1) : pvClamp(u * 2, 0, 1);
+          x = dx * dist * (1 - ki); y = dy * dist * (1 - ki); op = pvClamp(ui * 2, 0, 1);
         }
         anSet(lay[0], x, y, s, op, bl);
         return u;
