@@ -1430,6 +1430,19 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['format 1,240'] = run(ex.replace('kk = true', 'kk = false'), 1240) === '$1,240';
   R['format 3.2k'] = run(ex, 3200) === '$3.2k';
   R['format 1.4M'] = run(ex, 1400000) === '$1.4M';
+  // easing in the expression: keys are linear; with the second key dragged from 1 s to 3 s the count rises 0 -> 1000 and never overshoots
+  const sp = sl.property(1); R['counter keys linear'] = sp.numKeys === 2 && (!sp.keyInInterpolationType || [1, 2].every(k2 => sp.keyInInterpolationType(k2) === 'L' && sp.keyOutInterpolationType(k2) === 'L'));
+  [0, 1, 2].forEach(cv => {
+    B.set(byLabel(fx, 'To:').id, '1000'); B.set(byLabel(fx, 'Prefix:').id, ''); B.set(byLabel(fx, 'Short form (3.2k)').id, 'false'); B.set(byLabel(fx, 'Thousands separator').id, 'false');
+    B.set(byLabel(fx, 'Curve:').id, String(cv)); B.click(byLabel(fx, 'Apply number count').id);
+    const e2 = T.property('ADBE Text Properties').property('ADBE Text Document').expression;
+    const body = e2.replace(/^\/\/.*\n/, '').split('\n'); body[body.length - 1] = 'return ' + body[body.length - 1];
+    const f = Function('effect', 'time', body.join('\n'));
+    const t0 = sl.property(1).keyTime(1), slider = { value: 0, numKeys: 2, key: (k2) => k2 === 1 ? { time: t0, value: 0 } : { time: t0 + 3, value: 1000 } };
+    let prev = -1, ok = true, last = 0;
+    for (let s2 = -0.5; s2 <= 4; s2 += 0.02) { const v2 = +f(() => () => slider, t0 + s2); if (v2 < prev - 1e-9 || v2 > 1000 || v2 < 0) ok = false; prev = v2; last = v2; }
+    R['curve ' + cv + ': 0 -> 1000 with the key moved to 3 s, no overshoot'] = ok && last === 1000 && +f(() => () => slider, t0) === 0;
+  });
   // stagger order: bottom to top makes the lowest layer start first
   const a = comp.layers.add({}), b = comp.layers.add({}); [a, b].forEach(x => Object.setPrototypeOf(x, g.AVLayer.prototype));
   a.index = 1; b.index = 2; comp.selectedLayers = [a, b];
