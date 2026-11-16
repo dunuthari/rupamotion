@@ -1222,7 +1222,7 @@
         var ncFrom = cellField(g1, "From:", "0"), ncTo = cellField(g1, "To:", "1240");
         var ncDec = cellDrop(g1, "Decimals:", ["0", "1", "2"], 0);
         var ncPre = cellField(g2, "Prefix:", "", "Text before the number, e.g. $"), ncSuf = cellField(g2, "Suffix:", "", "Text after the number, e.g. %");
-        var ncCurve = cellDrop(g2, "Curve:", ["Ease out", "Linear", "Ease in-out"], 0);
+        var ncCurve = cellDrop(g2, "Curve:", ["Ease out", "Linear", "Ease in-out"], 1);   // Linear by default (requested)
         var ncSep = check(nc, "Thousands separator", true, "1240 shows as 1,240.");
         var ncK = check(nc, "Short form (3.2k)", false, "3200 shows as 3.2k, 1400000 as 1.4M.");
         btn(nc, "Apply number count", function () {

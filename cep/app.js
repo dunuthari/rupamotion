@@ -454,7 +454,7 @@
     "Word Highlight": { unit: "w", f: function (e, i, n, t) { var a = 0.2 + i * 0.4; pvSet(e, { c: (t >= a && t < a + 0.4) ? "#2EC4B6" : "" }); } },
     "Apply number count": { name: "Number counter", unit: "a", f: function (e, i, n, t) {
       var v = function (l, d) { var m = ctlByLabel(l); return m ? m.node.value : d; }, on = function (l) { var m = ctlByLabel(l); return m ? m.node.getAttribute("aria-checked") === "true" : false; };
-      var from = +v("From:", 0) || 0, to = +v("To:", 1240) || 0, dec = +v("Decimals:", 0) || 0, sep = on("Thousands separator"), kk = on("Short form (3.2k)"), c = +v("Curve:", 0) || 0;
+      var from = +v("From:", 0) || 0, to = +v("To:", 1240) || 0, dec = +v("Decimals:", 0) || 0, sep = on("Thousands separator"), kk = on("Short form (3.2k)"), c = +v("Curve:", 1) || 0;
       var u = pvClamp((t - 0.2) / 1, 0, 1), ea = c === 1 ? u : c === 2 ? (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2) : 1 - Math.pow(1 - u, 3), x = from + (to - from) * ea, s;
       if (kk && Math.abs(x) >= 1000) { var m = Math.abs(x) >= 1e6; s = (x / (m ? 1e6 : 1e3)).toFixed(dec > 0 ? dec : 1) + (m ? "M" : "k"); }
       else { s = x.toFixed(dec); if (sep) { var p = s.split("."); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ","); s = p.join("."); } }
