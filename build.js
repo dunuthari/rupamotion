@@ -10,8 +10,8 @@ const byName = (a, b) => (baseName(a) < baseName(b) ? -1 : baseName(a) > baseNam
 // readable button labels for the shipped .ffx files (file stem -> label); other files fall back to a tidied file name
 const LABELS = {
   "1by1": "One by One", "bounce_text": "Bounce Text", "Bouncing_Text_HQ": "Bouncing Text",
-  "Bouncy__Color_FadeOut_HQ": "Bouncy Color Fade", "character_down": "Letters Drop", "character_right": "Letters Slide",
-  "Color_FadeOut_HQ": "Color Fade Out", "gg_MotionTypeLite": "Motion Type", "SaaS_Text_Preset_3": "SaaS Style 3",
+  "character_down": "Letters Drop", "character_right": "Letters Slide",
+  "gg_MotionTypeLite": "Motion Type", "SaaS_Text_Preset_3": "SaaS Style 3",
   "SaaS_Text_Preset_4": "SaaS Style 4", "SaaS_Text_Preset_5": "SaaS Style 5", "SNAP_TEXT": "Snap", "SNAP_TEXT_2": "Snap 2",
   "Snapping_Text_HQ": "Snapping", "word_down": "Words Drop", "word_right": "Words Slide"
 };

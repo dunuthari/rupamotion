@@ -1285,8 +1285,14 @@
   function pvOut(u) { u = pvClamp(u, 0, 1); return 1 - Math.pow(1 - u, 3); }
   function pvSet(e, o) { e.style.opacity = o.o === undefined ? 1 : o.o; e.style.transform = o.t || ""; e.style.filter = o.b ? "blur(" + o.b + "px)" : ""; e.style.color = o.c || ""; }
   // unit: c letters, w words, a whole text; two: needs two lines; f(el, i, n, t, line, k). Built-in effects use their real timings;
-  // the .ffx presets are guesses from their names (their files cannot be read here).
+  // the .ffx presets are approximations: Bounce Text, Letters Drop, Words Drop and Motion Type follow the animator settings and key values
+  // read from their files (key times assumed to be seconds); the others are guesses from their names.
   var PV_BOUNCE = function (e, i, n, t) { var x = pvClamp((t - 0.1 - i * 0.05) / 0.5, 0, 1), y = x < 1 ? (1 - x) * -22 * Math.abs(Math.cos(x * 7)) : 0; pvSet(e, { o: pvClamp(x * 4, 0, 1), t: "translateY(" + y + "px)" }); };
+  // AE range selector, Ramp Up, swept by its Offset from -100 to 100 (read from the .ffx files): amount selected (0..1) of the unit
+  // at p = (i + 0.5) / n when the sweep is at s (0..1, smoothstep). Ramp Down is 1 - this.
+  function pvRamp(i, n, s) { var p = (i + 0.5) / n, o = -1 + 2 * (s * s * (3 - 2 * s)); return pvClamp(p - o, 0, 1); }
+  // Letters Drop / Words Drop: selected units sit 100 px lower at opacity 0; the ramp sweeps left to right in 0.83 s
+  var PV_RISE = function (e, i, n, t) { var a = pvRamp(i, n, pvClamp((t - 0.1) / 0.83, 0, 1)); pvSet(e, { o: 1 - a, t: "translateY(" + (26 * a) + "px)" }); };
   var PV_SNAP = function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.1) / 0.15); pvSet(e, { o: u > 0 ? 1 : 0, t: "scale(" + (1.5 - 0.5 * u) + ")" }); };
   var PV_FX = {
     "Typewriter": { unit: "c", caret: 1, f: function (e, i, n, t) { pvSet(e, { o: t >= 0.3 + i / 14 ? 1 : 0 }); } },
@@ -1306,25 +1312,24 @@
     "Hero Zoom": { unit: "a", f: function (e, i, n, t) { var u = pvOut(t / 1); pvSet(e, { o: pvClamp(t / 0.35, 0, 1), t: "scale(" + (3.2 - 2.2 * u) + ")", b: 14 * (1 - u) }); } },
     "Hero Blur": { unit: "a", f: function (e, i, n, t) { var u = pvOut(t / 0.9); pvSet(e, { o: u, t: "scale(" + (0.94 + 0.06 * u) + ")", b: 9 * (1 - u) }); } },
     "Blur Out": { unit: "a", f: function (e, i, n, t) { var u = pvClamp((t - 0.8) / 0.55, 0, 1); pvSet(e, { o: 1 - u, t: "scale(" + (1 - 0.08 * u) + ")", b: 9 * u }); } },
-    "Delete Out": { unit: "c", f: function (e, i, n, t) { pvSet(e, { o: t >= 1 + (n - 1 - i) * 0.03 ? 0 : 1 }); } },
     "One by One": { guess: 1, unit: "c", f: function (e, i, n, t) { pvSet(e, { o: pvOut((t - 0.1 - i * 0.06) / 0.2) }); } },
-    "Bounce Text": { guess: 1, unit: "c", f: PV_BOUNCE },
+    "Bounce Text": { guess: 1, unit: "a", f: function (e, i, n, t) {   // Transform effect: rises 6% of its height and fades in fast, then a decaying bounce on both
+      var u = pvClamp((t - 0.1) / 0.06, 0, 1), tau = Math.max(0, t - 0.16), w = Math.sin(1.8 * tau * 2 * Math.PI) / Math.exp(3 * tau) * (1 - Math.min(1, tau / 3));
+      pvSet(e, { o: pvClamp(u + (u >= 1 ? 0.72 * w : 0), 0, 1), t: "translateY(" + (3 * (1 - u) - (u >= 1 ? 2 * w : 0)) + "px)" });
+    } },
     "Bouncing Text": { guess: 1, unit: "c", f: PV_BOUNCE },
-    "Bouncy Color Fade": { guess: 1, unit: "c", f: function (e, i, n, t) { PV_BOUNCE(e, i, n, t); e.style.color = (t > 0.1 + i * 0.05 && t < 0.7 + i * 0.05) ? "#E8A23A" : ""; } },
-    "Letters Drop": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.04) / 0.3); pvSet(e, { o: u, t: "translateY(" + (-20 * (1 - u)) + "px)" }); } },
+    "Letters Drop": { guess: 1, unit: "c", f: PV_RISE },
     "Letters Slide": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.04) / 0.3); pvSet(e, { o: u, t: "translateX(" + (20 * (1 - u)) + "px)" }); } },
-    "Words Drop": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.12) / 0.35); pvSet(e, { o: u, t: "translateY(" + (-20 * (1 - u)) + "px)" }); } },
+    "Words Drop": { guess: 1, unit: "w", f: PV_RISE },
     "Words Slide": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.12) / 0.35); pvSet(e, { o: u, t: "translateX(" + (24 * (1 - u)) + "px)" }); } },
-    "Color Fade Out": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvClamp((t - 0.6 - i * 0.04) / 0.4, 0, 1); pvSet(e, { o: 1 - u, c: u > 0 ? "#E8A23A" : "" }); } },
     "Snap": { guess: 1, unit: "w", f: PV_SNAP }, "Snap 2": { guess: 1, unit: "w", f: PV_SNAP }, "Snapping": { guess: 1, unit: "c", f: PV_SNAP },
     // the next four are rebuilt from the settings stored in their .ffx files (which properties, based on words / letters / lines, how far)
     "SaaS Style 3": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.14) / 0.45); pvSet(e, { o: u, b: 8 * (1 - u), t: "translateX(" + (22 * (1 - u)) + "px)" }); } },
     "SaaS Style 4": { guess: 1, unit: "w", f: function (e, i, n, t) { var u = pvOut((t - 0.1 - i * 0.14) / 0.45); pvSet(e, { o: u, t: "translateX(" + (-30 * (1 - u)) + "px)" }); e.style.letterSpacing = (-0.08 * (1 - u)) + "em"; } },
     "SaaS Style 5": { guess: 1, unit: "c", f: function (e, i, n, t) { var u = pvOut((t - 0.1) / 0.6), c = pvOut((t - 0.1 - i * 0.03) / 0.3); pvSet(e, { o: c, b: 7 * (1 - u), t: "translateY(" + (16 * (1 - u)) + "px)" }); } },
-    "Motion Type": { guess: 1, unit: "c", f: function (e, i, n, t) {
-      var u = pvOut((t - 0.1 - i * 0.04) / 0.4), x = pvClamp((t - 2.0 - i * 0.03) / 0.3, 0, 1);
-      if (x > 0) { pvSet(e, { o: 1 - x, t: "translateY(" + (-10 * x) + "px) scale(" + (1 - 0.4 * x) + ")" }); }
-      else { pvSet(e, { o: u > 0 ? 1 : 0, t: "translateY(" + (34 * (1 - u)) + "px) rotate(" + (20 * (1 - u)) + "deg)" }); }
+    "Motion Type": { guess: 1, unit: "c", f: function (e, i, n, t) {   // intro: letters from above + fade, 1 s sweep; outro: down + fade over the last 1 s
+      var a = pvRamp(i, n, pvClamp((t - 0.1) / 1, 0, 1)), b = 1 - pvRamp(i, n, pvClamp((t - 2.1) / 1, 0, 1));
+      if (t >= 2.1) { pvSet(e, { o: 1 - b, t: "translateY(" + (14 * b) + "px)" }); } else { pvSet(e, { o: 1 - a, t: "translateY(" + (-14 * a) + "px)" }); }
     } }
   };
   function buildFxPreview(view) {

@@ -12,7 +12,7 @@
     //
     // Two keyframes: a "Roll" slider effect on the text layer goes 0 -> T seconds; an expression selector on a Position animator
     // turns that into each word's own 0-100% amount. If the expression selector cannot be created the whole block rolls instead.
-    var SR = { dur: 0.2, stagger: 0.08, top: 0.95, bottom: 0.30 };
+    var SR = { dur: 0.2, stagger: 0.08, top: 0.95, bottom: 0.30, hold: 1.0 };   // hold: pause between rolls when one layer has 3+ lines (not from the clip; set on request for 2-10 lines)
 
     function clearRoll(L) {
         var anims = L.property("ADBE Text Properties").property("ADBE Text Animators"), i, fx, m;
@@ -28,6 +28,8 @@
         clearRoll(L);
         var lay = layoutText(comp, L, t0);
         if (mode === "both" && (lay.lines < 2 || lay.wx.length < 2)) { return "needs two lines"; }
+        // one layer with N lines (2..10 and more) rolls N-1 times: line 1 -> line 2 -> ... -> line N, a pause between rolls
+        var steps = (mode === "both") ? Math.max(1, lay.lines - 1) : 1;
         if (lay.wx.length < 1) { return "skipped"; }
         var fs = src.fontSize, step = lay.lineStep;
 
@@ -41,7 +43,7 @@
             for (; c < m.index + m[0].length; c++) { perChar.push(last); }
         }
         for (; c < src.text.length; c++) { perChar.push(last); }
-        var T = maxK * SR.stagger + SR.dur;
+        var T1 = maxK * SR.stagger + SR.dur, T = steps * T1 + (steps - 1) * SR.hold;
 
         // the window: one line tall, very wide, in layer space on the first line
         var top = lay.baseY - SR.top * fs, bot = lay.baseY + SR.bottom * fs, X = comp.width * 3;
@@ -67,7 +69,7 @@
         an.property("ADBE Text Animator Properties").addProperty("ADBE Text Position 3D");
         var pos = an.property("ADBE Text Animator Properties").property("ADBE Text Position 3D");
         var dir = (mode === "in") ? 1 : -1;                  // arriving text starts one line lower and rises into place
-        pos.setValue([0, dir * step, 0]);
+        pos.setValue([0, dir * step * steps, 0]);
 
         var ok = false;
         if (sl) {
@@ -84,7 +86,7 @@
                     amt.expression = "// Ru SaaS Text Roll\nvar LW=" + arrExpr(inLine) + ";\nvar LC=" + arrExpr(perChar) + ";\nvar NW=" + inLine.length + ";\n" +
                         "var v=effect(\"Roll\")(\"Slider\");\n" +
                         "var k=(textTotal===NW)?LW[textIndex-1]:LC[textIndex-1];\n" +
-                        "var u=(v-k*" + SR.stagger + ")/" + SR.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=1-Math.pow(1-u,3);\n" + (mode === "in" ? "(1-u)*100" : "u*100");
+                        "var S=" + steps + ",u=0,s,a;\nfor(s=0;s<S;s++){a=(v-s*" + num2(T1 + SR.hold) + "-k*" + SR.stagger + ")/" + SR.dur + ";a=Math.max(0,Math.min(1,a));u+=1-Math.pow(1-a,3);}\nu=u/S;\n" + (mode === "in" ? "(1-u)*100" : "u*100");
                     ok = true;
                 }
             } catch (eS) { ok = false; }
@@ -94,7 +96,7 @@
             try { var sg = an.property("ADBE Text Selectors"); if (sg.numProperties === 0) { sg.addProperty("ADBE Text Selector"); } } catch (eF) {}
             pos.setValue([0, 0, 0]);
             pos.setValueAtTime(t0, [0, mode === "in" ? step : 0, 0]);
-            pos.setValueAtTime(t0 + T, [0, mode === "in" ? 0 : -step, 0]);
+            pos.setValueAtTime(t0 + T, [0, mode === "in" ? 0 : -step * steps, 0]);
             try { easeBetweenKeys(pos, t0, t0 + T, [0.2, 0, 0.2, 1]); } catch (eE) {}
         }
         return ok ? "ok" : "fallback";
@@ -102,7 +104,7 @@
 
     function doSaasRoll() {
         var comp = activeComp(); if (!comp) { return; }
-        var sel = selLayers(comp, 1, "Select the two text layers (first sentence BELOW, second sentence ABOVE), or one text layer with two lines."); if (!sel) { return; }
+        var sel = selLayers(comp, 1, "Select one text layer with 2 or more lines, or two text layers (first sentence BELOW, second sentence ABOVE)."); if (!sel) { return; }
         var t0 = comp.time, i, texts = [];
         for (i = 0; i < sel.length; i++) { if (isTextLayer(sel[i])) { texts.push(sel[i]); } }
         if (texts.length === 2) {
@@ -116,8 +118,8 @@
         if (texts.length === 1) {
             var res = rollOne(comp, texts[0], t0, "both");
             try { texts[0].selected = true; } catch (e2) {}
-            if (res !== "ok" && res !== "fallback") { alert("This text layer needs the two sentences on two lines. Or select two text layers: the first sentence below, the second above.", NAME); }
+            if (res !== "ok" && res !== "fallback") { alert("This text layer needs two or more lines (one sentence per line). Or select two text layers: the first sentence below, the second above.", NAME); }
             return;
         }
-        alert("Select two text layers (first sentence below, second sentence above), or one text layer with two lines.", NAME);
+        alert("Select one text layer with 2 or more lines, or two text layers (first sentence below, second sentence above).", NAME);
     }

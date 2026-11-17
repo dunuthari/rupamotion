@@ -1191,8 +1191,8 @@
             builtin("Typewriter", doTypewriter, "Types the selected text layer out letter by letter at the playhead, with a caret that follows."),
             builtin("Typewriter Block", doTypewriterBlock, "Types the selected text out word by word: a gradient block sits over the next word and the newest words glow blue, then settle back to the text colour."),
             builtin("Letter Blur", doLetterBlur, "Text fades in letter by letter with a little blur."),
-            builtin("SaaS Text Preset 1", doSaasRoll, "Select two text layers placed in the same spot (the lower layer is visible first and rolls out, the upper layer rolls in), or one layer with two lines. The first sentence rolls up and out through a one-line window while the second rises into its place, word by word."),
-            builtin("Two-Line Stack", doTwoLineStack, "A text layer with two lines: the first line sits, then the words of the second come in below and the block re-centres.")
+            builtin("SaaS Text Preset 1", doSaasRoll, "Select one text layer with 2 or more lines (one sentence per line), or two text layers in the same spot (the lower one is visible first). Each line rolls up out of a one-line window while the next rises into its place, word by word, with a 1 s pause between rolls."),
+            builtin("Two-Line Stack", doTwoLineStack, "A text layer with 2 or more lines: the first line sits, then each next line comes in below, word by word, and the block re-centres as it grows.")
         ]);
 
         // Style: looks and exits (the hero and blur ones also work on any layer)
@@ -1201,8 +1201,7 @@
             builtin("Word Highlight", doWordHighlight, "The current word turns teal and the highlight moves word to word."),
             builtin("Hero Zoom", doHeroZoom, "A giant, blurred layer pulls back and sharpens into place (any layer)."),
             builtin("Hero Blur", doHeroBlur, "The layer blurs in and settles in place (any layer)."),
-            builtin("Blur Out", doBlurOut, "The layer blurs out and shrinks a little (any layer)."),
-            builtin("Delete Out", doDeleteOut, "The letters disappear from the right, with blur.")
+            builtin("Blur Out", doBlurOut, "The layer blurs out and shrinks a little (any layer).")
         ]);
 
         // Presets: the embedded .ffx animation presets

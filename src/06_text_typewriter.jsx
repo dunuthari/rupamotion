@@ -5,7 +5,7 @@
     // "Typewriter": letter by letter with a thin caret. Read from a clip ("Let's choose a style"): the caret shows first, the
     // first letter lands, then the rest arrive at an even pace (roughly 14 letters a second) with the caret hugging the last
     // letter. A single line stays centred while it grows. When the last letter lands the caret blinks and goes away.
-    // "Typewriter Block": word by word with a gradient block over the next word and a blue wave behind it (second clip).
+    // "Typewriter Block": word by word with a gradient block over the next word (second clip; its blue wave was removed on request).
     // Both work on single lines, paragraphs with explicit line breaks, and paragraph (box) text that wraps. Pace, first-letter
     // hold, caret/block sizes and blink timing are read off the clips (not frame-measured), so they live in these constants.
     var TW = { cps: 14, hold: 0.3, caretW: 0.045, caretH: 1.1, caretGap: 0.06, caretRise: 0.3, blinkOn: 0.4, blinkOff: 0.4, blinks: 2 };
@@ -211,7 +211,7 @@
     }
 
     // ---------------------------------------------------------------------
-    // Typewriter Block: word by word, gradient block over the next word, blue wave behind it
+    // Typewriter Block: word by word, gradient block over the next word (the text keeps its own colour)
     // ---------------------------------------------------------------------
     function typewriterBlockOne(comp, L, t0) {
         var sp = textDocProp(L), src = sp.value, i;
@@ -256,14 +256,7 @@
         var ref = typedRef(helperName);
         sel.property("ADBE Text Index Start").expression = TW_MARK + "\nMath.floor(" + ref + ")";
 
-        // 2) colour wave: the last TB.wave words are blue, strongest on the newest word (Range Shape: Ramp Up)
-        var an2 = indexAnimator(anims, "Ru Typewriter Wave " + tag);
-        an2.property("ADBE Text Animator Properties").addProperty("ADBE Text Fill Color");
-        try { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(c4(TB.blue)); } catch (eF) { an2.property("ADBE Text Animator Properties").property("ADBE Text Fill Color").setValue(TB.blue); }
-        var sel2 = indexSelector(an2, 3);
-        try { sel2.property("ADBE Text Range Advanced").property("ADBE Text Range Shape").setValue(2); } catch (eS) {}       // Ramp Up
-        sel2.property("ADBE Text Index Start").expression = TW_MARK + "\nMath.max(0,Math.floor(" + ref + ")-" + TB.wave + ")";
-        sel2.property("ADBE Text Index End").expression = TW_MARK + "\nMath.floor(" + ref + ")";
+        // (the blue colour wave behind the newest words was removed on request: the text keeps its own colour)
 
         try { block.inPoint = Math.max(0, t0); block.outPoint = Math.max(block.inPoint + 0.1, Math.min(comp.duration, L.outPoint)); } catch (e3) {}
         block.selected = false;

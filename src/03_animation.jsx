@@ -416,6 +416,6 @@
             if (t1 - t0 < comp.frameDuration * 2) { continue; }
             var s = L.transform.scale.valueAtTime(t0, false);
             var big = scaled(s, 1 + amount / 100);
-            setKeys(L.transform.scale, out ? [[t0, big], [t1, s]] : [[t0, s], [t1, big]], { curve: { first: 33, last: 33 } });
+            setKeys(L.transform.scale, out ? [[t0, big], [t1, s]] : [[t0, s], [t1, big]], { linear: true });   // linear on request (constant speed over the hold)
         }
     }

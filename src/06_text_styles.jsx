@@ -8,7 +8,6 @@
     //   Two-Line Stack the first line sits, then the words of the second line come in below and the block re-centres (text, two lines)
     //   Word Highlight the current word turns teal, the highlight moves word to word (text)
     //   Blur Out       the layer blurs out and shrinks a little (any layer)
-    //   Delete Out     the letters disappear from the right, with blur (text)
     // Timings are read off the clip, not frame-measured. The per-letter / per-word ones use an Expression Selector driven by a
     // two-key slider effect (like SaaS Text Preset 1); its matchNames are from memory and unverified in AE: when it cannot be
     // created the effect falls back to a whole-layer version where there is one, otherwise says so.
@@ -16,10 +15,9 @@
         zoom: { from: 3.2, dur: 1.0, blur: 80, fade: 0.35, curve: [0.16, 1, 0.3, 1] },
         blurIn: { from: 0.94, dur: 0.9, blur: 36, fade: 0.5, curve: [0.2, 0.7, 0.2, 1] },
         letter: { stagger: 0.035, dur: 0.28, blur: 16, drop: 10 },
-        stack: { delay: 0.5, stagger: 0.08, dur: 0.3, glide: 0.5, blur: 12, drop: 14 },
+        stack: { delay: 0.5, next: 0.6, stagger: 0.08, dur: 0.3, glide: 0.5, blur: 12, drop: 14 },   // next: gap between later lines (3+ lines, on request)
         highlight: { step: 0.4, ramp: 0.12 },
-        blurOut: { dur: 0.55, blur: 30, to: 0.92, hold: 0.1 },
-        del: { stagger: 0.03, dur: 0.2, blur: 14 } };
+        blurOut: { dur: 0.55, blur: 30, to: 0.92, hold: 0.1 } };
 
     function tsSmooth(prop, pairs, curve) {
         var i;
@@ -168,22 +166,6 @@
         if (failed > 0) { alert("The per-letter selector could not be created; the whole line was blurred in instead.", NAME); }
     }
 
-    function doDeleteOut() {
-        var comp = activeComp(); if (!comp) { return; }
-        var list = tsTextLayers(comp, "Select the text layer(s) to delete letter by letter."); if (!list) { return; }
-        var t = comp.time, o = TS.del, i, failed = 0;
-        for (i = 0; i < list.length; i++) {
-            var L = list[i], n = textDocProp(L).value.text.length, T = Math.max(1, n - 1) * o.stagger + o.dur;
-            var sl = tsSlider(L, "Ru Delete", t, T), ok = false;
-            if (sl) {
-                // letters leave from the END: the last letter starts first
-                ok = tsExprAnimator(L, "Ru Delete Out", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]]],
-                    "// Ru Delete Out\nvar v=effect(\"Ru Delete\")(\"Slider\");\nvar u=(v-(" + n + "-textIndex)*" + o.stagger + ")/" + o.dur + ";\nu=Math.max(0,Math.min(1,u));\nu=u*u*(3-2*u);\nu*100", 1);
-            }
-            if (!ok) { failed++; tsBlurOut(L, t); }
-        }
-        if (failed > 0) { alert("The per-letter selector could not be created; the whole line was blurred out instead.", NAME); }
-    }
 
     // per-word and per-character tables for the expressions: word index (and place within its line) for every character
     function tsTables(lay, text) {
@@ -218,30 +200,31 @@
 
     function doTwoLineStack() {
         var comp = activeComp(); if (!comp) { return; }
-        var list = tsTextLayers(comp, "Select a text layer with two lines."); if (!list) { return; }
+        var list = tsTextLayers(comp, "Select a text layer with two or more lines."); if (!list) { return; }
         var t = comp.time, o = TS.stack, i, bad = 0;
         for (i = 0; i < list.length; i++) {
             var L = list[i], src = textDocProp(L).value, lay = layoutText(comp, L, t);
             if (lay.lines < 2 || lay.wx.length < 2) { bad++; continue; }
             var tb = tsTables(lay, src.text), maxK = 0, w;
             for (w = 0; w < tb.n; w++) { if (tb.wordLine[w] > 0) { maxK = Math.max(maxK, tb.wordK[w]); } }
-            var T = o.delay + maxK * o.stagger + o.dur + 0.1;
+            var NL = lay.lines, T = o.delay + (NL - 2) * o.next + maxK * o.stagger + o.dur + 0.1;   // line L (1..NL-1) starts at delay + (L-1) * next
             tsRemoveNamed(L.property("ADBE Effect Parade"), "Ru Stack");
             var sl = tsSlider(L, "Ru Stack", t, T), ok = false;
             if (sl) {
                 ok = tsExprAnimator(L, "Ru Stack", [["ADBE Text Opacity", 0], ["ADBE Text Blur", [o.blur, o.blur]], ["ADBE Text Position 3D", [0, o.drop, 0]]],
                     "// Ru Stack\nvar LN=" + arrExpr(tb.wordLine) + ";\nvar KK=" + arrExpr(tb.wordK) + ";\nvar CL=" + arrExpr(tb.charLine) + ";\nvar CK=" + arrExpr(tb.charK) + ";\nvar NW=" + tb.n + ";\n" +
                     "var v=effect(\"Ru Stack\")(\"Slider\");\nvar w=(textTotal===NW);\nvar ln=w?LN[textIndex-1]:CL[textIndex-1];\nvar k=w?KK[textIndex-1]:CK[textIndex-1];\nvar out=0;\n" +
-                    "if(ln>0){var u=(v-" + o.delay + "-k*" + o.stagger + ")/" + o.dur + ";u=Math.max(0,Math.min(1,u));u=1-Math.pow(1-u,3);out=(1-u)*100;}\nout", 3);
+                    "if(ln>0){var u=(v-" + o.delay + "-(ln-1)*" + o.next + "-k*" + o.stagger + ")/" + o.dur + ";u=Math.max(0,Math.min(1,u));u=1-Math.pow(1-u,3);out=(1-u)*100;}\nout", 3);
             }
             if (!ok) { bad++; continue; }
             // the block starts with line 1 alone in the middle, then glides up to its own place as line 2 arrives
             var s = L.transform.scale.value[0] / 100, off = (lay.lines - 1) * lay.lineStep * s / 2;
             try {
                 if (L.transform.position.numKeys === 0 && !L.parent && L.transform.position.expression === "") {
-                    L.transform.position.expression = "// Ru Stack\nvar v=effect(\"Ru Stack\")(\"Slider\");\nvar p=Math.max(0,Math.min(1,(v-" + o.delay + ")/" + o.glide + "));p=1-Math.pow(1-p,3);\n[value[0],value[1]+" + num2(off) + "*(1-p)]";
+                    // each arriving line lifts the block by half a line, so it stays centred: start low by (NL-1)/2 lines, end at rest
+                    L.transform.position.expression = "// Ru Stack\nvar v=effect(\"Ru Stack\")(\"Slider\");\nvar N=" + (NL - 1) + ",d=0,i,p;\nfor(i=0;i<N;i++){p=Math.max(0,Math.min(1,(v-" + o.delay + "-i*" + o.next + ")/" + o.glide + "));d+=1-Math.pow(1-p,3);}\n[value[0],value[1]+" + num2(off) + "*(1-d/N)]";
                 }
             } catch (eP) {}
         }
-        if (bad > 0) { alert(bad + " layer(s) skipped (they need two lines, or the per-word selector could not be created).", NAME); }
+        if (bad > 0) { alert(bad + " layer(s) skipped (they need two or more lines, or the per-word selector could not be created).", NAME); }
     }

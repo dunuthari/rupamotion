@@ -443,6 +443,40 @@ function runSwipe(arrow, mutate) {
   console.log(`shipped text preset buttons: ${files.map(label).join(' | ')}`);
 }
 
+// After a preset is applied: expressions timed from the layer start are pinned to the playhead, and SaaS Style 3/4/5 keep only their In keys
+{
+  function RealFile(p) { this.path = p; this.data = ''; }
+  RealFile.prototype.open = function () { return true; }; RealFile.prototype.write = function (d) { this.data += d; };
+  RealFile.prototype.close = function () {}; RealFile.prototype.remove = function () { return true; };
+  const g4 = Object.assign({}, g, { File: RealFile });
+  const run4 = new Function(...Object.keys(g4), 'thisObj', src.replace(/\}\)\(this\);\s*$/, '})(thisObj);'));
+  const root4 = Object.assign(new Panel(), el('panel', 'root4'));
+  run4(...Object.values(g4), root4);
+  const PROP = g.PropertyType.PROPERTY;
+  const group = (mn, kids) => ({ matchName: mn, propertyType: 0, kids, get numProperties() { return this.kids.length; }, property(k) { return typeof k === 'number' ? this.kids[k - 1] : this.kids.find(c => c.matchName === k || c.name === k) || null; } });
+  const offsetProp = (n, expr) => ({ matchName: 'ADBE Text Percent Offset', propertyType: PROP, expression: expr || '', keys: Array.from({ length: n }, (_, i) => i), get numKeys() { return this.keys.length; }, removeKey(i) { this.keys.splice(i - 1, 1); } });
+  function layerFor(made) {
+    const anims = group('ADBE Text Animators', [group('ADBE Text Animator', [group('ADBE Text Selectors', [group('ADBE Text Selector', [offsetProp(4, 'old one: inPoint')])])])]);
+    const fx = group('ADBE Effect Parade', []);
+    const L = { property(n) { return n === 'ADBE Text Properties' ? group('ADBE Text Properties', [anims]) : n === 'ADBE Effect Parade' ? fx : null; },
+      applyPreset() { made.forEach(m => anims.kids.push(m)); } };
+    return { L, anims };
+  }
+  const press = (label, made) => { const { L, anims } = layerFor(made); const comp = new g.CompItem(); comp.time = 2.5; comp.selectedLayers = [L]; app.project.activeItem = comp;
+    walk(root4).filter(n => n.type === 'button' && n.text === label && n.parent && n.parent.isBtnRow)[0].onClick(); app.project.activeItem = null; return anims; };
+  const R = {};
+  const inA = offsetProp(4), inB = offsetProp(4, 'linear(time,inPoint,inPoint+Dur,-100,100)');
+  const sa = press('SaaS Style 4', [group('ADBE Text Animator', [group('ADBE Text Selectors', [group('ADBE Text Selector', [inA])])]), group('ADBE Text Animator', [group('ADBE Text Selectors', [group('ADBE Text Selector', [inB])])])]);
+  R['SaaS Style 4: the Out keys (3 and 4) are removed from both animators the preset added'] = inA.numKeys === 2 && inB.numKeys === 2;
+  R['the layer\'s own older animator is left alone'] = sa.kids[0].property('ADBE Text Selectors').property(1).property(1).numKeys === 4 && sa.kids[0].property('ADBE Text Selectors').property(1).property(1).expression === 'old one: inPoint';
+  R['inPoint in a new expression becomes the playhead time'] = inB.expression === 'linear(time,2.5,2.5+Dur,-100,100)';
+  const bt = offsetProp(4, 'delay = .06; t = (time - inPoint) - myDelay; x = thisLayer.inPoint;');
+  press('Bouncing Text', [group('ADBE Text Animator', [group('ADBE Text Selectors', [group('ADBE Text Selector', [bt])])])]);
+  R['Bouncing Text: starts at the playhead; keys are kept (not an In-only preset); "thisLayer.inPoint" is not touched'] = bt.expression === 'delay = .06; t = (time - 2.5) - myDelay; x = thisLayer.inPoint;' && bt.numKeys === 4;
+  const bad = Object.keys(R).filter(k => !R[k]);
+  console.log(`preset fixes: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
+}
+
 // Text > Motion: the Text tab shows its sub-group chip row, with "Motion" selected, and the presets sit under it
 {
   const textTile = walk(root).filter(n => n.groupName === 'Text')[0];
@@ -743,8 +777,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['block sits on the next word and is as wide as it is'] = near(bp(0)[0], 960) && near(bp(1)[0], 960 + 135) && near(bp(2)[0], 960 + 405) && near(bp(2)[1], 540) && near(bs(0)[0], 90) && near(bs(1)[0], 225) && near(bs(2)[0], 135) && bs(1)[1] === 100;
   R['block goes away when the last word lands'] = ev(blk.transform.opacity.expression, 2.9, 0, 0, 0) === 100 && ev(blk.transform.opacity.expression, 3, 0, 0, 0) === 0;
   const an1 = anim(b.L0, 0), an2 = anim(b.L0, 1);
-  R['two animators on Words / Index units: reveal (hides) + wave (blue, Ramp Up)'] = an1.name.indexOf('Ru Typewriter ') === 0 && an2.name.indexOf('Ru Typewriter Wave ') === 0 && [an1, an2].every(x => adv(x).property('ADBE Text Range Units').value === 2 && adv(x).property('ADBE Text Range Type2').value === 3) && adv(an2).property('ADBE Text Range Shape').value === 2 && an1.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0 && Math.abs(an2.property('ADBE Text Animator Properties').property('ADBE Text Fill Color').value[2] - 0.965) < 1e-6;
-  R['wave window: the last 7 words, newest strongest (Start = typed - 7, End = typed)'] = ev(sel(an2).property('ADBE Text Index Start').expression, 12, 0, 0, 0) === 5 && ev(sel(an2).property('ADBE Text Index Start').expression, 3, 0, 0, 0) === 0 && ev(sel(an2).property('ADBE Text Index End').expression, 12.9, 0, 0, 0) === 12 && ev(sel(an1).property('ADBE Text Index Start').expression, 2.5, 0, 0, 0) === 2;
+  R['one animator on Words / Index units that hides; no colour wave, the text keeps its colour'] = an1.name.indexOf('Ru Typewriter ') === 0 && !an2 && adv(an1).property('ADBE Text Range Units').value === 2 && adv(an1).property('ADBE Text Range Type2').value === 3 && an1.property('ADBE Text Animator Properties').property('ADBE Text Opacity').value === 0 && ev(sel(an1).property('ADBE Text Index Start').expression, 2.5, 0, 0, 0) === 2;
   const fillOf = i => blk.property('ADBE Root Vectors Group').children[i].property('ADBE Vectors Group').children.find(c => c.matchName === 'ADBE Vector Graphic - Fill').property('ADBE Vector Fill Color').value;
   R['block is a gradient of 10 slices (cyan-blue to periwinkle)'] = blk.property('ADBE Root Vectors Group').children.length === 10 && fillOf(0)[0] < fillOf(9)[0];
   const bl = press('Typewriter Block', 'Hi\rthere you'), blb = bl.find('Ru Typewriter · Block '), blp = s => ev(blb.transform.position.expression, s, 0, 0, 0);
@@ -809,6 +842,11 @@ function buildTextIcon(sentence, atIndex, opts) {
   // wrapped paragraph text counts as two lines too
   const w = press('Hi there you', { boxText: true, boxTextSize: [500, 300] }), wan = w.L0.property('ADBE Text Properties').property('ADBE Text Animators').children.find(x => x.name === 'Ru SaaS Roll');
   R['paragraph text that wraps onto a second line works too'] = !!wan;
+  // three lines in one layer: two rolls (line 1 -> 2 -> 3), 1 s pause between them, both on the same two keys
+  const m3 = press('Hi there\ryou now\rgo'), an3 = m3.L0.property('ADBE Text Properties').property('ADBE Text Animators').children.find(x => x.name === 'Ru SaaS Roll');
+  const k3 = m3.L0.property('ADBE Effect Parade').children.find(c => c.name === 'Roll').children[0].keys, A3 = (v, i) => ev(an3.property('ADBE Text Selectors').children[0].property('ADBE Text Expressible Amount').expression, v, i, 5);
+  R['3 lines: still two keys, 0 -> 1.56 s (2 rolls of 0.28 s + 1 s pause); the animator travels two lines (-216 px)'] = k3.length === 2 && near(k3[1].v, 1.56) && an3.property('ADBE Text Animator Properties').property('ADBE Text Position 3D').value[1] === -216;
+  R['3 lines: half way after the first roll, holds through the pause, all the way after the second'] = near(A3(0.28, 1), 50) && near(A3(1.0, 1), 50) && near(A3(1.0, 5), 50) && A3(1.3, 1) > 50 && near(A3(1.56, 1), 100) && near(A3(1.56, 2), 100);
   const bad = Object.keys(R).filter(k => !R[k]);
   console.log(`saas text preset 1: ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
@@ -841,11 +879,11 @@ function buildTextIcon(sentence, atIndex, opts) {
   console.log(`saas text preset 1 (two layers): ${bad.length === 0 ? 'all ' + Object.keys(R).length + ' checks OK' : 'WRONG: ' + bad.join('; ')}`);
 }
 
-// The seven showreel styles in Text > Motion: Hero Zoom, Hero Blur, Letter Blur, Two-Line Stack, Word Highlight, Blur Out, Delete Out
+// The seven showreel styles in Text > Motion: Hero Zoom, Hero Blur, Letter Blur, Two-Line Stack, Word Highlight, Blur Out (Delete Out was removed on request)
 {
   const near = (a, b) => Math.abs(a - b) < 0.011, R = {};
   function ev(expr, val, idx, tot, value) { const prop = { valueOf() { return val; } }; const effect = () => () => prop; const textIndex = idx, textTotal = tot; return eval(expr); }   // eslint-disable-line no-eval
-  const names = ['Hero Zoom', 'Hero Blur', 'Letter Blur', 'Two-Line Stack', 'Word Highlight', 'Blur Out', 'Delete Out'];
+  const names = ['Hero Zoom', 'Hero Blur', 'Letter Blur', 'Two-Line Stack', 'Word Highlight', 'Blur Out'];
   R['all seven are plain buttons in the Motion card (no cards, no fields), and Marker Morph is gone'] = names.every(n => walk(root).filter(b => b.type === 'button' && b.text === n && b.parent && b.parent.isBtnRow).length === 1) && !names.some(n => walk(root).some(c => c.cardTitle === n)) && walk(root).filter(b => b.type === 'button' && b.text === 'Marker Morph').length === 0;
   function press(label, mkLayer) {
     const { comp, made } = fakeBuild(); app.project.activeItem = comp;
@@ -876,9 +914,7 @@ function buildTextIcon(sentence, atIndex, opts) {
   const L1 = (v, i) => ev(amt(la), v, i, 8);
   R['Letter Blur: each letter starts 0.035 s after the one before and eases out (hidden 100 -> 0)'] = L1(0, 1) === 100 && near(L1(0.525, 8), 0) && L1(0.1, 1) < L1(0.1, 2) && L1(0.1, 2) < L1(0.1, 3);
 
-  // Delete Out: from the right
-  const dl = press('Delete Out', text('Hi there')).L, da = anim(dl, 'Ru Delete Out'), D1 = (v, i) => ev(amt(da), v, i, 8);
-  R['Delete Out: the last letter starts first (0.03 s apart), the first letter last; blur 14'] = near(fx(dl, 'Ru Delete').children[0].keys[1].v, 0.41) && D1(0.1, 8) > 0 && D1(0.1, 1) === 0 && D1(0.1, 8) > D1(0.1, 7) && near(D1(0.41, 1), 100) && pv(da, 'ADBE Text Blur')[0] === 14;
+  R['Delete Out is gone (removed on request)'] = !walk(root).some(b => b.type === 'button' && b.text === 'Delete Out');
 
   // Word Highlight
   const wh = press('Word Highlight', text('Hi there you')).L, wa = anim(wh, 'Ru Word Highlight'), W1 = (v, i) => ev(amt(wa), v, i, 3);
@@ -890,6 +926,11 @@ function buildTextIcon(sentence, atIndex, opts) {
   R['Two-Line Stack: words of line 1 are never hidden; words of line 2 appear after 0.5 s, 0.08 s apart'] = S1(0, 1) === 0 && S1(0, 2) === 0 && S1(0.4, 3) === 100 && S1(0.98, 3) < 5 && S1(0.7, 3) < S1(0.7, 4) && fx(ts, 'Ru Stack').children[0].keys.length === 2;
   const pe = (v) => ev(ts.transform.position.expression, v, 0, 0, [960, 540]);
   R['Two-Line Stack: line 1 starts centred (block 54 px lower) and the block glides up to its own place'] = near(pe(0)[1], 594) && pe(0.98)[1] < 540.1 && pe(0.75)[1] > 540 && pe(0.75)[1] < 594;
+  // three lines: line 2 comes in after 0.5 s, line 3 0.6 s later; the block lifts half a line each time
+  const t3 = press('Two-Line Stack', text('Hi there\ryou now\rgo far')).L, s3 = anim(t3, 'Ru Stack'), S3 = (v, i) => ev(amt(s3), v, i, 6);
+  const P3 = v => ev(t3.transform.position.expression, v, 0, 0, [960, 540])[1];
+  R['3 lines: line 1 always shown, line 2 in from 0.5 s, line 3 from 1.1 s'] = S3(0, 1) === 0 && S3(0.4, 3) === 100 && S3(1.0, 3) < 5 && S3(1.0, 5) === 100 && S3(1.6, 5) < 5;
+  R['3 lines: the block starts a full line low and lifts half a line per new line'] = near(P3(0) - 540, 108) && near(P3(1.0) - 540, 54) && near(P3(2.0) - 540, 0);
   const one = press('Two-Line Stack', text('just one line')).L;
   R['Two-Line Stack: a single line is refused'] = !anim(one, 'Ru Stack');
 

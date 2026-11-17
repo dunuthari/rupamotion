@@ -34,6 +34,55 @@
     }
 
     // Writes the embedded preset to a temp .ffx and applies it to every selected layer
+    // ---- fixes applied AFTER a preset (the .ffx files themselves ship byte for byte and are never edited) ----
+    // Presets whose Out half is dropped: only the In keys stay (SaaS Style 3 also stops ending blue that way).
+    var PRESET_IN_ONLY = { "SaaS Style 3": 1, "SaaS Style 4": 1, "SaaS Style 5": 1 };
+
+    function presetCounts(L) {
+        var a = 0, e = 0;
+        try { a = L.property("ADBE Text Properties").property("ADBE Text Animators").numProperties; } catch (e1) {}
+        try { e = L.property("ADBE Effect Parade").numProperties; } catch (e2) {}
+        return { anims: a, fx: e };
+    }
+
+    // every property below a group (depth first)
+    function presetWalk(g, fn) {
+        var k, c;
+        for (k = 1; k <= g.numProperties; k++) {
+            c = g.property(k);
+            if (!c) { continue; }
+            if (c.propertyType === PropertyType.PROPERTY) { fn(c); } else { presetWalk(c, fn); }
+        }
+    }
+
+    // Expressions that time themselves from the layer start ("time - inPoint", "linear(time, inPoint, ...)") are pinned to the
+    // playhead instead, so the animation starts where the user put the playhead (Bouncing Text, Motion Type).
+    var PRESET_INPOINT = /(^|[^\w.$])inPoint\b/g;
+    function presetPinStart(p, t) {
+        var ex = "";
+        try { ex = p.expression; } catch (e0) { return; }
+        if (!ex || ex.indexOf("inPoint") < 0) { return; }
+        var nx = ex.replace(PRESET_INPOINT, "$1" + String(Math.round(t * 10000) / 10000));
+        if (nx !== ex) { try { p.expression = nx; } catch (e1) {} }
+    }
+
+    function presetAfter(L, name, t, before) {
+        var anims = null, fxs = null, k, newGroups = [];
+        try { anims = L.property("ADBE Text Properties").property("ADBE Text Animators"); } catch (e1) {}
+        try { fxs = L.property("ADBE Effect Parade"); } catch (e2) {}
+        if (anims) { for (k = before.anims + 1; k <= anims.numProperties; k++) { newGroups.push(anims.property(k)); } }
+        if (fxs) { for (k = before.fx + 1; k <= fxs.numProperties; k++) { newGroups.push(fxs.property(k)); } }
+        for (k = 0; k < newGroups.length; k++) {
+            presetWalk(newGroups[k], function (p) {
+                presetPinStart(p, t);
+                // In only: keep the first two keys of every animated range Offset the preset added (keys 3+ are the Out)
+                if (PRESET_IN_ONLY[name] && p.matchName === "ADBE Text Percent Offset" && p.numKeys > 2) {
+                    while (p.numKeys > 2) { p.removeKey(p.numKeys); }
+                }
+            });
+        }
+    }
+
     function doTextPreset(idx) {
         var comp = activeComp(); if (!comp) { return; }
         var sel = selLayers(comp, 1, "Select the text layer(s) to animate."); if (!sel) { return; }
@@ -47,9 +96,11 @@
             f.close();
             PRESET_FILES[idx] = f.fsName || f.path;
         }
-        var failed = "", i;
+        var failed = "", i, t = comp.time;
         for (i = 0; i < sel.length; i++) {
-            try { sel[i].applyPreset(f); } catch (e) { failed = e.toString(); }
+            var before = presetCounts(sel[i]);
+            try { sel[i].applyPreset(f); } catch (e) { failed = e.toString(); continue; }
+            try { presetAfter(sel[i], preset.name, t, before); } catch (e2) {}
         }
         if (failed !== "") { alert("After Effects couldn't apply \"" + preset.name + "\":\n" + failed, NAME); }
     }
